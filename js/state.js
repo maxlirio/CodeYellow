@@ -9,11 +9,15 @@ export const G = {
   // run state
   mode: 'menu',            // menu | lobby | playing | merchant | dead | victory | paused | transition
   seed: '',
-  floor: 1,
+  floor: 1,                // MY current floor (teammates can be on different ones)
   endless: false,
+  pendingVictory: false,
 
-  // dungeon
-  grid: null,              // { w, h, cells(Uint8Array), rooms, spawn:{x,z}, stairs:{x,z,cx,cy}, group }
+  // per-floor world registry (data + entities for every floor someone has visited)
+  floors: new Map(),       // n -> floor state record, see floorState()
+
+  // aliases into MY current floor's record (rebound on floor change)
+  grid: null,              // { w, h, cells, elev, ramps, rooms, spawn, stairs, stairsLocked }
   explored: null,          // Uint8Array fog-of-war for minimap
   torches: [],             // {x, y, z} flame positions
   traps: [],               // {x, z, cd}
@@ -49,6 +53,33 @@ export const G = {
   paused: false,
   time: 0,
 };
+
+// registry accessor: one record per floor, created on demand
+export function floorState(n) {
+  let fs = G.floors.get(n);
+  if (!fs) {
+    fs = {
+      n, grid: null, torches: [], traps: [], placements: null,
+      enemySpawns: [], lootSpawns: [],
+      enemies: [], loots: [], summons: [], drops: [],
+      meshGroup: null, enemyGroup: null, lootGroup: null,
+      explored: null, built: false, spawned: false, hadBoss: false,
+      nextSummonId: 0, nextLootId: 0,
+    };
+    G.floors.set(n, fs);
+  }
+  return fs;
+}
+
+// point the global aliases at MY current floor
+export function setFloorAliases(fs) {
+  G.grid = fs.grid;
+  G.enemies = fs.enemies;
+  G.loots = fs.loots;
+  G.traps = fs.traps;
+  G.torches = fs.torches;
+  G.explored = fs.explored;
+}
 
 export function cellIndex(cx, cy) { return cy * G.grid.w + cx; }
 export function cellAtWorld(x, z) {

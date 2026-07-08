@@ -1,14 +1,14 @@
 // Boot, scene setup, input, game-flow state machine, main loop.
 import * as THREE from 'three';
-import { G } from './state.js';
-import { WIN_FLOOR, BOSS_FLOORS, CLASSES } from './config.js';
+import { G, floorState, setFloorAliases } from './state.js';
+import { CLASSES } from './config.js';
 import { randomSeed } from './rng.js';
 import { loadAll, makeCharacter, applyLook } from './assets.js';
 import { initFx, buildTorchFx, updateFx, clearTransientFx } from './fx.js';
 import { initAudio, resumeAudio, toggleMute, sfx } from './audio.js';
-import { generateFloor } from './dungeon.js';
-import { spawnEnemies, updateEnemies, anyBossAlive, clearEnemies, damageEnemy } from './enemies.js';
-import { spawnLoots, updateLoot, clearLoot } from './loot.js';
+import { generateFloorData, buildFloorMeshes, disposeAllFloors } from './dungeon.js';
+import { spawnEnemiesForFloor, updateEnemies, damageEnemy, spawnEnemy, setEnemyState, killEnemy, refreshBossBarForFloor } from './enemies.js';
+import { spawnLootsForFloor, updateLoot, applyTakenSilently, dropItemLoot } from './loot.js';
 import { updateProjectiles, clearProjectiles } from './projectiles.js';
 import { castSpell, updateSpells, updateBeams, resetCooldowns, cooldowns } from './spells.js';
 import { giveStartingGear, equipItem, salvageItem, rollTrinket, addToBag, rarityOf } from './items.js';
@@ -16,6 +16,7 @@ import {
   createPlayer, resetPlayerForFloor, updatePlayer, updateRemotes, tryAttack, tryDodge, tryInteract,
   drinkPotion, onMouseMove, damageLocalPlayer, sendPos, effectiveMaxHp, effectiveDamage,
   effectiveSpeed, effectiveCrit, effectiveArmor, effectiveManaRegen, refreshEquipVisuals,
+  refreshRemoteVisibility,
 } from './player.js';
 import {
   show, hide, setHidden, addMsg, refreshHud, updateMinimap, updateDodgeCooldown,
@@ -179,19 +180,25 @@ function setupMenu() {
   $('btnQuit').onclick = () => location.reload();
   $('btnDescend').onclick = () => {
     hide('merchant');
-    if (isAuthority()) doFloorChange(G.floor + 1, true);
-    else netSend({ t: 'stairsReq' });
+    descendTo(G.floor + 1);
   };
   $('btnCloseInv').onclick = () => toggleInventory(false);
 
   setNetCallbacks({
     onLobbyUpdate: renderLobby,
     onStart: (seed) => startRun(seed),
-    onFloorChange: (n, broadcast) => doFloorChange(n, broadcast),
     onGameOver: () => gameOver(true),
     onVictory: () => victory(true),
     onHostGone: () => { shutdownNet(); hide('lobby'); show('menu'); },
     onPartyDeath: () => checkAllDead(),
+    // a teammate moved to floor n: host must simulate it; everyone updates the party bar
+    onPeerFloor: (pid, n) => {
+      if (isAuthority()) ensureFloor(n);
+      const p = G.net.players.get(pid);
+      addMsg(`${p?.name || 'A teammate'} ${n > 1 ? 'descended to' : 'is on'} floor ${n}`);
+    },
+    ensureFloorSim: (n) => ensureFloor(n),
+    onFstate: (m) => applyFstate(m),
   });
 }
 
@@ -211,11 +218,16 @@ function startRun(seed) {
   G.seed = seed || randomSeed();
   G.floor = 1;
   G.endless = false;
+  G.pendingVictory = false;
   G.run = { gold: 0, potions: 1, keys: 0, atkBonus: 0, hpBonus: 0, speedBonus: 0, speedBuys: 0, level: 1, xp: 0, kills: 0, chests: 0, startTime: performance.now(), buys: {} };
   resetCooldowns();
   hide('menu'); hide('lobby'); hide('merchant'); hide('dead'); hide('victory'); hide('inventory');
   invOpen = false;
   setHidden('hud', false);
+
+  disposeAllFloors();
+  clearTransientFx();
+  clearProjectiles();
 
   const classId = getClass();
   giveStartingGear(classId);
@@ -223,8 +235,9 @@ function startRun(seed) {
   G.player.maxHp = effectiveMaxHp();
   G.player.hp = G.player.maxHp;
 
-  buildFloor(1);
+  setLocalFloor(1);
   spawnRemoteAvatars();
+  refreshRemoteVisibility();
   G.mode = 'playing';
   refreshHud();
   addMsg('Descend. Survive. Destroy the Bone King on floor 9.', 'gold');
@@ -232,28 +245,76 @@ function startRun(seed) {
   lockPointer();
 }
 
-function buildFloor(n) {
+// make sure a floor's data + entities exist (no visuals) — used by the host for
+// floors teammates are on, and locally before entering one
+function ensureFloor(n) {
+  const fs = floorState(n);
+  if (!fs.grid) {
+    Object.assign(fs, generateFloorData(G.seed, n));
+  }
+  if (!fs.spawned) {
+    spawnEnemiesForFloor(fs);
+    spawnLootsForFloor(fs);
+    fs.spawned = true;
+  }
+  return fs;
+}
+
+// move MY view/simulation to floor n
+function setLocalFloor(n) {
+  const prev = G.floors.get(G.floor);
+  if (prev) {
+    if (prev.meshGroup) prev.meshGroup.visible = false;
+    if (prev.enemyGroup) prev.enemyGroup.visible = false;
+    if (prev.lootGroup) prev.lootGroup.visible = false;
+  }
+  const fs = ensureFloor(n);
+  buildFloorMeshes(fs);
+  fs.meshGroup.visible = true;
+  fs.enemyGroup.visible = true;
+  fs.lootGroup.visible = true;
   G.floor = n;
+  setFloorAliases(fs);
   clearTransientFx();
   clearProjectiles();
-  clearEnemies();
-  clearLoot();
-  const { enemySpawns, lootSpawns } = generateFloor(G.seed, n);
-  G.hadBoss = !!BOSS_FLOORS[n] || (G.endless && n % 3 === 0);
-  spawnEnemies(enemySpawns);
-  spawnLoots(lootSpawns);
   buildTorchFx();
   resetPlayerForFloor();
-  for (const r of G.remotes.values()) {
-    r.obj.position.set(G.grid.spawn.x, 0, G.grid.spawn.z);
-    r.netX = G.grid.spawn.x; r.netY = 0; r.netZ = G.grid.spawn.z;
-    r.dead = false;
-  }
-  if (G.endless && n > WIN_FLOOR && n % 3 === 0) {
-    G.grid.stairsLocked = true;
-  }
+  refreshRemoteVisibility();
+  refreshBossBarForFloor();
   refreshHud();
   sendPos(true);
+  netSend({ t: 'pfloor', n });
+  if (G.net.role === 'guest') netSend({ t: 'freq', n });
+}
+
+// apply the host's snapshot of what already happened on my new floor
+function applyFstate(m) {
+  const fs = G.floors.get(m.f);
+  if (!fs || !fs.spawned) return;
+  for (const s of m.summons) {
+    if (!fs.enemies.find(e => e.id === s.id)) {
+      const e = spawnEnemy(fs, s.type, s.x, s.z, { y: s.y, id: s.id });
+      setEnemyState(e, 'awaken', true);
+    }
+  }
+  for (const d of m.drops) {
+    if (!fs.loots.find(l => l.id === d.id)) dropItemLoot(fs, d.item, d.x, d.z, d.y, d.id);
+  }
+  for (const id of m.dead) {
+    const e = fs.enemies.find(x => x.id === id);
+    if (e && e.state !== 'dead') {
+      killEnemy(e, 'remote', true);
+      e.deadT = 5;
+      e.obj.visible = false;
+    }
+  }
+  for (const [id, hp] of m.hp) {
+    const e = fs.enemies.find(x => x.id === id);
+    if (e) { e.hp = hp; }
+  }
+  applyTakenSilently(fs, m.taken);
+  if (fs.grid) fs.grid.stairsLocked = m.locked;
+  if (m.f === G.floor) refreshBossBarForFloor();
 }
 
 function onStairsUsed() {
@@ -290,12 +351,11 @@ function buyItem(id, price) {
   refreshHud();
 }
 
-function doFloorChange(n, broadcast) {
-  if (G.net.role === 'host' && broadcast) netSend({ t: 'floor', n });
-  hide('merchant');
+// personal descent: only I change floors; teammates stay where they are
+function descendTo(n) {
   G.mode = 'transition';
   showTransition(n, () => {
-    buildFloor(n);
+    setLocalFloor(n);
     G.mode = 'playing';
     lockPointer();
   });
@@ -468,7 +528,8 @@ function loop(t) {
     updateFx(dt);
     updateNet(dt);
 
-    if (isAuthority() && G.hadBoss && G.floor === WIN_FLOOR && !G.endless && G.mode === 'playing' && !anyBossAlive()) {
+    if (G.pendingVictory) {
+      G.pendingVictory = false;
       victory();
     }
 

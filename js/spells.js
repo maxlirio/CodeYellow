@@ -69,14 +69,14 @@ export function castSpell(slot, effectiveDamage) {
           aoe: sp.aoe || 0, slow: sp.slow, poison: sp.poison ? { dps: Math.round(dmg * sp.poison.mult), dur: sp.poison.dur } : null,
         };
         spawnBolt(b);
-        netSend({ t: 'bolt', b: { ...b, owner: 'fx' } });
+        netSend({ t: 'bolt', f: G.floor, b: { ...b, owner: 'fx' } });
       }
       break;
     }
     case 'cone': {
       sfx.crit();
       spawnBurst(origin.clone().add(new THREE.Vector3(dir.x * 2, 1.2, dir.z * 2)), 0xffdd88, 18, 6, 0.14, 0.4);
-      netSend({ t: 'fx', x: origin.x + dir.x * 2, y: 1.2, z: origin.z + dir.z * 2, color: 0xffdd88 });
+      netSend({ t: 'fx', f: G.floor, x: origin.x + dir.x * 2, y: 1.2, z: origin.z + dir.z * 2, color: 0xffdd88 });
       for (const e of G.enemies) {
         if (e.state === 'dead') continue;
         const dx = e.obj.position.x - origin.x, dz = e.obj.position.z - origin.z;
@@ -93,7 +93,7 @@ export function castSpell(slot, effectiveDamage) {
     case 'aoe': {
       sfx.trap(); sfx.hit();
       spawnBurst(origin.clone().setY(origin.y + 0.5), 0xffaa44, 30, 8, 0.18, 0.6);
-      netSend({ t: 'fx', x: origin.x, y: origin.y + 0.5, z: origin.z, color: 0xffaa44, big: 1 });
+      netSend({ t: 'fx', f: G.floor, x: origin.x, y: origin.y + 0.5, z: origin.z, color: 0xffaa44, big: 1 });
       for (const e of G.enemies) {
         if (e.state === 'dead') continue;
         const d = Math.hypot(e.obj.position.x - origin.x, e.obj.position.z - origin.z);
@@ -115,7 +115,7 @@ export function castSpell(slot, effectiveDamage) {
       p.hp = Math.min(p.maxHp, p.hp + amount);
       spawnDamageNumber(origin.clone().setY(origin.y + 2.2), `+${amount}`, '#66ff88');
       spawnBurst(origin.clone().setY(origin.y + 1.2), 0x55ff77, 24, 4.5, 0.15, 0.9);
-      netSend({ t: 'fx', x: origin.x, y: origin.y + 1.2, z: origin.z, color: 0x55ff77 });
+      netSend({ t: 'fx', f: G.floor, x: origin.x, y: origin.y + 1.2, z: origin.z, color: 0x55ff77 });
       break;
     }
     case 'blink': {
@@ -134,7 +134,7 @@ export function castSpell(slot, effectiveDamage) {
       origin.y = groundHeightAt(pos.x, pos.z, origin.y);
       p.iframes = Math.max(p.iframes, 0.3);
       spawnBurst(origin.clone().setY(origin.y + 1), 0x8844ff, 14, 4, 0.13, 0.5);
-      netSend({ t: 'fx', x: origin.x, y: origin.y + 1, z: origin.z, color: 0x8844ff });
+      netSend({ t: 'fx', f: G.floor, x: origin.x, y: origin.y + 1, z: origin.z, color: 0x8844ff });
       break;
     }
     case 'chain': {
@@ -190,7 +190,7 @@ function drawLightning(a, b) {
   const line = new THREE.Line(geo, new THREE.LineBasicMaterial({ color: 0x99ddff, transparent: true, opacity: 1 }));
   G.scene.add(line);
   beams.push({ line, t: 0 });
-  netSend({ t: 'beam', a: [a.x, a.y, a.z], b: [b.x, b.y, b.z] });
+  netSend({ t: 'beam', f: G.floor, a: [a.x, a.y, a.z], b: [b.x, b.y, b.z] });
 }
 
 export function remoteBeam(a, b) {

@@ -1,6 +1,8 @@
-// Loot entities: chests (lid animation), coins, potions, keys, and equipment drops.
+// Loot, now per-floor: chests, coins, potions, keys, equipment drops. Lookup is by
+// floor + id so peers on different floors stay consistent; arriving on a floor a
+// teammate already looted applies state silently via applyTakenSilently().
 import * as THREE from 'three';
-import { G } from './state.js';
+import { G, floorState } from './state.js';
 import { makePiece, makeWeaponModel } from './assets.js';
 import { makeGlowSprite, spawnBurst, spawnDamageNumber } from './fx.js';
 import { sfx } from './audio.js';
@@ -8,27 +10,21 @@ import { addMsg, refreshHud } from './ui.js';
 import { netSend } from './net.js';
 import { rollAnyItem, addToBag, rarityOf } from './items.js';
 
-let lootGroup = null;
-
-export function clearLoot() {
-  if (lootGroup) { G.scene.remove(lootGroup); lootGroup = null; }
-  G.loots = [];
-}
-
 function baseY(kind) {
   return (kind === 'coin' || kind === 'key' || kind === 'potion' || kind === 'item') ? 0.55 : 0;
 }
 
-export function spawnLoots(lootSpawns) {
-  clearLoot();
-  lootGroup = new THREE.Group();
-  G.scene.add(lootGroup);
-  lootSpawns.forEach((s, i) => addLootEntity(s, i));
+export function spawnLootsForFloor(fs) {
+  fs.lootGroup = new THREE.Group();
+  fs.lootGroup.visible = false;
+  G.scene.add(fs.lootGroup);
+  fs.lootSpawns.forEach((s, i) => addLootEntity(fs, s, i));
+  fs.nextLootId = fs.lootSpawns.length;
 }
 
-function addLootEntity(s, id) {
+function addLootEntity(fs, s, id) {
   const loot = {
-    id, kind: s.kind, x: s.x, z: s.z, baseH: s.y || 0,
+    id, kind: s.kind, x: s.x, z: s.z, baseH: s.y || 0, floor: fs.n,
     taken: false, obj: null, opened: false, spin: false, bob: Math.random() * 6,
     item: s.item || null, itemColor: s.item ? rarityOf(s.item).color : null,
   };
@@ -50,18 +46,25 @@ function addLootEntity(s, id) {
     glow.position.y = 0.3;
     obj.add(glow);
   }
-  lootGroup.add(obj);
+  fs.lootGroup.add(obj);
   loot.obj = obj;
-  G.loots.push(loot);
+  fs.loots.push(loot);
   return loot;
 }
 
 // authority drops an equipment item into the world and shares it with guests
-export function dropItemLoot(item, x, z, y = 0, fromNet = false) {
-  const id = G.loots.length;
-  const loot = addLootEntity({ kind: 'item', item, x, z, y }, id);
-  if (G.net.role === 'host' && !fromNet) netSend({ t: 'ldrop', item, x, z, y });
+export function dropItemLoot(fs, item, x, z, y = 0, id = null) {
+  const lid = id ?? fs.nextLootId++;
+  if (id !== null && fs.nextLootId <= id) fs.nextLootId = id + 1;
+  const loot = addLootEntity(fs, { kind: 'item', item, x, z, y }, lid);
+  fs.drops.push({ id: lid, item, x, z, y });
+  if (G.net.role === 'host' && id === null) netSend({ t: 'ldrop', f: fs.n, id: lid, item, x, z, y });
   return loot;
+}
+
+export function lootById(f, id) {
+  const fs = G.floors.get(f);
+  return fs ? fs.loots.find(l => l.id === id) : null;
 }
 
 export function updateLoot(dt) {
@@ -73,10 +76,9 @@ export function updateLoot(dt) {
       l.bob += dt * 2.5;
       l.obj.position.y = l.baseH + 0.55 + Math.sin(l.bob) * 0.12;
     }
-    // auto-pickup for small items (equipment needs an explicit E)
     if (p && !p.dead && (l.kind === 'coin' || l.kind === 'coinstack' || l.kind === 'potion' || l.kind === 'key')) {
       const d = Math.hypot(p.obj.position.x - l.x, p.obj.position.z - l.z);
-      if (d < 1.3 && Math.abs(p.obj.position.y - l.baseH) < 1.5) takeLoot(l.id, 'local');
+      if (d < 1.3 && Math.abs(p.obj.position.y - l.baseH) < 1.5) takeLoot(l.floor, l.id, 'local');
     }
   }
 }
@@ -104,11 +106,11 @@ export function nearestItemDrop(pos, maxD = 2.4) {
 }
 
 // by = 'local' | 'remote' | peerId; in guest role, local pickups become requests to the host.
-export function takeLoot(id, by, fromNet = false) {
-  const l = G.loots[id];
+export function takeLoot(f, id, by, fromNet = false) {
+  const l = lootById(f, id);
   if (!l || l.taken) return;
   if (by === 'local' && G.net.role === 'guest' && !fromNet) {
-    netSend({ t: 'lootReq', id });
+    netSend({ t: 'lootReq', f, id });
     return;
   }
   if (l.kind === 'goldchest' && by === 'local' && G.run.keys < 1 && !fromNet) {
@@ -122,37 +124,39 @@ export function takeLoot(id, by, fromNet = false) {
     return;
   }
   l.taken = true;
-  if (G.net.role === 'host') netSend({ t: 'lootTaken', id, by: isMine ? 'host' : by });
+  const visible = f === G.floor;
+  if (G.net.role === 'host') netSend({ t: 'lootTaken', f, id, by: isMine ? 'host' : by });
   const pos = new THREE.Vector3(l.x, l.baseH + 1, l.z);
+  const fx = (color, n = 10, s = 3.5) => { if (visible) spawnBurst(pos, color, n, s, 0.12); };
 
   const give = (fn) => { if (isMine) fn(); };
   switch (l.kind) {
     case 'coin': {
-      const amt = 3 + Math.floor(Math.random() * 4) + G.floor;
+      const amt = 3 + Math.floor(Math.random() * 4) + f;
       give(() => { G.run.gold += amt; addMsg(`+${amt} gold`, 'gold'); });
       if (isMine) sfx.coin();
-      spawnBurst(pos, 0xffd35c, 8, 3, 0.1);
+      fx(0xffd35c, 8, 3);
       hideLoot(l);
       break;
     }
     case 'coinstack': {
-      const amt = 8 + Math.floor(Math.random() * 8) + G.floor * 2;
+      const amt = 8 + Math.floor(Math.random() * 8) + f * 2;
       give(() => { G.run.gold += amt; addMsg(`+${amt} gold`, 'gold'); });
       if (isMine) sfx.coin();
-      spawnBurst(pos, 0xffd35c, 14, 4, 0.12);
+      fx(0xffd35c, 14, 4);
       hideLoot(l);
       break;
     }
     case 'potion':
       give(() => { G.run.potions++; addMsg('Picked up a health potion 🧪'); });
       if (isMine) sfx.potion();
-      spawnBurst(pos, 0x44ff77, 10, 3.5, 0.12);
+      fx(0x44ff77);
       hideLoot(l);
       break;
     case 'key':
       give(() => { G.run.keys++; addMsg('Found a golden key! 🔑', 'gold'); });
       if (isMine) sfx.key();
-      spawnBurst(pos, 0xffee66, 12, 4, 0.12);
+      fx(0xffee66, 12, 4);
       hideLoot(l);
       break;
     case 'item':
@@ -161,7 +165,7 @@ export function takeLoot(id, by, fromNet = false) {
         addMsg(`Picked up <span style="color:${rarityOf(l.item).color}">${l.item.name}</span> — Tab to equip`, 'gold');
       });
       if (isMine) sfx.chest();
-      spawnBurst(pos, rarityOf(l.item).glow, 14, 4, 0.13);
+      fx(rarityOf(l.item).glow, 14, 4);
       hideLoot(l);
       break;
     case 'chest':
@@ -172,29 +176,40 @@ export function takeLoot(id, by, fromNet = false) {
         G.run.chests++;
         if (l.kind === 'goldchest') {
           G.run.keys--;
-          const gold = 40 + Math.floor(Math.random() * 30) + G.floor * 8;
+          const gold = 40 + Math.floor(Math.random() * 30) + f * 8;
           G.run.gold += gold;
-          const item = rollAnyItem(G.player.classId, G.floor, 0.6);
+          const item = rollAnyItem(G.player.classId, f, 0.6);
           if (addToBag(item)) addMsg(`Golden chest: +${gold} gold and <span style="color:${rarityOf(item).color}">${item.name}</span>!`, 'gold');
           else addMsg(`Golden chest: +${gold} gold (bag full!)`, 'gold');
-          spawnDamageNumber(pos, 'TREASURE!', '#ffd35c', true);
+          if (visible) spawnDamageNumber(pos, 'TREASURE!', '#ffd35c', true);
         } else {
           const roll = Math.random();
-          if (roll < 0.35) { const g = 12 + Math.floor(Math.random() * 15) + G.floor * 4; G.run.gold += g; addMsg(`Chest: +${g} gold`, 'gold'); }
+          if (roll < 0.35) { const g = 12 + Math.floor(Math.random() * 15) + f * 4; G.run.gold += g; addMsg(`Chest: +${g} gold`, 'gold'); }
           else if (roll < 0.6) { G.run.potions++; addMsg('Chest: a health potion 🧪'); }
           else if (roll < 0.85) {
-            const item = rollAnyItem(G.player.classId, G.floor, 0.1);
+            const item = rollAnyItem(G.player.classId, f, 0.1);
             if (addToBag(item)) addMsg(`Chest: <span style="color:${rarityOf(item).color}">${item.name}</span> — Tab to equip`, 'gold');
             else { G.run.gold += 20; addMsg('Chest: +20 gold (bag full)', 'gold'); }
           }
           else { G.run.keys++; addMsg('Chest: a golden key! 🔑', 'gold'); }
         }
       }
-      spawnBurst(pos, 0xffcc55, 16, 4.5, 0.13);
+      fx(0xffcc55, 16, 4.5);
       break;
     }
   }
   if (isMine) refreshHud();
+}
+
+// silently apply "already looted by a teammate" state when arriving on a floor
+export function applyTakenSilently(fs, ids) {
+  for (const id of ids) {
+    const l = fs.loots.find(x => x.id === id);
+    if (!l || l.taken) continue;
+    l.taken = true;
+    if (l.kind === 'chest' || l.kind === 'goldchest') openChestVisual(l);
+    else hideLoot(l);
+  }
 }
 
 function hideLoot(l) {

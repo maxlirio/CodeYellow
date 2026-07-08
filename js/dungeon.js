@@ -1,6 +1,6 @@
-// Procedural dungeon: seeded room+corridor generation, merged static geometry,
-// climbable platforms with stairs & rail barriers, torches, traps, portal exit,
-// and spawn lists for enemies & loot.
+// Procedural dungeon. generateFloorData() is pure (grid + spawn lists + mesh placements),
+// so the host can simulate floors it never renders; buildFloorMeshes() creates the
+// visual geometry for floors the local player actually visits.
 import * as THREE from 'three';
 import { G } from './state.js';
 import { makeRng } from './rng.js';
@@ -9,30 +9,27 @@ import { buildMergedStatic } from './assets.js';
 
 export const SOLID = 0, FLOOR = 1, STAIRS = 3, TRAP = 4, OBSTACLE = 5, RAMP = 6;
 
-let floorGroup = null;
-
-export function clearFloorMeshes() {
-  if (floorGroup) {
-    floorGroup.traverse((n) => { if (n.isMesh) { n.geometry.dispose(); } });
-    G.scene.remove(floorGroup);
-    floorGroup = null;
-  }
+// deterministic boss schedule (endless floors keep the 3-floor cadence)
+export function bossTypeFor(floor) {
+  if (BOSS_FLOORS[floor]) return BOSS_FLOORS[floor];
+  if (floor > 9 && floor % 3 === 0) return floor % 9 === 0 ? 'boneking' : 'boss';
+  return null;
 }
 
-export function generateFloor(seedStr, floor) {
+export function generateFloorData(seedStr, floor) {
   const rng = makeRng(`${seedStr}:floor:${floor}`);
   const size = Math.min(34 + floor * 2, 46);
   const w = size, h = size;
-  const cells = new Uint8Array(w * h); // SOLID
-  const elev = new Uint8Array(w * h);  // 1 = platform surface at y=4 above this cell
-  const ramps = new Map();             // idx -> {dx,dy} ascending direction
+  const cells = new Uint8Array(w * h);
+  const elev = new Uint8Array(w * h);
+  const ramps = new Map();
   const at = (x, y) => cells[y * w + x];
   const set = (x, y, v) => { cells[y * w + x] = v; };
   const inb = (x, y) => x > 0 && y > 0 && x < w - 1 && y < h - 1;
   const idxOf = (x, y) => y * w + x;
 
-  // ---- rooms ----
-  const isBossFloor = !!BOSS_FLOORS[floor];
+  const bossType = bossTypeFor(floor);
+  const isBossFloor = !!bossType;
   const targetRooms = Math.min(6 + floor, 11);
   const rooms = [];
   for (let tries = 0; tries < 140 && rooms.length < targetRooms; tries++) {
@@ -49,7 +46,6 @@ export function generateFloor(seedStr, floor) {
     for (let y = r.y; y < r.y + r.h; y++) for (let x = r.x; x < r.x + r.w; x++) set(x, y, FLOOR);
   }
 
-  // ---- corridors ----
   const corridor = (a, b) => {
     let { cx: x, cy: y } = a;
     const digTo = (tx, ty) => {
@@ -61,7 +57,6 @@ export function generateFloor(seedStr, floor) {
   for (let i = 1; i < rooms.length; i++) corridor(rooms[i - 1], rooms[i]);
   for (let i = 0; i < 2 && rooms.length > 3; i++) corridor(rng.pick(rooms), rng.pick(rooms));
 
-  // ---- spawn & exit rooms ----
   const spawnRoom = rooms[0];
   let exitRoom = rooms[0], bestD = -1;
   for (const r of rooms) {
@@ -69,13 +64,11 @@ export function generateFloor(seedStr, floor) {
     if (d > bestD) { bestD = d; exitRoom = r; }
   }
 
-  // ---- climbable platforms in large rooms ----
-  // A 2-cell-deep raised strip along one wall, with a staircase up and rail barriers.
-  const platforms = []; // {cells:[{x,y}], ramp:{x,y,dx,dy}, room}
+  // ---- climbable platforms ----
+  const platforms = [];
   const eligible = rooms.filter(r => r !== spawnRoom && r !== exitRoom && r.w >= 6 && r.h >= 6);
   for (const r of rooms) {
     if (!eligible.includes(r)) continue;
-    // always raise at least one structure per floor if any room can hold one
     const mustPlace = platforms.length === 0 && r === eligible[eligible.length - 1];
     if (!mustPlace && !rng.chance(0.65)) continue;
     const side = rng.pick(['N', 'S', 'W', 'E']);
@@ -102,7 +95,7 @@ export function generateFloor(seedStr, floor) {
     platforms.push({ cells: strip, ramp: { ...rampCell, ...rampDir }, room: r });
   }
 
-  // ---- traps in corridors ----
+  // ---- traps ----
   const traps = [];
   const isCorridorCell = (x, y) => {
     if (at(x, y) !== FLOOR) return false;
@@ -112,7 +105,7 @@ export function generateFloor(seedStr, floor) {
   const trapCount = Math.min(2 + floor, 8);
   for (let tries = 0, placed = 0; tries < 200 && placed < trapCount; tries++) {
     const x = rng.int(2, w - 3), y = rng.int(2, h - 3);
-    if (isCorridorCell(x, y)) { set(x, y, TRAP); traps.push({ x: x * CELL, z: y * CELL, cx: x, cy: y }); placed++; }
+    if (isCorridorCell(x, y)) { set(x, y, TRAP); traps.push({ x: x * CELL, z: y * CELL, cx: x, cy: y, cd: 0 }); placed++; }
   }
 
   // ---- portal exit ----
@@ -128,7 +121,7 @@ export function generateFloor(seedStr, floor) {
   const portal = edgeCandidates.length ? rng.pick(edgeCandidates) : { x: exitRoom.cx, y: exitRoom.cy, dx: 0, dy: -1 };
   set(portal.x, portal.y, STAIRS);
 
-  // ================= geometry =================
+  // ================= mesh placements =================
   const placements = [];
   const M = new THREE.Matrix4(), Q = new THREE.Quaternion(), V = new THREE.Vector3(), S = new THREE.Vector3();
   const place = (piece, x, y, z, yaw = 0, scale = 1) => {
@@ -152,7 +145,6 @@ export function generateFloor(seedStr, floor) {
     const c = at(x, y);
     if (c === SOLID) continue;
     const wx = x * CELL, wz = y * CELL;
-    // floor tile
     if (c === TRAP) {
       place('floor_tile_large', wx, 0, wz);
       place('floor_tile_big_spikes', wx, 0.02, wz);
@@ -169,7 +161,6 @@ export function generateFloor(seedStr, floor) {
         place(fv, wx, 0, wz, rng.int(0, 3) * Math.PI / 2);
       }
     }
-    // walls on edges facing solid cells — two storeys high for first-person enclosure
     for (const d of wallDirs) {
       const nx = x + d.dx, ny = y + d.dy;
       const neighbor = (nx < 0 || ny < 0 || nx >= w || ny >= h) ? SOLID : at(nx, ny);
@@ -186,7 +177,6 @@ export function generateFloor(seedStr, floor) {
       place(piece, ex, 0, ez, d.yaw);
       const roll2 = rng.next();
       place(roll2 < 0.85 ? 'wall' : 'wall_cracked', ex, PLATFORM_H, ez, d.yaw);
-      // torches on some walls
       torchStep++;
       if (torchStep % 5 === 0 && c !== STAIRS) {
         const inx = -d.dx, inz = -d.dy;
@@ -198,21 +188,18 @@ export function generateFloor(seedStr, floor) {
     }
   }
 
-  // ---- platform geometry: deck tiles, stairs, rails, support pillars ----
+  // ---- platform decks, rails, stairs, supports ----
   for (const p of platforms) {
     const isPlat = (x, y) => x >= 0 && y >= 0 && x < w && y < h && elev[idxOf(x, y)] === 1;
     p.cells.forEach((c, ci) => {
       place('floor_tile_large', c.x * CELL, PLATFORM_H, c.y * CELL, rng.int(0, 3) * Math.PI / 2);
-      // rails on open edges (skip the stairs entrance)
       for (const d of wallDirs) {
         const nx = c.x + d.dx, ny = c.y + d.dy;
         const nc = (nx < 0 || ny < 0 || nx >= w || ny >= h) ? SOLID : at(nx, ny);
         if (nc === SOLID || isPlat(nx, ny)) continue;
-        const isStairEntrance = (nx === p.ramp.x && ny === p.ramp.y);
-        if (isStairEntrance) continue;
+        if (nx === p.ramp.x && ny === p.ramp.y) continue;
         place('barrier', c.x * CELL + d.dx * CELL / 2, PLATFORM_H, c.y * CELL + d.dy * CELL / 2, d.yaw);
       }
-      // support pillars under the outer edge, every other cell
       if (ci % 2 === 0) {
         const exposed = wallDirs.some(d => { const nx = c.x + d.dx, ny = c.y + d.dy; return !isPlat(nx, ny) && (nx < 0 || ny < 0 || nx >= w || ny >= h ? false : at(nx, ny) !== SOLID); });
         if (exposed && at(c.x, c.y) === FLOOR) {
@@ -221,14 +208,12 @@ export function generateFloor(seedStr, floor) {
         }
       }
     });
-    // staircase: model top (local z=0) sits at the edge facing the platform
     const r = p.ramp;
     const topX = r.x * CELL + r.dx * CELL / 2, topZ = r.y * CELL + r.dy * CELL / 2;
-    const yaw = Math.atan2(-r.dx, -r.dy);
-    place('stairs', topX, 0, topZ, yaw, [0.8, PLATFORM_H / 5.1, 1]);
+    place('stairs', topX, 0, topZ, Math.atan2(-r.dx, -r.dy), [0.8, PLATFORM_H / 5.1, 1]);
   }
 
-  // ---- room decoration & obstacles ----
+  // ---- props ----
   const props = [];
   const propAt = (x, y) => props.find(p => p.cx === x && p.cy === y);
   for (const r of rooms) {
@@ -262,12 +247,7 @@ export function generateFloor(seedStr, floor) {
     }
   }
 
-  // ---- build merged mesh ----
-  clearFloorMeshes();
-  floorGroup = buildMergedStatic(placements);
-  G.scene.add(floorGroup);
-
-  // ---- enemy spawn list (deterministic order => stable network ids) ----
+  // ---- enemy spawns (deterministic order & ids across all peers) ----
   const enemySpawns = [];
   const pool = enemyPool(floor);
   const eChance = eliteChance(floor);
@@ -280,7 +260,6 @@ export function generateFloor(seedStr, floor) {
       enemySpawns.push({ type: rng.pick(pool), x: x * CELL + rng.next() * 2 - 1, z: y * CELL + rng.next() * 2 - 1, y: 0, elite: rng.chance(eChance) });
     }
   }
-  // archers guarding platforms
   for (const p of platforms) {
     const nA = rng.int(1, 2);
     for (let i = 0; i < nA; i++) {
@@ -289,10 +268,10 @@ export function generateFloor(seedStr, floor) {
     }
   }
   if (isBossFloor) {
-    enemySpawns.push({ type: BOSS_FLOORS[floor], x: exitRoom.cx * CELL, z: exitRoom.cy * CELL, y: 0 });
+    enemySpawns.push({ type: bossType, x: exitRoom.cx * CELL, z: exitRoom.cy * CELL, y: 0 });
   }
 
-  // ---- loot spawn list ----
+  // ---- loot spawns ----
   const lootSpawns = [];
   const freeRoomCell = (r, wantPlat = false) => {
     for (let tries = 0; tries < 24; tries++) {
@@ -310,7 +289,6 @@ export function generateFloor(seedStr, floor) {
     const c = freeRoomCell(r);
     if (c) lootSpawns.push({ kind: 'chest', x: c.x * CELL, z: c.y * CELL, y: c.py, yaw: rng.next() * Math.PI * 2 });
   }
-  // platform treasure: a chest + coins on each platform
   for (const p of platforms) {
     const c = freeRoomCell(p.room, true);
     if (c) lootSpawns.push({ kind: 'chest', x: c.x * CELL + 1, z: c.y * CELL, y: PLATFORM_H, yaw: rng.next() * Math.PI * 2 });
@@ -337,59 +315,75 @@ export function generateFloor(seedStr, floor) {
     if (c) lootSpawns.push({ kind: 'potion', x: c.x * CELL + rng.next() * 2 - 1, z: c.y * CELL + rng.next() * 2 - 1, y: c.py });
   }
 
-  // portal glow
-  const glowGeo = new THREE.PlaneGeometry(2.6, 3.4);
-  const glowMat = new THREE.MeshBasicMaterial({ color: 0xff7718, transparent: true, opacity: 0.75, side: THREE.DoubleSide });
-  const glow = new THREE.Mesh(glowGeo, glowMat);
-  glow.position.set(portal.x * CELL + portal.dx * CELL / 2, 1.8, portal.y * CELL + portal.dy * CELL / 2);
-  glow.rotation.y = wallDirs.find(d => d.dx === portal.dx && d.dy === portal.dy).yaw;
-  floorGroup.add(glow);
-  const plight = new THREE.PointLight(0xff8822, 18, 14, 1.6);
-  plight.position.set(portal.x * CELL + portal.dx * (CELL / 2 - 0.6), 2.2, portal.y * CELL + portal.dy * (CELL / 2 - 0.6));
-  floorGroup.add(plight);
-
-  // ---- commit state ----
-  G.grid = {
+  const grid = {
     w, h, cells, elev, ramps, rooms,
     spawn: { x: spawnRoom.cx * CELL, z: spawnRoom.cy * CELL },
     stairs: { x: portal.x * CELL, z: portal.y * CELL, cx: portal.x, cy: portal.y },
     stairsLocked: isBossFloor,
+    portal: { dx: portal.dx, dy: portal.dy, yaw: wallDirs.find(d => d.dx === portal.dx && d.dy === portal.dy).yaw },
   };
-  G.explored = new Uint8Array(w * h);
-  G.torches = torches;
-  G.traps = traps.map(t => ({ ...t, cd: 0 }));
+  return {
+    grid, torches, traps, placements, enemySpawns, lootSpawns,
+    explored: new Uint8Array(w * h), hadBoss: isBossFloor,
+  };
+}
 
-  return { enemySpawns, lootSpawns };
+// Build (or rebuild) the visual geometry for a floor the local player visits.
+export function buildFloorMeshes(fs) {
+  if (fs.built) return;
+  const group = buildMergedStatic(fs.placements);
+  const { stairs, portal } = fs.grid;
+  const glow = new THREE.Mesh(
+    new THREE.PlaneGeometry(2.6, 3.4),
+    new THREE.MeshBasicMaterial({ color: 0xff7718, transparent: true, opacity: 0.75, side: THREE.DoubleSide })
+  );
+  glow.position.set(stairs.x + portal.dx * CELL / 2, 1.8, stairs.z + portal.dy * CELL / 2);
+  glow.rotation.y = portal.yaw;
+  group.add(glow);
+  const plight = new THREE.PointLight(0xff8822, 18, 14, 1.6);
+  plight.position.set(stairs.x + portal.dx * (CELL / 2 - 0.6), 2.2, stairs.z + portal.dy * (CELL / 2 - 0.6));
+  group.add(plight);
+  group.visible = false;
+  G.scene.add(group);
+  fs.meshGroup = group;
+  fs.built = true;
+}
+
+export function disposeAllFloors() {
+  for (const fs of G.floors.values()) {
+    for (const grp of [fs.meshGroup, fs.enemyGroup, fs.lootGroup]) {
+      if (!grp) continue;
+      grp.traverse((n) => { if (n.isMesh && !n.isSkinnedMesh && fs.meshGroup === grp) n.geometry.dispose(); });
+      G.scene.remove(grp);
+    }
+  }
+  G.floors.clear();
 }
 
 // ---- elevation ----
-// Ground height under a point, given the mover's current y (so you can walk both
-// under and on top of platforms).
-export function groundHeightAt(x, z, curY = 0) {
-  if (!G.grid) return 0;
+export function groundHeightAt(x, z, curY = 0, grid = null) {
+  const g = grid || G.grid;
+  if (!g) return 0;
   const cx = Math.round(x / CELL), cy = Math.round(z / CELL);
-  if (cx < 0 || cy < 0 || cx >= G.grid.w || cy >= G.grid.h) return 0;
-  const idx = cy * G.grid.w + cx;
-  const ramp = G.grid.ramps.get(idx);
+  if (cx < 0 || cy < 0 || cx >= g.w || cy >= g.h) return 0;
+  const idx = cy * g.w + cx;
+  const ramp = g.ramps.get(idx);
   if (ramp) {
     const s = Math.min(1, Math.max(0, (ramp.dx * (x - cx * CELL) + ramp.dy * (z - cy * CELL)) / CELL + 0.5));
     return s * PLATFORM_H;
   }
-  if (G.grid.elev[idx]) return curY > PLATFORM_H * 0.6 ? PLATFORM_H : 0;
+  if (g.elev[idx]) return curY > PLATFORM_H * 0.6 ? PLATFORM_H : 0;
   return 0;
 }
 
 // ---- movement & collision ----
-const cellBlocked = (x, z, y, ghost, ref) => {
-  if (!G.grid) return true;
+const cellBlocked = (g, x, z, y, ghost, ref) => {
   const cx = Math.round(x / CELL), cy = Math.round(z / CELL);
-  if (cx < 0 || cy < 0 || cx >= G.grid.w || cy >= G.grid.h) return true;
-  const c = G.grid.cells[cy * G.grid.w + cx];
+  if (cx < 0 || cy < 0 || cx >= g.w || cy >= g.h) return true;
+  const c = g.cells[cy * g.w + cx];
   if (c === SOLID) return true;
   if (c === OBSTACLE && !ghost && y < 2.4) return true;
-  const h = groundHeightAt(x, z, y);
-  // can't walk up a ledge much taller than the local ground (ramps rise smoothly,
-  // so measure against where we stand, with slack for the probe lookahead)
+  const h = groundHeightAt(x, z, y, g);
   if (h > ref + 1.3) return true;
   // platform rails: while elevated, the only way down is the staircase
   if (!ghost && y > 2.4 && c !== RAMP && h < y - 2) return true;
@@ -397,16 +391,18 @@ const cellBlocked = (x, z, y, ghost, ref) => {
 };
 
 export function moveWithCollision(pos, dx, dz, radius = 0.55, opts = {}) {
+  const g = opts.grid || G.grid;
+  if (!g) return;
   const y = opts.y ?? pos.y ?? 0;
   const ghost = !!opts.ghost;
-  const ref = Math.max(y, groundHeightAt(pos.x, pos.z, y));
+  const ref = Math.max(y, groundHeightAt(pos.x, pos.z, y, g));
   const tryAxis = (nx, nz) => {
     const checks = [
       [nx + radius, nz], [nx - radius, nz], [nx, nz + radius], [nx, nz - radius],
       [nx + radius * 0.7, nz + radius * 0.7], [nx - radius * 0.7, nz + radius * 0.7],
       [nx + radius * 0.7, nz - radius * 0.7], [nx - radius * 0.7, nz - radius * 0.7],
     ];
-    return checks.every(([cx, cz]) => !cellBlocked(cx, cz, y, ghost, ref));
+    return checks.every(([cx, cz]) => !cellBlocked(g, cx, cz, y, ghost, ref));
   };
   let x = pos.x, z = pos.z;
   if (dx !== 0 && tryAxis(x + dx, z)) x += dx;
@@ -414,14 +410,16 @@ export function moveWithCollision(pos, dx, dz, radius = 0.55, opts = {}) {
   pos.x = x; pos.z = z;
 }
 
-export function hasLineOfSight(x0, z0, x1, z1) {
+export function hasLineOfSight(x0, z0, x1, z1, grid = null) {
+  const g = grid || G.grid;
+  if (!g) return false;
   const steps = Math.ceil(Math.hypot(x1 - x0, z1 - z0) / (CELL * 0.4));
   for (let i = 1; i < steps; i++) {
     const t = i / steps;
     const sx = x0 + (x1 - x0) * t, sz = z0 + (z1 - z0) * t;
     const cx = Math.round(sx / CELL), cy = Math.round(sz / CELL);
-    if (cx < 0 || cy < 0 || cx >= G.grid.w || cy >= G.grid.h) return false;
-    if (G.grid.cells[cy * G.grid.w + cx] === SOLID) return false;
+    if (cx < 0 || cy < 0 || cx >= g.w || cy >= g.h) return false;
+    if (g.cells[cy * g.w + cx] === SOLID) return false;
   }
   return true;
 }

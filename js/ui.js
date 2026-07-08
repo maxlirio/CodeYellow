@@ -180,8 +180,9 @@ export function updatePartyBar() {
   if (!G.remotes.size) { bar.innerHTML = ''; return; }
   let html = '';
   for (const r of G.remotes.values()) {
+    const here = r.floor === G.floor;
     html += `<div class="pcard ${r.dead ? 'dead' : ''}">
-      <span class="pname">${r.cls.icon} ${escapeHtml(r.name)}</span>
+      <span class="pname">${r.cls.icon} ${escapeHtml(r.name)} <span style="color:${here ? '#7dff8a' : '#8d8168'};float:right">F${r.floor}</span></span>
       <div class="pbar"><div class="pfill" style="width:${Math.max(0, (r.hp / r.maxHp) * 100)}%"></div></div>
     </div>`;
   }
@@ -242,9 +243,10 @@ export function updateMinimap() {
     if (ex < 0 || ey < 0 || ex > c.width || ey > c.height) continue;
     ctx.beginPath(); ctx.arc(ex, ey, e.boss ? 4 : 2.5, 0, 7); ctx.fill();
   }
-  // remote players
+  // remote players (same floor only)
   ctx.fillStyle = '#55b6ff';
   for (const r of G.remotes.values()) {
+    if (r.floor !== G.floor) continue;
     const rx = (r.obj.position.x / 4 - x0) * scale, ry = (r.obj.position.z / 4 - y0) * scale;
     if (rx >= 0 && ry >= 0 && rx <= c.width && ry <= c.height) { ctx.beginPath(); ctx.arc(rx, ry, 3, 0, 7); ctx.fill(); }
   }

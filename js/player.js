@@ -243,7 +243,7 @@ export function sendPos(force = false) {
   if (G.net.role === 'solo' || !p) return;
   p.lastPosSend = 0;
   netSend({
-    t: 'pos',
+    t: 'pos', f: G.floor,
     x: +p.obj.position.x.toFixed(2), y: +p.obj.position.y.toFixed(2), z: +p.obj.position.z.toFixed(2),
     yaw: +p.yaw.toFixed(2),
     anim: p.anim.currentName,
@@ -274,7 +274,7 @@ function doAttackHit() {
     };
     spawnBolt(b);
     sfx.bolt();
-    netSend({ t: 'bolt', b: { ...b, owner: 'fx' } });
+    netSend({ t: 'bolt', f: G.floor, b: { ...b, owner: 'fx' } });
     return;
   }
   sfx.swing();
@@ -382,9 +382,9 @@ export function tryInteract(onStairs) {
   } else if (interactTarget.kind === 'chest') {
     const c = interactTarget.chest;
     if (c.kind === 'goldchest' && G.run.keys < 1) return;
-    takeLoot(c.id, 'local');
+    takeLoot(G.floor, c.id, 'local');
   } else if (interactTarget.kind === 'drop') {
-    takeLoot(interactTarget.drop.id, 'local');
+    takeLoot(G.floor, interactTarget.drop.id, 'local');
   }
 }
 
@@ -465,7 +465,7 @@ export function addRemotePlayer(pid, name, classId, look, equip) {
   tag.position.y = 2.6;
   obj.add(tag);
   G.scene.add(obj);
-  const r = { pid, name, classId, cls, obj, anim, netX: 0, netY: 0, netZ: 0, netYaw: 0, hp: cls.hp, maxHp: cls.hp, dead: false, lastAnim: 'Idle' };
+  const r = { pid, name, classId, cls, obj, anim, netX: 0, netY: 0, netZ: 0, netYaw: 0, hp: cls.hp, maxHp: cls.hp, dead: false, lastAnim: 'Idle', floor: 1 };
   anim.play('Idle');
   G.remotes.set(pid, r);
   updatePartyBar();
@@ -487,6 +487,11 @@ export function applyRemoteEquip(pid, meshes) {
 
 export function updateRemotes(dt) {
   for (const r of G.remotes.values()) {
+    if (r.floor !== G.floor) {
+      // hidden on another floor — keep position current (enemy AI there needs it)
+      r.obj.position.set(r.netX, r.netY, r.netZ);
+      continue;
+    }
     r.anim.update(dt);
     r.obj.position.x += (r.netX - r.obj.position.x) * Math.min(1, dt * 12);
     r.obj.position.y += (r.netY - r.obj.position.y) * Math.min(1, dt * 12);
@@ -498,9 +503,21 @@ export function updateRemotes(dt) {
   }
 }
 
+// hide teammates who are on a different floor
+export function refreshRemoteVisibility() {
+  for (const r of G.remotes.values()) r.obj.visible = r.floor === G.floor;
+}
+
 export function applyRemotePos(pid, m) {
   const r = G.remotes.get(pid);
   if (!r) return;
+  const f = m.f ?? r.floor;
+  if (f !== r.floor) {
+    r.floor = f;
+    // snap so they don't slide across the map after a floor change
+    r.obj.position.set(m.x, m.y || 0, m.z);
+    r.obj.visible = f === G.floor;
+  }
   r.netX = m.x; r.netY = m.y || 0; r.netZ = m.z; r.netYaw = m.yaw;
   r.hp = m.hp; r.maxHp = m.mhp;
   if (m.dead && !r.dead) { r.dead = true; r.anim.play('Death_A', { once: true, clamp: true }); }

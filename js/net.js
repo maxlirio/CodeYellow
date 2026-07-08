@@ -1,14 +1,16 @@
 // PeerJS multiplayer (same approach as CodeBlue): the 5-letter room code IS the host's
 // peer id — no backend needed, PeerJS's free public broker does signaling.
-// Host-authoritative: host simulates enemies/loot; guests render snapshots.
+// Host-authoritative. Players can be on DIFFERENT floors: the host simulates every
+// floor with a player on it; every message is floor-tagged; arriving on a floor a
+// teammate already visited pulls a state snapshot (freq -> fstate).
 import * as THREE from 'three';
-import { G } from './state.js';
+import { G, floorState } from './state.js';
 import { addMsg } from './ui.js';
 
-const PREFIX = 'code-orange-mx-';
+const PREFIX = 'code-orange-mx2-';
 const CODE_CHARS = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
 
-let callbacks = {}; // set by main.js: onLobbyUpdate, onStart, onFloorChange, onGameOver, onVictory, onPeerLeft
+let callbacks = {}; // main.js: onLobbyUpdate, onStart, onGameOver, onVictory, onHostGone, onPartyDeath, onPeerFloor, onFstate, ensureFloorSim
 export function setNetCallbacks(cb) { callbacks = cb; }
 
 // handlers wired at runtime to avoid import cycles
@@ -90,6 +92,20 @@ export function hostStart() {
   netSend({ t: 'start', seed: G.seed });
 }
 
+// snapshot of everything that already happened on a floor
+function buildFstate(n) {
+  const fs = floorState(n);
+  return {
+    t: 'fstate', f: n,
+    taken: fs.loots.filter(l => l.taken).map(l => l.id),
+    dead: fs.enemies.filter(e => e.state === 'dead').map(e => e.id),
+    hp: fs.enemies.filter(e => e.state !== 'dead' && e.hp < e.maxHp).map(e => [e.id, e.hp]),
+    summons: fs.summons,
+    drops: fs.drops,
+    locked: fs.grid ? fs.grid.stairsLocked : false,
+  };
+}
+
 function handleAsHost(conn, m) {
   const pid = conn.peer;
   switch (m.t) {
@@ -102,16 +118,24 @@ function handleAsHost(conn, m) {
       H?.player.applyRemotePos(pid, m);
       relay(conn, { ...m, pid });
       break;
+    case 'pfloor':
+      callbacks.onPeerFloor?.(pid, m.n);
+      relay(conn, { ...m, pid });
+      break;
+    case 'freq':
+      callbacks.ensureFloorSim?.(m.n);
+      sendTo(conn, buildFstate(m.n));
+      break;
     case 'bolt':
-      H?.proj.spawnBolt(m.b);
+      if (m.f === G.floor) H?.proj.spawnBolt(m.b);
       relay(conn, { ...m, pid });
       break;
     case 'fx':
-      H?.fx.spawnBurst(new THREE.Vector3(m.x, m.y, m.z), m.color, m.big ? 26 : 14, m.big ? 7 : 4, 0.15, 0.5);
+      if (m.f === G.floor) H?.fx.spawnBurst(new THREE.Vector3(m.x, m.y, m.z), m.color, m.big ? 26 : 14, m.big ? 7 : 4, 0.15, 0.5);
       relay(conn, { ...m, pid });
       break;
     case 'beam':
-      H?.spells.remoteBeam(m.a, m.b);
+      if (m.f === G.floor) H?.spells.remoteBeam(m.a, m.b);
       relay(conn, { ...m, pid });
       break;
     case 'equip':
@@ -119,15 +143,12 @@ function handleAsHost(conn, m) {
       relay(conn, { ...m, pid });
       break;
     case 'dmg': {
-      const e = H?.enemies.enemyById(m.id);
+      const e = H?.enemies.enemyById(m.f, m.id);
       if (e) H.enemies.damageEnemy(e, m.amount, m.crit, true, pid, m.fx || null);
       break;
     }
     case 'lootReq':
-      H?.loot.takeLoot(m.id, pid, true);
-      break;
-    case 'stairsReq':
-      if (!G.grid.stairsLocked) callbacks.onFloorChange?.(G.floor + 1, true);
+      H?.loot.takeLoot(m.f, m.id, pid, true);
       break;
     case 'pdead': {
       const p = G.net.players.get(pid);
@@ -136,9 +157,6 @@ function handleAsHost(conn, m) {
       callbacks.onPartyDeath?.();
       break;
     }
-    case 'prespawn':
-      relay(conn, { ...m, pid });
-      break;
   }
 }
 
@@ -186,18 +204,6 @@ function handleAsGuest(m) {
       G.net.players = new Map(m.players.map(p => [p.pid, { name: p.name, classId: p.classId, look: p.look }]));
       callbacks.onLobbyUpdate?.();
       break;
-    case 'fx':
-      H?.fx.spawnBurst(new THREE.Vector3(m.x, m.y, m.z), m.color, m.big ? 26 : 14, m.big ? 7 : 4, 0.15, 0.5);
-      break;
-    case 'beam':
-      H?.spells.remoteBeam(m.a, m.b);
-      break;
-    case 'equip':
-      H?.player.applyRemoteEquip(m.pid, m.meshes);
-      break;
-    case 'ldrop':
-      H?.loot.dropItemLoot(m.item, m.x, m.z, m.y, true);
-      break;
     case 'start':
       G.net.started = true;
       callbacks.onStart?.(m.seed);
@@ -206,46 +212,68 @@ function handleAsGuest(m) {
       ensureRemote(m.pid);
       H?.player.applyRemotePos(m.pid, m);
       break;
-    case 'bolt':
-      H?.proj.spawnBolt(m.b);
+    case 'pfloor':
+      callbacks.onPeerFloor?.(m.pid, m.n);
       break;
+    case 'fstate':
+      callbacks.onFstate?.(m);
+      break;
+    case 'bolt':
     case 'ebolt':
-      H?.proj.spawnBolt(m.b);
+      if (m.f === G.floor) H?.proj.spawnBolt(m.b);
+      break;
+    case 'fx':
+      if (m.f === G.floor) H?.fx.spawnBurst(new THREE.Vector3(m.x, m.y, m.z), m.color, m.big ? 26 : 14, m.big ? 7 : 4, 0.15, 0.5);
+      break;
+    case 'beam':
+      if (m.f === G.floor) H?.spells.remoteBeam(m.a, m.b);
+      break;
+    case 'equip':
+      H?.player.applyRemoteEquip(m.pid, m.meshes);
       break;
     case 'ehp': {
-      const e = H?.enemies.enemyById(m.id);
+      const e = H?.enemies.enemyById(m.f, m.id);
       if (e) e.hp = m.hp;
       break;
     }
     case 'estate': {
-      const e = H?.enemies.enemyById(m.id);
+      const e = H?.enemies.enemyById(m.f, m.id);
       if (e) H.enemies.setEnemyState(e, m.s, true);
       break;
     }
     case 'esnap': {
+      const fs = G.floors.get(m.f);
+      if (!fs || !fs.spawned) break;
       for (const s of m.list) {
-        const e = H?.enemies.enemyById(s[0]);
+        const e = fs.enemies.find(en => en.id === s[0]);
         if (e) { e.netX = s[1]; e.netZ = s[2]; e.netYaw = s[3]; e.hp = s[4]; e.netY = s[5] || 0; }
       }
       break;
     }
     case 'edie': {
-      const e = H?.enemies.enemyById(m.id);
+      const e = H?.enemies.enemyById(m.f, m.id);
       if (e) H.enemies.killEnemy(e, m.by === myId() ? 'local' : 'remote', true);
       break;
     }
-    case 'espawn':
-      H?.enemies.spawnEnemy(m.type, m.x, m.z, true, m.y || 0);
+    case 'espawn': {
+      const fs = G.floors.get(m.f);
+      if (fs && fs.spawned) {
+        const e = H?.enemies.spawnEnemy(fs, m.type, m.x, m.z, { y: m.y || 0, id: m.id });
+        if (e) H.enemies.setEnemyState(e, 'awaken', true);
+      }
       break;
+    }
     case 'phit':
       if (m.target === myId()) H?.player.damageLocalPlayer(m.dmg);
       break;
     case 'lootTaken':
-      H?.loot.takeLoot(m.id, m.by === myId() ? 'local' : 'remote', true);
+      H?.loot.takeLoot(m.f, m.id, m.by === myId() ? 'local' : 'remote', true);
       break;
-    case 'floor':
-      callbacks.onFloorChange?.(m.n, false);
+    case 'ldrop': {
+      const fs = G.floors.get(m.f);
+      if (fs && fs.spawned) H?.loot.dropItemLoot(fs, m.item, m.x, m.z, m.y, m.id);
       break;
+    }
     case 'pdead': {
       const p = G.net.players.get(m.pid);
       addMsg(`☠ ${p?.name || 'A companion'} has fallen!`, 'bad');
@@ -277,19 +305,25 @@ export function spawnRemoteAvatars() {
   }
 }
 
-// periodic enemy snapshots from host
+// periodic enemy snapshots from host, one message per floor guests occupy
 let snapT = 0;
 export function updateNet(dt) {
   if (G.net.role !== 'host' || !G.net.conns.length) return;
   snapT += dt;
   if (snapT < 0.12) return;
   snapT = 0;
-  const list = [];
-  for (const e of G.enemies) {
-    if (e.state === 'dead') continue;
-    list.push([e.id, +e.obj.position.x.toFixed(2), +e.obj.position.z.toFixed(2), +e.obj.rotation.y.toFixed(2), e.hp, +e.obj.position.y.toFixed(2)]);
+  const guestFloors = new Set();
+  for (const r of G.remotes.values()) guestFloors.add(r.floor);
+  for (const f of guestFloors) {
+    const fs = G.floors.get(f);
+    if (!fs || !fs.spawned) continue;
+    const list = [];
+    for (const e of fs.enemies) {
+      if (e.state === 'dead') continue;
+      list.push([e.id, +e.obj.position.x.toFixed(2), +e.obj.position.z.toFixed(2), +e.obj.rotation.y.toFixed(2), e.hp, +e.obj.position.y.toFixed(2)]);
+    }
+    if (list.length) netSend({ t: 'esnap', f, list });
   }
-  if (list.length) netSend({ t: 'esnap', list });
 }
 
 export function shutdownNet() {
