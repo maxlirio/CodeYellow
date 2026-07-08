@@ -3,7 +3,7 @@
 // floor-namespaced and deterministic (floor*1000+index; summons get 500+).
 import * as THREE from 'three';
 import { G, floorState } from './state.js';
-import { ENEMIES, scaleHp, scaleDmg, BOSS_NAMES } from './config.js';
+import { ENEMIES, scaleHp, scaleDmg } from './config.js';
 import { makeCharacter, tintCharacter } from './assets.js';
 import { makeBlobShadow, spawnDamageNumber, spawnBurst } from './fx.js';
 import { sfx } from './audio.js';
@@ -37,16 +37,23 @@ export function spawnEnemy(fs, type, x, z, { y = 0, elite = false, id = null } =
   obj.add(makeBlobShadow(0.9 * scale));
   fs.enemyGroup.add(obj);
   const floorN = fs.n;
+  const mut = fs.mutator || {};
+  const hpMult = (elite ? 2.4 : 1) * (mut.hpMult ?? 1);
   const e = {
     id: id ?? floorN * 1000 + fs.enemies.length, type, cfg, elite, floor: floorN,
-    hp: Math.round(scaleHp(cfg.hp, floorN) * (elite ? 2.4 : 1)),
-    maxHp: Math.round(scaleHp(cfg.hp, floorN) * (elite ? 2.4 : 1)),
+    hp: Math.round(scaleHp(cfg.hp, floorN) * hpMult),
+    maxHp: Math.round(scaleHp(cfg.hp, floorN) * hpMult),
     dmg: Math.round(scaleDmg(cfg.dmg, floorN) * (elite ? 1.5 : 1)),
+    speedMult: mut.speedMult ?? 1,
+    goldMult: (elite ? 2 : 1) * (mut.goldMult ?? 1),
+    xpMult: (elite ? 2.5 : 1) * (mut.xpMult ?? 1),
     obj, anim, state: 'inactive', stateT: 0, attackT: 0, attackFired: false,
     yaw: Math.random() * Math.PI * 2, scale, boss: !!cfg.boss, ghost: !!cfg.ghost,
-    summonT: 5, netX: x, netY: y, netZ: z, netYaw: 0, deadT: 0,
+    stalwart: !!cfg.stalwart,
+    summonT: cfg.summonEvery ? cfg.summonEvery * 0.6 : 5,
+    netX: x, netY: y, netZ: z, netYaw: 0, deadT: 0,
     slowT: 0, slowMult: 1, stunT: 0, poisonT: 0, poisonDps: 0, poisonTick: 0, poisonBy: 'local',
-    kbX: 0, kbZ: 0, vy: 0,
+    vulnT: 0, kbX: 0, kbZ: 0, vy: 0,
   };
   obj.rotation.y = e.yaw;
   anim.play(anim.has('Skeleton_Inactive_Standing_Pose') ? 'Skeleton_Inactive_Standing_Pose' : 'Idle');
@@ -132,6 +139,7 @@ export function updateEnemies(dt) {
 function simulateEnemy(e, fs, players, dt, mine) {
   const grid = fs.grid;
   // ---- status effects ----
+  if (e.vulnT > 0) e.vulnT -= dt;
   if (e.slowT > 0) { e.slowT -= dt; if (e.slowT <= 0) e.slowMult = 1; }
   if (e.poisonT > 0) {
     e.poisonT -= dt;
@@ -160,8 +168,8 @@ function simulateEnemy(e, fs, players, dt, mine) {
         setEnemyState(e, 'awaken');
         if (e.boss && mine) {
           sfx.bossroar();
-          showBossBar(BOSS_NAMES[e.floor] || 'ANCIENT HORROR');
-          addMsg(`${BOSS_NAMES[e.floor] || 'A boss'} awakens!`, 'bad');
+          showBossBar(e.cfg.bossName || 'ANCIENT HORROR');
+          addMsg(`${e.cfg.bossName || 'A boss'} awakens!`, 'bad');
         } else if (mine && Math.random() < 0.4) sfx.bones();
       }
       break;
@@ -183,7 +191,9 @@ function simulateEnemy(e, fs, players, dt, mine) {
       const dx = t.pos.x - e.obj.position.x, dz = t.pos.z - e.obj.position.z;
       const d = Math.max(0.001, Math.hypot(dx, dz));
       e.yaw = Math.atan2(dx, dz);
-      const speed = e.cfg.speed * e.slowMult;
+      // berserkers get faster as they take damage
+      const enrage = e.cfg.enrage ? 1 + (1 - e.hp / e.maxHp) * 0.9 : 1;
+      const speed = e.cfg.speed * e.slowMult * e.speedMult * enrage;
       let mx = (dx / d) * speed * dt, mz = (dz / d) * speed * dt;
       for (const o of fs.enemies) {
         if (o === e || o.state === 'dead') continue;
@@ -206,15 +216,16 @@ function simulateEnemy(e, fs, players, dt, mine) {
           const bolt = {
             x: from.x + dir.x * 0.8, y: from.y, z: from.z + dir.z * 0.8,
             dirX: dir.x, dirY: dir.y, dirZ: dir.z,
-            speed: 13, dmg: e.dmg, owner: 'enemy',
-            color: e.cfg.slowBolt ? 0x66ccff : 0x9944ff,
+            speed: e.cfg.boltSpeed || 13, dmg: e.dmg, owner: 'enemy',
+            color: e.cfg.slowBolt ? 0x66ccff : e.cfg.boltSpeed ? 0xddcc88 : 0x9944ff,
             slow: e.cfg.slowBolt ? { mult: 0.5, dur: 2.5 } : null,
           };
           if (mine) { spawnBolt(bolt); sfx.bolt(); }
           netSend({ t: 'ebolt', f: e.floor, b: bolt });
         } else if (t && t.dist < e.cfg.range + 0.6 && dy3 < 2) {
-          if (t.id === 'me') damageLocalPlayer(e.dmg);
-          else netSend({ t: 'phit', target: t.id, dmg: e.dmg });
+          const fx = e.cfg.plague ? { poison: { dps: e.cfg.plague.dps + Math.floor(e.floor / 2), dur: e.cfg.plague.dur } } : null;
+          if (t.id === 'me') damageLocalPlayer(e.dmg, fx);
+          else netSend({ t: 'phit', target: t.id, dmg: e.dmg, fx });
         }
       }
       if (e.stateT > e.cfg.attackTime + 0.25) setEnemyState(e, 'chase');
@@ -246,22 +257,22 @@ function simulateEnemy(e, fs, players, dt, mine) {
     }
   }
 
-  // boss summons
-  if (e.boss && e.cfg.summons && e.state !== 'inactive' && e.state !== 'dead') {
+  // summoners (necromancers and summoning bosses)
+  if (e.cfg.summons && e.state !== 'inactive' && e.state !== 'dead') {
     e.summonT -= dt;
     if (e.summonT <= 0) {
-      e.summonT = 9;
-      for (let i = 0; i < 2; i++) {
+      e.summonT = e.cfg.summonEvery || 9;
+      for (let i = 0; i < (e.cfg.summonCount || 1); i++) {
         const a = Math.random() * Math.PI * 2;
         const x = e.obj.position.x + Math.sin(a) * 3, z = e.obj.position.z + Math.cos(a) * 3;
         const id = fs.n * 1000 + 500 + fs.nextSummonId++;
-        const m = spawnEnemy(fs, 'minion', x, z, { y: e.obj.position.y, id });
+        const m = spawnEnemy(fs, e.cfg.summonType || 'minion', x, z, { y: e.obj.position.y, id });
         setEnemyState(m, 'awaken');
-        fs.summons.push({ id, type: 'minion', x, z, y: e.obj.position.y });
-        netSend({ t: 'espawn', f: fs.n, id, type: 'minion', x, z, y: e.obj.position.y });
+        fs.summons.push({ id, type: e.cfg.summonType || 'minion', x, z, y: e.obj.position.y });
+        netSend({ t: 'espawn', f: fs.n, id, type: e.cfg.summonType || 'minion', x, z, y: e.obj.position.y });
         if (mine) spawnBurst(new THREE.Vector3(x, e.obj.position.y + 1, z), 0x9944ff, 12, 4, 0.13);
       }
-      if (mine) addMsg('The Bone King summons minions!', 'bad');
+      if (mine) addMsg(e.boss ? `${e.cfg.bossName} ${e.cfg.bossMsg || 'summons minions'}!` : 'A necromancer raises the dead!', 'bad');
     }
   }
 
@@ -315,18 +326,23 @@ export function damageEnemy(e, amount, crit = false, fromNet = false, source = '
     notifyHit(crit);
     return;
   }
+  if (e.vulnT > 0) amount = Math.round(amount * 1.5); // death-marked
   e.hp -= amount;
   if (visible) {
-    spawnDamageNumber(e.obj.position.clone().setY(e.obj.position.y + 2 * e.scale), crit ? `${amount}!` : `${amount}`, crit ? '#ff5533' : '#ffd35c', crit);
+    spawnDamageNumber(e.obj.position.clone().setY(e.obj.position.y + 2 * e.scale), crit ? `${amount}!` : `${amount}`, crit ? '#ff5533' : e.vulnT > 0 ? '#ff88ff' : '#ffd35c', crit);
     spawnBurst(e.obj.position.clone().setY(e.obj.position.y + 1.2), 0xcccccc, 6, 3, 0.09, 0.35);
   }
   if (mine) { sfx[crit ? 'crit' : 'hit'](); notifyHit(crit); }
 
   if (effects) {
     if (effects.slow) { e.slowT = effects.slow.dur; e.slowMult = effects.slow.mult; }
-    if (effects.stun && !e.boss) e.stunT = Math.max(e.stunT, effects.stun);
+    if (effects.stun && !e.boss && !e.stalwart) e.stunT = Math.max(e.stunT, effects.stun);
     if (effects.poison) { e.poisonT = effects.poison.dur; e.poisonDps = effects.poison.dps; e.poisonBy = source; }
-    if (effects.kb && !e.boss) { e.kbX += effects.kb.x; e.kbZ += effects.kb.z; }
+    if (effects.kb && !e.boss && !e.stalwart) { e.kbX += effects.kb.x; e.kbZ += effects.kb.z; }
+    if (effects.vuln) e.vulnT = Math.max(e.vulnT, effects.vuln);
+    if (effects.lifesteal && mine && G.player && !G.player.dead) {
+      G.player.hp = Math.min(G.player.maxHp, G.player.hp + Math.max(1, Math.round(amount * effects.lifesteal)));
+    }
   }
 
   if (G.net.role === 'host') netSend({ t: 'ehp', f: e.floor, id: e.id, hp: e.hp });
@@ -351,12 +367,28 @@ export function killEnemy(e, source = 'local', fromNet = false) {
   }
   if (G.net.role === 'host' && !fromNet) netSend({ t: 'edie', f: e.floor, id: e.id, by: source === 'local' ? 'host' : source });
 
+  // plaguebearers burst into a poison cloud
+  if (e.cfg.deathCloud && isAuthority()) {
+    if (visible) spawnBurst(e.obj.position.clone().setY(e.obj.position.y + 1), 0x66cc44, 24, 5, 0.16, 0.8);
+    netSend({ t: 'fx', f: e.floor, x: e.obj.position.x, y: e.obj.position.y + 1, z: e.obj.position.z, color: 0x66cc44, big: 1 });
+    const pfx = { poison: { dps: 4 + Math.floor(e.floor / 2), dur: 3 } };
+    if (G.player && !G.player.dead && G.floor === e.floor) {
+      const d = Math.hypot(G.player.obj.position.x - e.obj.position.x, G.player.obj.position.z - e.obj.position.z);
+      if (d < e.cfg.deathCloud) damageLocalPlayer(3, pfx);
+    }
+    for (const [pid, r] of G.remotes) {
+      if (r.floor !== e.floor || r.dead) continue;
+      const d = Math.hypot(r.obj.position.x - e.obj.position.x, r.obj.position.z - e.obj.position.z);
+      if (d < e.cfg.deathCloud) netSend({ t: 'phit', target: pid, dmg: 3, fx: pfx });
+    }
+  }
+
   const mine = source === 'local';
   if (mine) {
-    const gold = Math.round((e.cfg.gold[0] + Math.floor(Math.random() * (e.cfg.gold[1] - e.cfg.gold[0]))) * (e.elite ? 2 : 1));
+    const gold = Math.round((e.cfg.gold[0] + Math.floor(Math.random() * (e.cfg.gold[1] - e.cfg.gold[0]))) * e.goldMult);
     G.run.gold += gold;
     G.run.kills++;
-    gainXp(Math.round(e.cfg.xp * (e.elite ? 2.5 : 1)));
+    gainXp(Math.round(e.cfg.xp * e.xpMult));
     addMsg(`${e.boss ? '💀 Boss defeated!' : e.elite ? '⭐ Elite destroyed!' : 'Skeleton destroyed'} +${gold}g`, e.boss || e.elite ? 'gold' : '');
   }
   // item drops (authority rolls & shares the actual item)
@@ -396,7 +428,7 @@ export function enemyById(f, id) {
 export function refreshBossBarForFloor() {
   const boss = G.enemies.find(e => e.boss && e.state !== 'dead' && e.state !== 'inactive');
   if (boss) {
-    showBossBar(BOSS_NAMES[G.floor] || 'ANCIENT HORROR');
+    showBossBar(boss.cfg.bossName || 'ANCIENT HORROR');
     updateBossBar(boss.hp / boss.maxHp);
   } else {
     hideBossBar();

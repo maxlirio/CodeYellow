@@ -25,6 +25,7 @@ export function spawnBolt(b) {
   G.projectiles.push({
     sp, x, z, y, dirX, dirY, dirZ, speed, dmg, owner, color, life: 0,
     size: b.size || 1, aoe: b.aoe || 0, slow: b.slow || null, poison: b.poison || null,
+    lifesteal: b.lifesteal || 0, pierce: !!b.pierce, hitIds: null,
   });
 }
 
@@ -62,13 +63,19 @@ export function updateProjectiles(dt, hooks) {
     if (!dead && p.owner === 'player') {
       for (const e of G.enemies) {
         if (e.state === 'dead' || e.state === 'inactive') continue;
+        if (p.hitIds && p.hitIds.has(e.id)) continue;
         const r = 0.95 * (e.scale || 1);
         if (Math.hypot(e.obj.position.x - p.x, e.obj.position.z - p.z) < r &&
             Math.abs(e.obj.position.y + 1.1 * e.scale - p.y) < 1.5 * e.scale) {
-          if (p.aoe) { explode(p, hooks); p.exploded = true; }
-          else hooks.damageEnemy(e, p.dmg, Math.random() < 0.08, false, 'local', { slow: p.slow, poison: p.poison });
-          dead = true;
-          break;
+          if (p.aoe) { explode(p, hooks); p.exploded = true; dead = true; }
+          else {
+            hooks.damageEnemy(e, p.dmg, Math.random() < 0.08, false, 'local', { slow: p.slow, poison: p.poison, lifesteal: p.lifesteal });
+            if (p.pierce) {
+              (p.hitIds ??= new Set()).add(e.id);
+              spawnBurst(new THREE.Vector3(p.x, p.y, p.z), p.color, 6, 3, 0.1, 0.3);
+            } else dead = true;
+          }
+          if (dead) break;
         }
       }
     } else if (!dead && p.owner === 'enemy') {

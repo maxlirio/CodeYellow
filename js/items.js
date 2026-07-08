@@ -2,7 +2,7 @@
 import { G } from './state.js';
 import {
   RARITIES, WEAPON_TYPES, OFFHAND_TYPES, NAME_PREFIX, NAME_SUFFIX,
-  TRINKET_NAMES, TRINKET_STATS, CLASSES,
+  TRINKET_NAMES, TRINKET_STATS, CLASSES, AFFIXES,
 } from './config.js';
 
 let uidCounter = 1;
@@ -32,14 +32,27 @@ export function rollWeapon(classId, floor, luck = 0) {
   const dmg = Math.round(cls.dmg * rarity.mult * (wt.dmgBonus || 1) * (1 + 0.09 * (floor - 1)));
   const item = {
     uid: uidCounter++, slot: 'weapon', classId, wtype: wt.id, mesh: wt.mesh, model: wt.model,
-    name: itemName(rarity, wt.noun), rarity: rarity.id, icon: '⚔',
+    name: itemName(rarity, wt.noun), rarity: rarity.id, icon: wt.ranged ? '🏹' : '⚔',
+    ranged: !!wt.ranged, atkTime: wt.atkTime || null,
     stats: { dmg },
   };
+  if (wt.speedAdd) item.stats.speed = wt.speedAdd;
   if (rarity.mult >= 1.4) { // rare+: bonus stat
     const t = pick(TRINKET_STATS);
     item.stats[t.stat] = +(t.min + Math.random() * (t.max - t.min) * 0.6).toFixed(1);
   }
+  // rare+ weapons can carry an affix (epic+ always do)
+  if (rarity.mult >= 1.65 || (rarity.mult >= 1.4 && Math.random() < 0.6)) {
+    const affix = pick(AFFIXES);
+    item.affix = affix.id;
+    item.name = `${affix.name} ${item.name}`;
+    if (affix.crit) item.stats.crit = (item.stats.crit || 0) + affix.crit;
+  }
   return item;
+}
+
+export function affixOf(item) {
+  return item?.affix ? AFFIXES.find(a => a.id === item.affix) : null;
 }
 
 export function rollOffhand(classId, floor, luck = 0) {

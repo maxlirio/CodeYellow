@@ -1,39 +1,35 @@
-// Procedural dungeon. generateFloorData() is pure (grid + spawn lists + mesh placements),
-// so the host can simulate floors it never renders; buildFloorMeshes() creates the
-// visual geometry for floors the local player actually visits.
+// Procedural dungeon. Every floor rolls a THEME (visual identity), a LAYOUT
+// (rooms / warrens / cavern / great hall), an optional MUTATOR, plus varied
+// platform shapes — all deterministic from the shared seed so co-op peers match.
+// generateFloorData() is pure; buildFloorMeshes() renders it for the local player.
 import * as THREE from 'three';
 import { G } from './state.js';
-import { makeRng } from './rng.js';
-import { CELL, BOSS_FLOORS, PLATFORM_H, enemyPool, eliteChance, ARCHERS } from './config.js';
+import { makeRng, hashStr } from './rng.js';
+import {
+  CELL, BOSS_FLOORS, PLATFORM_H, enemyPool, eliteChance, ARCHERS,
+  THEMES, MUTATORS, MUTATOR_CHANCE, MIDBOSS_TYPES,
+} from './config.js';
 import { buildMergedStatic } from './assets.js';
 
 export const SOLID = 0, FLOOR = 1, STAIRS = 3, TRAP = 4, OBSTACLE = 5, RAMP = 6;
 
-// deterministic boss schedule (endless floors keep the 3-floor cadence)
-export function bossTypeFor(floor) {
-  if (BOSS_FLOORS[floor]) return BOSS_FLOORS[floor];
-  if (floor > 9 && floor % 3 === 0) return floor % 9 === 0 ? 'boneking' : 'boss';
-  return null;
+// deterministic theme rotation: consecutive floors always differ
+export function themeFor(seed, floor) {
+  const base = hashStr(seed + ':themes');
+  return THEMES[(base + floor * 3) % THEMES.length];
 }
 
-export function generateFloorData(seedStr, floor) {
-  const rng = makeRng(`${seedStr}:floor:${floor}`);
-  const size = Math.min(34 + floor * 2, 46);
-  const w = size, h = size;
+// ---------------- layout carvers ----------------
+// each returns { cells, rooms } — rooms are used for spawns/props even in caverns
+function carveRooms(rng, w, h, floor, { roomMin = 4, roomMax = 9, count = null, loops = 2 } = {}) {
   const cells = new Uint8Array(w * h);
-  const elev = new Uint8Array(w * h);
-  const ramps = new Map();
   const at = (x, y) => cells[y * w + x];
   const set = (x, y, v) => { cells[y * w + x] = v; };
   const inb = (x, y) => x > 0 && y > 0 && x < w - 1 && y < h - 1;
-  const idxOf = (x, y) => y * w + x;
-
-  const bossType = bossTypeFor(floor);
-  const isBossFloor = !!bossType;
-  const targetRooms = Math.min(6 + floor, 11);
+  const targetRooms = count ?? Math.min(6 + floor, 11);
   const rooms = [];
-  for (let tries = 0; tries < 140 && rooms.length < targetRooms; tries++) {
-    const rw = rng.int(4, 9), rh = rng.int(4, 9);
+  for (let tries = 0; tries < 200 && rooms.length < targetRooms; tries++) {
+    const rw = rng.int(roomMin, roomMax), rh = rng.int(roomMin, roomMax);
     const rx = rng.int(1, w - rw - 2), ry = rng.int(1, h - rh - 2);
     let ok = true;
     for (const r of rooms) {
@@ -45,17 +41,170 @@ export function generateFloorData(seedStr, floor) {
   for (const r of rooms) {
     for (let y = r.y; y < r.y + r.h; y++) for (let x = r.x; x < r.x + r.w; x++) set(x, y, FLOOR);
   }
-
-  const corridor = (a, b) => {
+  const corridor = (a, b, wide = false) => {
     let { cx: x, cy: y } = a;
+    const dig = (px, py) => {
+      if (inb(px, py) && at(px, py) === SOLID) set(px, py, FLOOR);
+      if (wide && inb(px + 1, py) && at(px + 1, py) === SOLID) set(px + 1, py, FLOOR);
+    };
     const digTo = (tx, ty) => {
-      while (x !== tx) { x += Math.sign(tx - x); if (inb(x, y) && at(x, y) === SOLID) set(x, y, FLOOR); }
-      while (y !== ty) { y += Math.sign(ty - y); if (inb(x, y) && at(x, y) === SOLID) set(x, y, FLOOR); }
+      while (x !== tx) { x += Math.sign(tx - x); dig(x, y); }
+      while (y !== ty) { y += Math.sign(ty - y); dig(x, y); }
     };
     if (rng.chance(0.5)) { digTo(b.cx, y); digTo(b.cx, b.cy); } else { digTo(x, b.cy); digTo(b.cx, b.cy); }
   };
-  for (let i = 1; i < rooms.length; i++) corridor(rooms[i - 1], rooms[i]);
-  for (let i = 0; i < 2 && rooms.length > 3; i++) corridor(rng.pick(rooms), rng.pick(rooms));
+  for (let i = 1; i < rooms.length; i++) corridor(rooms[i - 1], rooms[i], roomMax >= 10);
+  for (let i = 0; i < loops && rooms.length > 3; i++) corridor(rng.pick(rooms), rng.pick(rooms));
+  return { cells, rooms };
+}
+
+function carveWarrens(rng, w, h, floor) {
+  return carveRooms(rng, w, h, floor, { roomMin: 3, roomMax: 5, count: Math.min(12 + floor, 17), loops: 4 });
+}
+
+function carveHall(rng, w, h, floor) {
+  const out = carveRooms(rng, w, h, floor, { roomMin: 9, roomMax: 14, count: 3, loops: 1 });
+  out.halls = true;
+  return out;
+}
+
+function carveCavern(rng, w, h) {
+  const cells = new Uint8Array(w * h);
+  const idx = (x, y) => y * w + x;
+  // random fill then cellular smoothing
+  for (let y = 1; y < h - 1; y++) for (let x = 1; x < w - 1; x++) {
+    cells[idx(x, y)] = rng.chance(0.55) ? FLOOR : SOLID;
+  }
+  for (let it = 0; it < 5; it++) {
+    const next = new Uint8Array(cells);
+    for (let y = 1; y < h - 1; y++) for (let x = 1; x < w - 1; x++) {
+      let open = 0;
+      for (let dy = -1; dy <= 1; dy++) for (let dx = -1; dx <= 1; dx++) {
+        if (dx === 0 && dy === 0) continue;
+        if (cells[idx(x + dx, y + dy)] === FLOOR) open++;
+      }
+      next[idx(x, y)] = open >= 5 ? FLOOR : SOLID;
+    }
+    cells.set(next);
+  }
+  // keep only the largest connected region
+  const region = new Int32Array(w * h).fill(-1);
+  let bestRegion = -1, bestSize = 0, nRegions = 0;
+  for (let y = 1; y < h - 1; y++) for (let x = 1; x < w - 1; x++) {
+    if (cells[idx(x, y)] !== FLOOR || region[idx(x, y)] !== -1) continue;
+    const stack = [[x, y]];
+    let size = 0;
+    region[idx(x, y)] = nRegions;
+    while (stack.length) {
+      const [px, py] = stack.pop();
+      size++;
+      for (const [dx, dy] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
+        const nx = px + dx, ny = py + dy;
+        if (nx <= 0 || ny <= 0 || nx >= w - 1 || ny >= h - 1) continue;
+        if (cells[idx(nx, ny)] === FLOOR && region[idx(nx, ny)] === -1) {
+          region[idx(nx, ny)] = nRegions;
+          stack.push([nx, ny]);
+        }
+      }
+    }
+    if (size > bestSize) { bestSize = size; bestRegion = nRegions; }
+    nRegions++;
+  }
+  for (let i = 0; i < w * h; i++) if (cells[i] === FLOOR && region[i] !== bestRegion) cells[i] = SOLID;
+  // synthesize pseudo-rooms: open 3x3 patches, spaced apart
+  const rooms = [];
+  for (let tries = 0; tries < 400 && rooms.length < 10; tries++) {
+    const x = rng.int(2, w - 5), y = rng.int(2, h - 5);
+    let open = true;
+    for (let dy = 0; dy < 3 && open; dy++) for (let dx = 0; dx < 3; dx++) {
+      if (cells[idx(x + dx, y + dy)] !== FLOOR) { open = false; break; }
+    }
+    if (!open) continue;
+    if (rooms.some(r => Math.abs(r.cx - (x + 1)) + Math.abs(r.cy - (y + 1)) < 7)) continue;
+    rooms.push({ x, y, w: 3, h: 3, cx: x + 1, cy: y + 1 });
+  }
+  if (rooms.length < 2) return null; // degenerate cave — caller falls back to rooms
+  return { cells, rooms };
+}
+
+// ---------------- platform shapes ----------------
+// returns [{cells:[{x,y}], ramps:[{x,y,dx,dy}]}] entries for a room, or null
+function planPlatform(rng, room, at, inb) {
+  const variant = rng.pick(['side', 'side', 'island', 'balcony']);
+  if (variant === 'island' && room.w >= 7 && room.h >= 7) {
+    const cx = room.cx, cy = room.cy;
+    const cellsP = [{ x: cx, y: cy }, { x: cx + 1, y: cy }, { x: cx, y: cy + 1 }, { x: cx + 1, y: cy + 1 }];
+    const ramps = [
+      { x: cx - 1, y: cy, dx: 1, dy: 0 },
+      { x: cx + 2, y: cy + 1, dx: -1, dy: 0 },
+    ].filter(r => inb(r.x, r.y) && at(r.x, r.y) === FLOOR);
+    if (!ramps.length) return null;
+    if (cellsP.some(c => at(c.x, c.y) !== FLOOR)) return null;
+    return { cells: cellsP, ramps };
+  }
+  // side strip (default) and balcony (two adjacent sides)
+  const side = rng.pick(['N', 'S', 'W', 'E']);
+  const strip = [];
+  const addStrip = (s) => {
+    if (s === 'N' || s === 'S') {
+      const rows = s === 'N' ? [room.y, room.y + 1] : [room.y + room.h - 1, room.y + room.h - 2];
+      for (let x = room.x; x < room.x + room.w; x++) for (const y of rows) strip.push({ x, y });
+    } else {
+      const cols = s === 'W' ? [room.x, room.x + 1] : [room.x + room.w - 1, room.x + room.w - 2];
+      for (let y = room.y; y < room.y + room.h; y++) for (const x of cols) strip.push({ x, y });
+    }
+  };
+  addStrip(side);
+  if (variant === 'balcony' && room.w >= 7 && room.h >= 7) {
+    addStrip(side === 'N' || side === 'S' ? (rng.chance(0.5) ? 'W' : 'E') : (rng.chance(0.5) ? 'N' : 'S'));
+  }
+  // dedupe
+  const seen = new Set();
+  const cellsP = strip.filter(c => { const k = c.x + ':' + c.y; if (seen.has(k)) return false; seen.add(k); return true; });
+  let ramp = null;
+  if (side === 'N' || side === 'S') {
+    const rampX = rng.chance(0.5) ? room.x : room.x + room.w - 1;
+    const rampY = side === 'N' ? room.y + 2 : room.y + room.h - 3;
+    ramp = { x: rampX, y: rampY, dx: 0, dy: side === 'N' ? -1 : 1 };
+  } else {
+    const rampY = rng.chance(0.5) ? room.y : room.y + room.h - 1;
+    const rampX = side === 'W' ? room.x + 2 : room.x + room.w - 3;
+    ramp = { x: rampX, y: rampY, dx: side === 'W' ? -1 : 1, dy: 0 };
+  }
+  if (!inb(ramp.x, ramp.y) || at(ramp.x, ramp.y) !== FLOOR) return null;
+  if (cellsP.some(c => c.x === ramp.x && c.y === ramp.y)) return null;
+  return { cells: cellsP, ramps: [ramp] };
+}
+
+// ---------------- main generator ----------------
+export function generateFloorData(seedStr, floor) {
+  const rng = makeRng(`${seedStr}:floor:${floor}`);
+  const size = Math.min(34 + floor * 2, 46);
+  const w = size, h = size;
+
+  const theme = themeFor(seedStr, floor);
+  const isBossFloor = !!BOSS_FLOORS[floor] || (floor > 9 && floor % 3 === 0);
+  const bossType = !isBossFloor ? null : floor >= 9 && floor % 9 === 0 ? 'boneking' : floor === 9 ? 'boneking' : rng.pick(MIDBOSS_TYPES);
+  const mutator = rng.chance(MUTATOR_CHANCE) && floor > 1 ? rng.pick(MUTATORS) : null;
+
+  // layout
+  let layoutId = floor === 1 ? 'rooms'
+    : isBossFloor && rng.chance(0.5) ? 'hall'
+    : rng.pick(['rooms', 'rooms', 'warrens', 'cavern', 'hall']);
+  let carved = null;
+  if (layoutId === 'cavern') carved = carveCavern(rng, w, h);
+  if (!carved && layoutId === 'warrens') carved = carveWarrens(rng, w, h, floor);
+  if (!carved && layoutId === 'hall') carved = carveHall(rng, w, h, floor);
+  if (!carved) { layoutId = layoutId === 'cavern' ? 'rooms' : layoutId; carved = carveRooms(rng, w, h, floor); }
+  const { cells, rooms } = carved;
+  const isCavern = layoutId === 'cavern';
+
+  const elev = new Uint8Array(w * h);
+  const ramps = new Map();
+  const at = (x, y) => cells[y * w + x];
+  const set = (x, y, v) => { cells[y * w + x] = v; };
+  const inb = (x, y) => x > 0 && y > 0 && x < w - 1 && y < h - 1;
+  const idxOf = (x, y) => y * w + x;
 
   const spawnRoom = rooms[0];
   let exitRoom = rooms[0], bestD = -1;
@@ -64,35 +213,34 @@ export function generateFloorData(seedStr, floor) {
     if (d > bestD) { bestD = d; exitRoom = r; }
   }
 
-  // ---- climbable platforms ----
+  // ---- hall colonnades ----
+  if (carved.halls) {
+    for (const r of rooms) {
+      if (r.w < 9 || r.h < 9) continue;
+      for (let y = r.y + 2; y < r.y + r.h - 2; y += 3) {
+        for (let x = r.x + 2; x < r.x + r.w - 2; x += 3) {
+          if (at(x, y) === FLOOR && rng.chance(0.8)) set(x, y, OBSTACLE); // pillar placed later
+        }
+      }
+    }
+  }
+
+  // ---- climbable platforms (rooms/hall layouts; caverns & warrens stay flat) ----
   const platforms = [];
   const eligible = rooms.filter(r => r !== spawnRoom && r !== exitRoom && r.w >= 6 && r.h >= 6);
   for (const r of rooms) {
     if (!eligible.includes(r)) continue;
     const mustPlace = platforms.length === 0 && r === eligible[eligible.length - 1];
     if (!mustPlace && !rng.chance(0.65)) continue;
-    const side = rng.pick(['N', 'S', 'W', 'E']);
-    let strip = [], rampCell = null, rampDir = null;
-    if (side === 'N' || side === 'S') {
-      const rows = side === 'N' ? [r.y, r.y + 1] : [r.y + r.h - 1, r.y + r.h - 2];
-      for (let x = r.x; x < r.x + r.w; x++) for (const y of rows) strip.push({ x, y });
-      const rampX = rng.chance(0.5) ? r.x : r.x + r.w - 1;
-      const rampY = side === 'N' ? r.y + 2 : r.y + r.h - 3;
-      rampCell = { x: rampX, y: rampY };
-      rampDir = { dx: 0, dy: side === 'N' ? -1 : 1 };
-    } else {
-      const cols = side === 'W' ? [r.x, r.x + 1] : [r.x + r.w - 1, r.x + r.w - 2];
-      for (let y = r.y; y < r.y + r.h; y++) for (const x of cols) strip.push({ x, y });
-      const rampY = rng.chance(0.5) ? r.y : r.y + r.h - 1;
-      const rampX = side === 'W' ? r.x + 2 : r.x + r.w - 3;
-      rampCell = { x: rampX, y: rampY };
-      rampDir = { dx: side === 'W' ? -1 : 1, dy: 0 };
+    const plan = planPlatform(rng, r, at, inb);
+    if (!plan) continue;
+    if (plan.cells.some(c => at(c.x, c.y) !== FLOOR)) continue;
+    for (const c of plan.cells) elev[idxOf(c.x, c.y)] = 1;
+    for (const rp of plan.ramps) {
+      set(rp.x, rp.y, RAMP);
+      ramps.set(idxOf(rp.x, rp.y), { dx: rp.dx, dy: rp.dy });
     }
-    if (!inb(rampCell.x, rampCell.y) || at(rampCell.x, rampCell.y) !== FLOOR) continue;
-    for (const c of strip) elev[idxOf(c.x, c.y)] = 1;
-    set(rampCell.x, rampCell.y, RAMP);
-    ramps.set(idxOf(rampCell.x, rampCell.y), rampDir);
-    platforms.push({ cells: strip, ramp: { ...rampCell, ...rampDir }, room: r });
+    platforms.push({ cells: plan.cells, ramps: plan.ramps, room: r });
   }
 
   // ---- traps ----
@@ -102,23 +250,30 @@ export function generateFloorData(seedStr, floor) {
     for (const r of rooms) if (x >= r.x && x < r.x + r.w && y >= r.y && y < r.y + r.h) return false;
     return true;
   };
-  const trapCount = Math.min(2 + floor, 8);
-  for (let tries = 0, placed = 0; tries < 200 && placed < trapCount; tries++) {
+  const trapCount = Math.min(2 + floor, 8) * (layoutId === 'warrens' ? 2 : 1);
+  for (let tries = 0, placed = 0; tries < 260 && placed < trapCount; tries++) {
     const x = rng.int(2, w - 3), y = rng.int(2, h - 3);
     if (isCorridorCell(x, y)) { set(x, y, TRAP); traps.push({ x: x * CELL, z: y * CELL, cx: x, cy: y, cd: 0 }); placed++; }
   }
 
   // ---- portal exit ----
   const edgeCandidates = [];
-  for (let x = exitRoom.x; x < exitRoom.x + exitRoom.w; x++) {
-    if (at(x, exitRoom.y - 1) === SOLID) edgeCandidates.push({ x, y: exitRoom.y, dx: 0, dy: -1 });
-    if (at(x, exitRoom.y + exitRoom.h) === SOLID) edgeCandidates.push({ x, y: exitRoom.y + exitRoom.h - 1, dx: 0, dy: 1 });
+  const scanPortal = (x, y) => {
+    if (at(x, y) !== FLOOR && at(x, y) !== TRAP) return;
+    for (const [dx, dy] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
+      const nx = x + dx, ny = y + dy;
+      if (nx < 0 || ny < 0 || nx >= w || ny >= h || at(nx, ny) === SOLID) {
+        edgeCandidates.push({ x, y, dx, dy, d: (x - exitRoom.cx) ** 2 + (y - exitRoom.cy) ** 2 });
+      }
+    }
+  };
+  for (let y = Math.max(1, exitRoom.y - 2); y < Math.min(h - 1, exitRoom.y + exitRoom.h + 2); y++) {
+    for (let x = Math.max(1, exitRoom.x - 2); x < Math.min(w - 1, exitRoom.x + exitRoom.w + 2); x++) {
+      if (!elev[idxOf(x, y)] && at(x, y) !== RAMP) scanPortal(x, y);
+    }
   }
-  for (let y = exitRoom.y; y < exitRoom.y + exitRoom.h; y++) {
-    if (at(exitRoom.x - 1, y) === SOLID) edgeCandidates.push({ x: exitRoom.x, y, dx: -1, dy: 0 });
-    if (at(exitRoom.x + exitRoom.w, y) === SOLID) edgeCandidates.push({ x: exitRoom.x + exitRoom.w - 1, y, dx: 1, dy: 0 });
-  }
-  const portal = edgeCandidates.length ? rng.pick(edgeCandidates) : { x: exitRoom.cx, y: exitRoom.cy, dx: 0, dy: -1 };
+  edgeCandidates.sort((a, b) => a.d - b.d);
+  const portal = edgeCandidates.length ? edgeCandidates[Math.min(rng.int(0, 3), edgeCandidates.length - 1)] : { x: exitRoom.cx, y: exitRoom.cy, dx: 0, dy: -1 };
   set(portal.x, portal.y, STAIRS);
 
   // ================= mesh placements =================
@@ -131,7 +286,7 @@ export function generateFloorData(seedStr, floor) {
     placements.push({ piece, matrix: M.clone() });
   };
 
-  const floorVariants = ['floor_tile_large', 'floor_tile_large', 'floor_tile_large', 'floor_tile_large', 'floor_tile_small_broken_A', 'floor_tile_small_weeds_A', 'floor_tile_small_decorated', 'floor_tile_small_broken_B'];
+  const smallTiles = theme.tiles.filter(t => t.includes('small'));
   const torches = [];
   const wallDirs = [
     { dx: 1, dy: 0, yaw: Math.PI / 2 },
@@ -139,6 +294,18 @@ export function generateFloorData(seedStr, floor) {
     { dx: 0, dy: 1, yaw: 0 },
     { dx: 0, dy: -1, yaw: 0 },
   ];
+  const torchEvery = Math.max(3, Math.round(5 / (mutator?.torchMult ?? 1)));
+
+  const placeFloorTile = (wx, wz) => {
+    const fv = theme.tiles[Math.floor(rng.next() * theme.tiles.length)];
+    if (fv.includes('small') && smallTiles.length) {
+      for (const [ox, oz] of [[-1, -1], [1, -1], [-1, 1], [1, 1]]) {
+        place(smallTiles[Math.floor(rng.next() * smallTiles.length)], wx + ox, 0, wz + oz, rng.int(0, 3) * Math.PI / 2);
+      }
+    } else {
+      place(fv.includes('small') ? 'floor_tile_large' : fv, wx, 0, wz, rng.int(0, 3) * Math.PI / 2);
+    }
+  };
 
   let torchStep = 0;
   for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) {
@@ -150,16 +317,11 @@ export function generateFloorData(seedStr, floor) {
       place('floor_tile_big_spikes', wx, 0.02, wz);
     } else if (c === RAMP) {
       place('floor_tile_large', wx, 0, wz);
+    } else if (c === OBSTACLE && carved.halls) {
+      placeFloorTile(wx, wz);
+      place(rng.chance(0.4) ? 'pillar_decorated' : 'pillar', wx, 0, wz);
     } else {
-      const fv = floorVariants[Math.floor(rng.next() * floorVariants.length)];
-      if (fv.includes('small')) {
-        for (const [ox, oz] of [[-1, -1], [1, -1], [-1, 1], [1, 1]]) {
-          const v = rng.chance(0.25) ? floorVariants[Math.floor(rng.next() * floorVariants.length)] : 'floor_tile_small';
-          place(v.includes('small') ? v : 'floor_tile_small', wx + ox, 0, wz + oz, rng.int(0, 3) * Math.PI / 2);
-        }
-      } else {
-        place(fv, wx, 0, wz, rng.int(0, 3) * Math.PI / 2);
-      }
+      placeFloorTile(wx, wz);
     }
     for (const d of wallDirs) {
       const nx = x + d.dx, ny = y + d.dy;
@@ -172,13 +334,13 @@ export function generateFloorData(seedStr, floor) {
         place('wall', ex, PLATFORM_H, ez, d.yaw);
         continue;
       }
+      const crackiness = theme.id === 'forge' || isCavern ? 0.6 : 0.8;
       const roll = rng.next();
-      const piece = roll < 0.8 ? 'wall' : roll < 0.93 ? 'wall_cracked' : 'wall_broken';
+      const piece = roll < crackiness ? 'wall' : roll < crackiness + 0.13 ? 'wall_cracked' : 'wall_broken';
       place(piece, ex, 0, ez, d.yaw);
-      const roll2 = rng.next();
-      place(roll2 < 0.85 ? 'wall' : 'wall_cracked', ex, PLATFORM_H, ez, d.yaw);
+      place(rng.next() < 0.85 ? 'wall' : 'wall_cracked', ex, PLATFORM_H, ez, d.yaw);
       torchStep++;
-      if (torchStep % 5 === 0 && c !== STAIRS) {
+      if (torchStep % torchEvery === 0 && c !== STAIRS) {
         const inx = -d.dx, inz = -d.dy;
         const tyaw = Math.atan2(inx, inz);
         const ty = elev[idxOf(x, y)] ? PLATFORM_H + 2.3 : 2.3;
@@ -191,13 +353,13 @@ export function generateFloorData(seedStr, floor) {
   // ---- platform decks, rails, stairs, supports ----
   for (const p of platforms) {
     const isPlat = (x, y) => x >= 0 && y >= 0 && x < w && y < h && elev[idxOf(x, y)] === 1;
+    const isRampCell = (x, y) => p.ramps.some(r => r.x === x && r.y === y);
     p.cells.forEach((c, ci) => {
       place('floor_tile_large', c.x * CELL, PLATFORM_H, c.y * CELL, rng.int(0, 3) * Math.PI / 2);
       for (const d of wallDirs) {
         const nx = c.x + d.dx, ny = c.y + d.dy;
         const nc = (nx < 0 || ny < 0 || nx >= w || ny >= h) ? SOLID : at(nx, ny);
-        if (nc === SOLID || isPlat(nx, ny)) continue;
-        if (nx === p.ramp.x && ny === p.ramp.y) continue;
+        if (nc === SOLID || isPlat(nx, ny) || isRampCell(nx, ny)) continue;
         place('barrier', c.x * CELL + d.dx * CELL / 2, PLATFORM_H, c.y * CELL + d.dy * CELL / 2, d.yaw);
       }
       if (ci % 2 === 0) {
@@ -208,9 +370,10 @@ export function generateFloorData(seedStr, floor) {
         }
       }
     });
-    const r = p.ramp;
-    const topX = r.x * CELL + r.dx * CELL / 2, topZ = r.y * CELL + r.dy * CELL / 2;
-    place('stairs', topX, 0, topZ, Math.atan2(-r.dx, -r.dy), [0.8, PLATFORM_H / 5.1, 1]);
+    for (const r of p.ramps) {
+      const topX = r.x * CELL + r.dx * CELL / 2, topZ = r.y * CELL + r.dy * CELL / 2;
+      place('stairs', topX, 0, topZ, Math.atan2(-r.dx, -r.dy), [0.8, PLATFORM_H / 5.1, 1]);
+    }
   }
 
   // ---- props ----
@@ -219,20 +382,20 @@ export function generateFloorData(seedStr, floor) {
   for (const r of rooms) {
     if (r === spawnRoom) continue;
     const isExit = r === exitRoom;
-    const nProps = rng.int(1, 3);
+    const nProps = rng.int(1, isCavern ? 2 : 3);
     for (let i = 0; i < nProps; i++) {
       const x = rng.int(r.x, r.x + r.w - 1), y = rng.int(r.y, r.y + r.h - 1);
-      const onEdge = x === r.x || y === r.y || x === r.x + r.w - 1 || y === r.y + r.h - 1;
+      const onEdge = isCavern || x === r.x || y === r.y || x === r.x + r.w - 1 || y === r.y + r.h - 1;
       if (!onEdge || at(x, y) !== FLOOR || propAt(x, y) || elev[idxOf(x, y)]) continue;
       if (isExit && Math.abs(x - portal.x) + Math.abs(y - portal.y) < 2) continue;
-      const kind = rng.pick(['barrel_large', 'box_large', 'crates_stacked', 'table_medium', 'barrel_small', 'shelf_small']);
+      const kind = rng.pick(theme.props);
       const yaw = rng.int(0, 3) * Math.PI / 2;
       place(kind, x * CELL, 0, y * CELL, yaw);
       if (kind === 'table_medium' && rng.chance(0.8)) place(rng.pick(['candle_lit', 'candle_triple', 'bottle_A_brown', 'bottle_B_brown']), x * CELL, 1.05, y * CELL, rng.next() * Math.PI * 2);
       set(x, y, OBSTACLE);
       props.push({ cx: x, cy: y });
     }
-    if (r.w >= 6 && r.h >= 6) {
+    if (!isCavern && !carved.halls && r.w >= 6 && r.h >= 6) {
       for (const [px, py] of [[r.x + 1, r.y + 1], [r.x + r.w - 2, r.y + 1], [r.x + 1, r.y + r.h - 2], [r.x + r.w - 2, r.y + r.h - 2]]) {
         if (rng.chance(0.55) && at(px, py) === FLOOR && !propAt(px, py) && !elev[idxOf(px, py)]) {
           place(rng.chance(0.3) ? 'pillar_decorated' : 'pillar', px * CELL, 0, py * CELL);
@@ -241,23 +404,47 @@ export function generateFloorData(seedStr, floor) {
         }
       }
     }
-    if (rng.chance(0.5)) {
+    if (theme.banners.length && rng.chance(0.5)) {
       const bx = rng.int(r.x, r.x + r.w - 1);
-      if (at(bx, r.y - 1) === SOLID && at(bx, r.y) !== OBSTACLE) place(rng.pick(['banner_patternA_red', 'banner_patternA_blue']), bx * CELL, 3.4, r.y * CELL - CELL / 2 + 0.15, 0);
+      if (inb(bx, r.y - 1) === false || at(bx, r.y - 1) === SOLID) {
+        if (at(bx, r.y) !== OBSTACLE) place(rng.pick(theme.banners), bx * CELL, 3.4, r.y * CELL - CELL / 2 + 0.15, 0);
+      }
     }
   }
 
-  // ---- enemy spawns (deterministic order & ids across all peers) ----
+  // ---- enemy spawns (deterministic order & ids) ----
   const enemySpawns = [];
-  const pool = enemyPool(floor);
+  let pool = mutator?.poolOverride ? mutator.poolOverride.slice() : enemyPool(floor).concat(theme.bias);
   const eChance = eliteChance(floor);
+  const countMult = mutator?.countMult ?? 1;
   for (const r of rooms) {
     if (r === spawnRoom) continue;
-    const n = (r === exitRoom && isBossFloor) ? 1 : rng.int(2, Math.min(4, 2 + Math.floor(floor / 2)));
+    let base;
+    if (r === exitRoom && isBossFloor) base = 1;
+    else if (carved.halls) base = rng.int(5, 8);              // few rooms, but vast
+    else if (layoutId === 'warrens') base = rng.int(1, 2);    // many cramped rooms
+    else base = rng.int(2, Math.min(4, 2 + Math.floor(floor / 2)));
+    const n = Math.round(base * countMult);
     for (let i = 0; i < n; i++) {
-      const x = rng.int(r.x, r.x + r.w - 1), y = rng.int(r.y, r.y + r.h - 1);
-      if (at(x, y) !== FLOOR || elev[idxOf(x, y)]) continue;
-      enemySpawns.push({ type: rng.pick(pool), x: x * CELL + rng.next() * 2 - 1, z: y * CELL + rng.next() * 2 - 1, y: 0, elite: rng.chance(eChance) });
+      for (let tries = 0; tries < 6; tries++) {
+        const x = rng.int(r.x, r.x + r.w - 1), y = rng.int(r.y, r.y + r.h - 1);
+        if (at(x, y) !== FLOOR || elev[idxOf(x, y)]) continue;
+        enemySpawns.push({ type: rng.pick(pool), x: x * CELL + rng.next() * 2 - 1, z: y * CELL + rng.next() * 2 - 1, y: 0, elite: rng.chance(eChance) });
+        break;
+      }
+    }
+  }
+  // caverns: packs wandering the open cave beyond the pseudo-rooms
+  if (isCavern) {
+    const nW = Math.round((8 + floor * 2) * countMult);
+    for (let i = 0; i < nW; i++) {
+      for (let tries = 0; tries < 10; tries++) {
+        const x = rng.int(2, w - 3), y = rng.int(2, h - 3);
+        if (at(x, y) !== FLOOR || elev[idxOf(x, y)]) continue;
+        if (Math.abs(x - spawnRoom.cx) + Math.abs(y - spawnRoom.cy) < 6) continue;
+        enemySpawns.push({ type: rng.pick(pool), x: x * CELL + rng.next() * 2 - 1, z: y * CELL + rng.next() * 2 - 1, y: 0, elite: rng.chance(eChance) });
+        break;
+      }
     }
   }
   for (const p of platforms) {
@@ -283,7 +470,7 @@ export function generateFloorData(seedStr, floor) {
     return null;
   };
   const chestRooms = rooms.filter(r => r !== spawnRoom);
-  const nChests = Math.min(2 + Math.floor(floor / 2), 5);
+  const nChests = Math.min(2 + Math.floor(floor / 2), 5) + (mutator?.extraChests ?? 0);
   for (let i = 0; i < nChests && chestRooms.length; i++) {
     const r = rng.pick(chestRooms);
     const c = freeRoomCell(r);
@@ -303,7 +490,7 @@ export function generateFloorData(seedStr, floor) {
     const kc = freeRoomCell(kr);
     if (kc) lootSpawns.push({ kind: 'key', x: kc.x * CELL + 1, z: kc.y * CELL + 1, y: kc.py });
   }
-  const nCoins = rng.int(7, 12);
+  const nCoins = rng.int(7, 12) + (mutator?.extraCoins ?? 0);
   for (let i = 0; i < nCoins; i++) {
     const r = rng.pick(rooms);
     const c = freeRoomCell(r);
@@ -325,6 +512,7 @@ export function generateFloorData(seedStr, floor) {
   return {
     grid, torches, traps, placements, enemySpawns, lootSpawns,
     explored: new Uint8Array(w * h), hadBoss: isBossFloor,
+    theme, mutator, layoutId,
   };
 }
 

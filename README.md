@@ -8,13 +8,16 @@ A 3D co-op dungeon crawler that runs entirely in the browser. No build step, no 
 
 ## The game
 
-A **first-person** crawl through 9 procedurally generated floors — destroy **the Bone King** on floor 9. Bosses guard floors 3, 6 and 9; the way down stays locked until they fall. After floor 9, keep going in endless mode.
+A **first-person roguelike** crawl through 9 procedurally generated floors — destroy **the Bone King** on floor 9. Bosses guard floors 3, 6 and 9; the way down stays locked until they fall. After floor 9, keep going in endless mode. **Every floor rolls its own identity**, so no two runs feel alike.
 
-- **4 classes, 12 spells** — Knight, Barbarian, Rogue, Mage. Each class has a basic attack plus three spells on keys 1/2/3: fireballs, chain lightning, frost shards, fan of knives, shadow-step blinks, ground slams, shield bashes, battle rage, heals…
-- **First-person combat** — crosshair that flares on targets, **Shift to aim** (FOV zoom, steadier shots), dodge dash with i-frames, hit markers, crits, knockback, slows, poison
-- **Verticality** — climbable staircases lead to railed platforms where skeleton archers guard treasure; walk under them, climb up, rain bolts down
-- **A bigger horde** — minions, rogues, warriors, mages, exploding **bombers**, slowing **frost mages**, **ghosts** that drift through obstacles, glowing **elite champions**, and summoning bosses
-- **Equipment & inventory (Tab)** — weapon / offhand / two trinket slots plus a 12-slot bag. Procedurally named drops in 5 rarity tiers (Common → Legendary) with damage, crit, armor, speed, HP and mana-regen stats. Right-click to salvage for gold.
+- **7 floor themes** — the Crypts, Rotten Cellars, Drowned Deep, Silent Ossuary, Ember Forge, Frostbound Halls, Rat Warrens: each with its own fog, lighting, torch color, floor tiles, props, and monster mix
+- **4 layout generators** — classic rooms & corridors, cramped trap-riddled warrens, organic caverns grown by cellular automata, and vast pillared great halls
+- **Floor mutators** — INFESTED, CURSED, TREASURE VAULT, HAUNTED, SWIFT DEATH, PITCH DARK: random modifiers announced as you descend
+- **4 classes × 6-spell schools, dealt 3 per run** — your loadout is random every run (24 spells total: fireballs, meteors called onto your crosshair, chain lightning, piercing arcane orbs, blizzards, whirlwinds, savage leaps, smoke bombs, death marks, consecrated ground, bulwarks, bloodlust…). The merchant's Spell Tome rerolls a slot mid-run.
+- **First-person combat** — crosshair that flares on targets, **Shift to aim** (FOV zoom, steadier shots), dodge dash with i-frames, hit markers, crits, knockback, slows, poison, burns
+- **Verticality** — climbable staircases lead to railed platforms, central islands with twin stairs, and wall balconies where skeleton archers guard treasure
+- **17 monster types** — minions, rogues, warriors, mages, exploding bombers, frost mages, ghosts, dark shades, necromancers that raise the dead mid-fight, berserkers that frenzy at low HP, unstoppable juggernauts, plaguebearers that burst into poison clouds, snipers, brutes, elite champions — and boss floors roll the Gravebound Champion, the Necrolord, or the Pale Reaper
+- **Equipment & inventory (Tab)** — weapon / offhand / two trinket slots plus a 12-slot bag. Drops in 5 rarity tiers with **affixes** (Flaming, Frostbound, Vampiric, Swift, Brutal). Rogues can find **crossbows** that turn their basic attack ranged; mages can find fast-casting wands. Right-click to salvage for gold.
 - **Appearance customization** — helmet/hood and cape toggles plus six cape colors, with a live 3D preview in the menu; your look syncs to co-op teammates
 - **Loot & economy** — coins, chests, potions, a locked golden chest per floor (find the key), equipment drops from elites/bosses, and the Bone Merchant between floors
 - **Progression** — XP levels, upgrades, escalating difficulty per floor

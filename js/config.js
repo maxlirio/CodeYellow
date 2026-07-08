@@ -10,7 +10,7 @@ export const CLASSES = {
     hp: 125, dmg: 16, speed: 8.2, crit: 0.06, attackAnims: ['1H_Melee_Attack_Slice_Horizontal', '1H_Melee_Attack_Chop'],
     attackTime: 0.7, attackRange: 3.0, attackArc: 1.1, mana: 60, manaRegen: 5,
     show: ['1H_Sword', 'Round_Shield'],
-    spells: ['holybolt', 'shieldbash', 'warcry'],
+    spellPool: ['holybolt', 'shieldbash', 'warcry', 'judgement', 'consecrate', 'bulwark'],
   },
   barbarian: {
     name: 'Barbarian', icon: '🪓', model: 'Barbarian',
@@ -18,7 +18,7 @@ export const CLASSES = {
     hp: 150, dmg: 26, speed: 7.7, crit: 0.1, attackAnims: ['2H_Melee_Attack_Chop', '2H_Melee_Attack_Slice'],
     attackTime: 0.92, attackRange: 3.4, attackArc: 1.35, mana: 60, manaRegen: 5,
     show: ['2H_Axe'],
-    spells: ['axethrow', 'groundslam', 'rage'],
+    spellPool: ['axethrow', 'groundslam', 'rage', 'whirlwind', 'leap', 'bloodlust'],
   },
   rogue: {
     name: 'Rogue', icon: '🗡', model: 'Rogue',
@@ -26,7 +26,7 @@ export const CLASSES = {
     hp: 92, dmg: 11, speed: 9.4, crit: 0.28, attackAnims: ['Dualwield_Melee_Attack_Slice', 'Dualwield_Melee_Attack_Stab'],
     attackTime: 0.44, attackRange: 2.6, attackArc: 1.0, mana: 70, manaRegen: 6,
     show: ['Knife', 'Knife_Offhand'],
-    spells: ['knifefan', 'shadowstep', 'venomvial'],
+    spellPool: ['knifefan', 'shadowstep', 'venomvial', 'smokebomb', 'deathmark', 'shurikenstorm'],
   },
   mage: {
     name: 'Mage', icon: '🔮', model: 'Mage',
@@ -34,25 +34,50 @@ export const CLASSES = {
     hp: 84, dmg: 20, speed: 8.4, crit: 0.08, attackAnims: ['Spellcast_Shoot'],
     attackTime: 0.55, attackRange: 26, attackArc: 0, mana: 110, manaRegen: 9,
     show: ['2H_Staff'], ranged: true,
-    spells: ['fireball', 'frostshard', 'chainlightning'],
+    spellPool: ['fireball', 'frostshard', 'chainlightning', 'meteor', 'blizzard', 'arcaneorb'],
   },
 };
 
-// ---------------- spells (keys 1/2/3) ----------------
+// ---------------- spells (each run deals you a random 3 from your class pool) ----------------
 export const SPELLS = {
+  // knight
   holybolt:   { name: 'Holy Bolt', icon: '✨', mana: 12, cd: 3,  type: 'proj', dmgMult: 1.35, speed: 24, color: 0xffe08a, size: 1.1 },
   shieldbash: { name: 'Shield Bash', icon: '🛡', mana: 15, cd: 6, type: 'cone', dmgMult: 1.0, range: 4.5, arc: 1.2, knockback: 9, stun: 1.2 },
   warcry:     { name: 'Warcry', icon: '❤️‍🔥', mana: 25, cd: 18, type: 'heal', frac: 0.35, radius: 9 },
+  judgement:  { name: 'Judgement', icon: '⚖️', mana: 20, cd: 8, type: 'targetaoe', dmgMult: 1.6, radius: 3.2, range: 20, delay: 0.5, color: 0xffe08a },
+  consecrate: { name: 'Consecrate', icon: '🕯️', mana: 18, cd: 10, type: 'aoe', dmgMult: 0.7, radius: 5, burn: { mult: 0.35, dur: 4 }, color: 0xffcc66 },
+  bulwark:    { name: 'Bulwark', icon: '🧱', mana: 16, cd: 14, type: 'buff', armorAdd: 0.5, dmgMult: 1, speedMult: 1, dur: 5 },
+  // barbarian
   axethrow:   { name: 'Axe Throw', icon: '🪓', mana: 12, cd: 4,  type: 'proj', dmgMult: 1.8, speed: 18, color: 0xff8844, size: 1.5 },
   groundslam: { name: 'Ground Slam', icon: '💥', mana: 18, cd: 8, type: 'aoe', dmgMult: 1.3, radius: 5.5, stun: 1.0 },
   rage:       { name: 'Battle Rage', icon: '😤', mana: 20, cd: 16, type: 'buff', dmgMult: 1.45, speedMult: 1.25, dur: 6 },
+  whirlwind:  { name: 'Whirlwind', icon: '🌪️', mana: 20, cd: 7, type: 'aoe', dmgMult: 1.7, radius: 4.2, color: 0xffbb66 },
+  leap:       { name: 'Savage Leap', icon: '🦵', mana: 16, cd: 9, type: 'blink', dist: 10, landAoe: { dmgMult: 1.1, radius: 4, stun: 0.6 } },
+  bloodlust:  { name: 'Bloodlust', icon: '🩸', mana: 22, cd: 18, type: 'buff', dmgMult: 1.15, speedMult: 1.1, lifesteal: 0.25, dur: 7 },
+  // rogue
   knifefan:   { name: 'Fan of Knives', icon: '🔪', mana: 14, cd: 5, type: 'proj', dmgMult: 0.65, speed: 21, color: 0xcccccc, count: 5, spread: 0.55 },
   shadowstep: { name: 'Shadow Step', icon: '🌀', mana: 12, cd: 7, type: 'blink', dist: 9 },
   venomvial:  { name: 'Venom Vial', icon: '☠️', mana: 16, cd: 8, type: 'proj', dmgMult: 0.5, speed: 15, color: 0x66ff44, aoe: 2.8, poison: { mult: 0.45, dur: 5 } },
+  smokebomb:  { name: 'Smoke Bomb', icon: '💨', mana: 15, cd: 12, type: 'aoe', dmgMult: 0, radius: 6, stun: 2.2, selfIframes: 1.2, color: 0x99aabb },
+  deathmark:  { name: 'Death Mark', icon: '🎯', mana: 14, cd: 10, type: 'mark', range: 22, vuln: 1.5, dur: 6 },
+  shurikenstorm: { name: 'Shuriken Storm', icon: '✴️', mana: 20, cd: 9, type: 'proj', dmgMult: 0.45, speed: 19, color: 0xbbccdd, count: 9, spread: 1.6 },
+  // mage
   fireball:   { name: 'Fireball', icon: '🔥', mana: 18, cd: 5, type: 'proj', dmgMult: 1.5, speed: 19, color: 0xff5522, size: 1.4, aoe: 3.5 },
   frostshard: { name: 'Frost Shard', icon: '❄️', mana: 12, cd: 3.5, type: 'proj', dmgMult: 0.9, speed: 22, color: 0x88d4ff, slow: { mult: 0.45, dur: 3 } },
   chainlightning: { name: 'Chain Lightning', icon: '⚡', mana: 24, cd: 9, type: 'chain', dmgMult: 0.95, range: 20, jumps: 4, falloff: 0.78 },
+  meteor:     { name: 'Meteor', icon: '☄️', mana: 26, cd: 11, type: 'targetaoe', dmgMult: 2.2, radius: 4.5, range: 24, delay: 0.9, color: 0xff6622, burn: { mult: 0.3, dur: 3 } },
+  blizzard:   { name: 'Blizzard', icon: '🌨️', mana: 22, cd: 10, type: 'aoe', dmgMult: 0.6, radius: 7, slowAll: { mult: 0.4, dur: 4 }, color: 0xaaddff },
+  arcaneorb:  { name: 'Arcane Orb', icon: '🔮', mana: 20, cd: 8, type: 'proj', dmgMult: 1.1, speed: 10, color: 0xcc66ff, size: 2.2, pierce: true },
 };
+
+// ---------------- weapon affixes (rare+ weapons) ----------------
+export const AFFIXES = [
+  { id: 'flaming', name: 'Flaming', desc: 'burns targets', burn: { mult: 0.3, dur: 3 } },
+  { id: 'frost', name: 'Frostbound', desc: 'chills targets', slow: { mult: 0.55, dur: 2 } },
+  { id: 'vampiric', name: 'Vampiric', desc: 'heals 8% of damage', lifesteal: 0.08 },
+  { id: 'swift', name: 'Swift', desc: '+18% attack speed', atkSpeed: 1.18 },
+  { id: 'brutal', name: 'Brutal', desc: '+10% crit', crit: 10 },
+];
 
 // ---------------- items & rarity ----------------
 export const RARITIES = [
@@ -63,7 +88,7 @@ export const RARITIES = [
   { id: 'legendary', name: 'Legendary', mult: 2.0,  color: '#ff9a2a', glow: 0xff8811, w: 2 },
 ];
 
-// weapon archetypes per class: rig mesh(es) to show + ground-drop model
+// weapon archetypes: rig mesh(es) + drop model; `ranged` swaps your basic attack style
 export const WEAPON_TYPES = {
   knight: [
     { id: 'sword1h', noun: 'Sword', mesh: ['1H_Sword', 'OFFHAND'], model: 'sword_1handed' },
@@ -75,13 +100,13 @@ export const WEAPON_TYPES = {
   ],
   rogue: [
     { id: 'daggers', noun: 'Daggers', mesh: ['Knife', 'Knife_Offhand'], model: 'dagger' },
+    { id: 'crossbow', noun: 'Crossbow', mesh: ['2H_Crossbow'], model: 'crossbow_2handed', dmgBonus: 1.1, ranged: true, atkTime: 0.85 },
   ],
   mage: [
     { id: 'staff', noun: 'Staff', mesh: ['2H_Staff'], model: 'staff' },
-    { id: 'wand', noun: 'Wand', mesh: ['1H_Wand'], model: 'wand', dmgBonus: 0.9, speedBonus: true },
+    { id: 'wand', noun: 'Wand', mesh: ['1H_Wand'], model: 'wand', dmgBonus: 0.82, atkTime: 0.38, speedAdd: 0.4 },
   ],
 };
-// offhand item per class (shown when weapon is 1-handed)
 export const OFFHAND_TYPES = {
   knight: { noun: 'Shield', meshes: ['Round_Shield', 'Badge_Shield', 'Spike_Shield'], models: ['shield_round', 'shield_badge', 'shield_spikes'], stat: 'armor' },
   barbarian: { noun: 'Shield', meshes: ['Barbarian_Round_Shield'], models: ['shield_round'], stat: 'armor' },
@@ -115,29 +140,107 @@ export const ENEMIES = {
   bomber:   { model: 'Skeleton_Minion',  hp: 24, dmg: 22, speed: 6.6, range: 1.8, xp: 20, gold: [4, 9],  attackTime: 0.4, aggro: 13, scale: 0.95, tint: 0x77ff55, explode: 3.6 },
   frostmage:{ model: 'Skeleton_Mage',    hp: 40, dmg: 9,  speed: 3.4, range: 14,  xp: 30, gold: [7, 14], attackTime: 1.5, aggro: 15, scale: 1, ranged: true, tint: 0x77bbff, slowBolt: true },
   ghost:    { model: 'Skeleton_Minion',  hp: 34, dmg: 13, speed: 3.1, range: 2.0, xp: 32, gold: [8, 15], attackTime: 0.9, aggro: 17, scale: 1.05, ghost: true },
-  boss:     { model: 'Skeleton_Warrior', hp: 380, dmg: 22, speed: 4.6, range: 3.4, xp: 170, gold: [60, 90], attackTime: 1.1, aggro: 30, scale: 1.65, boss: true },
-  boneking: { model: 'Skeleton_Mage',    hp: 620, dmg: 26, speed: 4.2, range: 16,  xp: 420, gold: [150, 220], attackTime: 1.3, aggro: 40, scale: 1.9, ranged: true, boss: true, summons: true },
+  shade:    { model: 'Skeleton_Rogue',   hp: 28, dmg: 10, speed: 5.4, range: 2.0, xp: 34, gold: [8, 16], attackTime: 0.6, aggro: 18, scale: 1, ghost: true, tint: 0x334455 },
+  necromancer: { model: 'Skeleton_Mage', hp: 46, dmg: 10, speed: 3.2, range: 13, xp: 42, gold: [10, 20], attackTime: 1.5, aggro: 15, scale: 1.1, ranged: true, tint: 0xbb66ff, summons: true, summonEvery: 12, summonType: 'minion', summonCount: 1 },
+  berserker:{ model: 'Skeleton_Rogue',   hp: 44, dmg: 11, speed: 5.6, range: 2.2, xp: 36, gold: [8, 16], attackTime: 0.55, aggro: 14, scale: 1.05, tint: 0xff5544, enrage: true },
+  juggernaut:{ model: 'Skeleton_Warrior', hp: 120, dmg: 18, speed: 2.7, range: 2.6, xp: 55, gold: [14, 26], attackTime: 1.3, aggro: 10, scale: 1.28, tint: 0x666677, stalwart: true },
+  plaguebearer:{ model: 'Skeleton_Minion', hp: 38, dmg: 8, speed: 4.4, range: 2.2, xp: 38, gold: [9, 17], attackTime: 0.95, aggro: 12, scale: 1.05, tint: 0x66aa44, plague: { dps: 4, dur: 4 }, deathCloud: 3.2 },
+  sniper:   { model: 'Skeleton_Rogue',   hp: 26, dmg: 13, speed: 4.5, range: 18,  xp: 34, gold: [8, 15], attackTime: 1.7, aggro: 20, scale: 1, ranged: true, tint: 0xccbb88, boltSpeed: 24 },
+  brute:    { model: 'Skeleton_Minion',  hp: 55, dmg: 15, speed: 4.0, range: 2.4, xp: 30, gold: [7, 14], attackTime: 1.1, aggro: 11, scale: 1.3, tint: 0xcc9966, kbHit: 7 },
+  // bosses (floor 3/6 rolls one archetype; floor 9 is always the Bone King)
+  boss:     { model: 'Skeleton_Warrior', hp: 380, dmg: 22, speed: 4.6, range: 3.4, xp: 170, gold: [60, 90], attackTime: 1.1, aggro: 30, scale: 1.65, boss: true, bossName: 'GRAVEBOUND CHAMPION', stalwart: true },
+  necrolord:{ model: 'Skeleton_Mage',    hp: 300, dmg: 18, speed: 3.8, range: 15, xp: 180, gold: [60, 95], attackTime: 1.3, aggro: 30, scale: 1.6, boss: true, ranged: true, tint: 0xbb66ff, summons: true, summonEvery: 8, summonType: 'minion', summonCount: 2, bossName: 'THE NECROLORD', bossMsg: 'raises the dead' },
+  reaper:   { model: 'Skeleton_Rogue',   hp: 320, dmg: 20, speed: 6.8, range: 2.8, xp: 180, gold: [60, 95], attackTime: 0.6, aggro: 32, scale: 1.55, boss: true, ghost: true, tint: 0x223344, bossName: 'THE PALE REAPER' },
+  boneking: { model: 'Skeleton_Mage',    hp: 620, dmg: 26, speed: 4.2, range: 16,  xp: 420, gold: [150, 220], attackTime: 1.3, aggro: 40, scale: 1.9, ranged: true, boss: true, summons: true, summonEvery: 9, summonType: 'minion', summonCount: 2, bossName: 'THE BONE KING' },
 };
+export const MIDBOSS_TYPES = ['boss', 'necrolord', 'reaper'];
 
-// spawn pools per floor band (archers listed separately for platforms)
+// base pool per floor band; themes then bias it
 export function enemyPool(floor) {
   if (floor === 1) return ['minion', 'minion', 'minion', 'rogue'];
   if (floor === 2) return ['minion', 'minion', 'rogue', 'warrior', 'bomber'];
-  if (floor <= 4) return ['minion', 'minion', 'rogue', 'warrior', 'mage', 'bomber', 'ghost'];
-  if (floor <= 6) return ['minion', 'rogue', 'rogue', 'warrior', 'warrior', 'mage', 'bomber', 'frostmage', 'ghost'];
-  return ['rogue', 'rogue', 'warrior', 'warrior', 'mage', 'mage', 'bomber', 'bomber', 'frostmage', 'ghost', 'ghost'];
+  if (floor <= 4) return ['minion', 'minion', 'rogue', 'warrior', 'mage', 'bomber', 'ghost', 'brute'];
+  if (floor <= 6) return ['minion', 'rogue', 'rogue', 'warrior', 'warrior', 'mage', 'bomber', 'frostmage', 'ghost', 'brute', 'berserker', 'sniper', 'plaguebearer'];
+  return ['rogue', 'rogue', 'warrior', 'warrior', 'mage', 'mage', 'bomber', 'bomber', 'frostmage', 'ghost', 'ghost', 'berserker', 'juggernaut', 'plaguebearer', 'sniper', 'necromancer', 'shade', 'brute'];
 }
-export const ARCHERS = ['mage', 'frostmage', 'rogue'];
+export const ARCHERS = ['mage', 'frostmage', 'rogue', 'sniper'];
 export const eliteChance = (floor) => Math.min(0.25, 0.04 + floor * 0.025);
 
-export const BOSS_FLOORS = { 3: 'boss', 6: 'boss', 9: 'boneking' };
+export const BOSS_FLOORS = { 3: true, 6: true, 9: true };
 export const WIN_FLOOR = 9;
-export const BOSS_NAMES = { 3: 'GRAVEBOUND CHAMPION', 6: 'THE MARROW WARDEN', 9: 'THE BONE KING' };
 
-export const FLOOR_NAMES = [
-  '', 'The Mossy Gate', 'Forgotten Cellars', 'Champion’s Crypt', 'The Rat Warrens',
-  'Drowned Archives', 'Warden’s Maw', 'The Silent Ossuary', 'Roots of the World', 'Throne of the Bone King',
+// ---------------- floor themes ----------------
+export const THEMES = [
+  {
+    id: 'crypt', name: 'The Crypts', fog: 0x0a0812, density: 0.030,
+    hemi: 0x9988bb, amb: 0x4a4260, torch: 0xffb066,
+    tiles: ['floor_tile_large', 'floor_tile_large', 'floor_tile_large', 'floor_tile_small_broken_A', 'floor_tile_small_decorated', 'floor_tile_small_broken_B'],
+    props: ['barrel_large', 'box_large', 'crates_stacked', 'table_medium', 'shelf_small'],
+    banners: ['banner_patternA_red', 'banner_patternA_blue'],
+    bias: [],
+  },
+  {
+    id: 'cellars', name: 'The Rotten Cellars', fog: 0x120c06, density: 0.032,
+    hemi: 0xbb9977, amb: 0x554433, torch: 0xffc080,
+    tiles: ['floor_wood_large', 'floor_wood_large', 'floor_wood_small', 'floor_wood_large_dark', 'floor_wood_small_dark'],
+    props: ['barrel_large', 'barrel_small', 'crates_stacked', 'box_large', 'box_small', 'table_medium'],
+    banners: ['banner_patternA_red'],
+    bias: ['rogue', 'berserker', 'brute'],
+  },
+  {
+    id: 'drowned', name: 'The Drowned Deep', fog: 0x061210, density: 0.038,
+    hemi: 0x77bbaa, amb: 0x2f4a44, torch: 0xaaffcc,
+    tiles: ['floor_tile_large', 'floor_tile_small_weeds_A', 'floor_tile_small_weeds_B', 'floor_tile_small_weeds_A', 'floor_tile_large_rocks'],
+    props: ['barrel_large', 'box_small', 'shelf_small'],
+    banners: ['banner_patternA_blue'],
+    bias: ['ghost', 'plaguebearer', 'shade'],
+  },
+  {
+    id: 'ossuary', name: 'The Silent Ossuary', fog: 0x14121a, density: 0.026,
+    hemi: 0xccccdd, amb: 0x555566, torch: 0xffe0aa,
+    tiles: ['floor_tile_large', 'floor_tile_large', 'floor_tile_small_broken_A', 'floor_tile_small_broken_B', 'floor_tile_small_decorated'],
+    props: ['table_medium', 'shelf_small', 'chair'],
+    banners: ['banner_patternA_blue'],
+    bias: ['ghost', 'ghost', 'shade', 'necromancer'],
+  },
+  {
+    id: 'forge', name: 'The Ember Forge', fog: 0x160804, density: 0.034,
+    hemi: 0xcc7755, amb: 0x552211, torch: 0xff6633,
+    tiles: ['floor_tile_large', 'floor_tile_large_rocks', 'floor_dirt_large_rocky', 'floor_tile_small_broken_A', 'floor_tile_small_broken_B'],
+    props: ['crates_stacked', 'box_large', 'barrel_large'],
+    banners: ['banner_patternA_red'],
+    bias: ['bomber', 'bomber', 'berserker', 'juggernaut'],
+  },
+  {
+    id: 'frozen', name: 'The Frostbound Halls', fog: 0x0a1018, density: 0.030,
+    hemi: 0x88aadd, amb: 0x334466, torch: 0x99ccff,
+    tiles: ['floor_tile_large', 'floor_tile_large', 'floor_tile_small_broken_A', 'floor_tile_small_decorated'],
+    props: ['box_large', 'crates_stacked', 'shelf_small'],
+    banners: ['banner_patternA_blue'],
+    bias: ['frostmage', 'frostmage', 'juggernaut', 'sniper'],
+  },
+  {
+    id: 'warrens', name: 'The Rat Warrens', fog: 0x0c0a06, density: 0.036,
+    hemi: 0xaa9977, amb: 0x443b2a, torch: 0xffb066,
+    tiles: ['floor_dirt_large', 'floor_dirt_small_A', 'floor_dirt_small_B', 'floor_dirt_small_C', 'floor_dirt_small_D', 'floor_dirt_large_rocky'],
+    props: ['barrel_small', 'box_small', 'crates_stacked'],
+    bias: ['minion', 'minion', 'rogue', 'bomber'],
+    banners: [],
+  },
 ];
+
+// ---------------- floor mutators ----------------
+export const MUTATORS = [
+  { id: 'infested', name: 'INFESTED', desc: 'The dead are legion — half again as many foes.', countMult: 1.5 },
+  { id: 'cursed', name: 'CURSED', desc: 'Foes are hardier, but their bones drip with gold.', hpMult: 1.4, goldMult: 1.8 },
+  { id: 'treasure', name: 'TREASURE VAULT', desc: 'Riches beyond counting hide here.', extraChests: 3, extraCoins: 8 },
+  { id: 'haunted', name: 'HAUNTED', desc: 'Spirits drift through these halls.', poolOverride: ['ghost', 'ghost', 'shade', 'shade', 'necromancer'] },
+  { id: 'swift', name: 'SWIFT DEATH', desc: 'Everything here is faster. Everything.', speedMult: 1.3, xpMult: 1.4 },
+  { id: 'darkness', name: 'PITCH DARK', desc: 'The torches have all but died.', torchMult: 0.35 },
+];
+export const MUTATOR_CHANCE = 0.45;
+
+export const LAYOUTS = ['rooms', 'warrens', 'cavern', 'hall'];
 
 // difficulty scaling per floor
 export const scaleHp = (hp, floor) => Math.round(hp * (1 + 0.22 * (floor - 1)));
@@ -150,6 +253,7 @@ export const SHOP_ITEMS = [
   { id: 'atk', icon: '⚔', name: 'Whetstone', desc: '+3 damage for this run.', base: 40, grow: 22 },
   { id: 'hp', icon: '❤', name: 'Bone Charm', desc: '+20 max HP and heal 20.', base: 40, grow: 22 },
   { id: 'relic', icon: '💍', name: 'Mystery Relic', desc: 'A random trinket. Rarity scales with depth.', base: 70, grow: 25 },
+  { id: 'tome', icon: '📖', name: 'Spell Tome', desc: 'Replace one of your spells with another from your school.', base: 55, grow: 20 },
 ];
 
 // Weapon-ish meshes we hide by default; equipment then re-shows its kit.

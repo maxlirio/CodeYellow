@@ -7,11 +7,13 @@ import { WEAPON_MESHES, CAPE_COLORS } from './config.js';
 
 const CHAR_MODELS = ['Knight', 'Mage', 'Rogue', 'Rogue_Hooded', 'Barbarian'];
 const ENEMY_MODELS = ['Skeleton_Minion', 'Skeleton_Warrior', 'Skeleton_Rogue', 'Skeleton_Mage'];
-const WEAPON_MODELS = ['sword_1handed', 'sword_2handed', 'axe_1handed', 'axe_2handed', 'dagger', 'staff', 'wand', 'shield_round', 'shield_badge', 'shield_spikes'];
+const WEAPON_MODELS = ['sword_1handed', 'sword_2handed', 'axe_1handed', 'axe_2handed', 'dagger', 'staff', 'wand', 'shield_round', 'shield_badge', 'shield_spikes', 'crossbow_1handed', 'crossbow_2handed'];
 const DUNGEON_PIECES = [
   'wall', 'wall_corner', 'wall_doorway', 'wall_endcap', 'wall_Tsplit', 'wall_crossing', 'wall_broken', 'wall_cracked', 'wall_gated',
   'floor_tile_large', 'floor_tile_small', 'floor_tile_small_broken_A', 'floor_tile_small_broken_B',
-  'floor_tile_small_weeds_A', 'floor_tile_small_decorated', 'floor_dirt_large',
+  'floor_tile_small_weeds_A', 'floor_tile_small_weeds_B', 'floor_tile_small_decorated', 'floor_tile_large_rocks',
+  'floor_dirt_large', 'floor_dirt_large_rocky', 'floor_dirt_small_A', 'floor_dirt_small_B', 'floor_dirt_small_C', 'floor_dirt_small_D',
+  'floor_wood_large', 'floor_wood_small', 'floor_wood_large_dark', 'floor_wood_small_dark',
   'pillar', 'pillar_decorated', 'torch_mounted', 'torch_lit', 'stairs',
   'barrier', 'barrier_half', 'barrier_corner', 'barrier_column',
   'chest', 'chest_gold', 'key', 'coin', 'coin_stack_small', 'coin_stack_medium', 'coin_stack_large',

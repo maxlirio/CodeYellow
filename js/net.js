@@ -264,7 +264,7 @@ function handleAsGuest(m) {
       break;
     }
     case 'phit':
-      if (m.target === myId()) H?.player.damageLocalPlayer(m.dmg);
+      if (m.target === myId()) H?.player.damageLocalPlayer(m.dmg, m.fx || null);
       break;
     case 'lootTaken':
       H?.loot.takeLoot(m.f, m.id, m.by === myId() ? 'local' : 'remote', true);

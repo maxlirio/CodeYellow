@@ -10,7 +10,7 @@ import { sfx } from './audio.js';
 import { moveWithCollision, groundHeightAt } from './dungeon.js';
 import { spawnBolt } from './projectiles.js';
 import { damageEnemy } from './enemies.js';
-import { gearStat, weaponDamage, equippedMeshes } from './items.js';
+import { gearStat, weaponDamage, equippedMeshes, affixOf } from './items.js';
 import { addMsg, refreshHud, showPrompt, hidePrompt, flashVignette, updatePartyBar, hitmarker, setCrosshairHostile } from './ui.js';
 import { netSend } from './net.js';
 import { nearestChest, takeLoot, nearestItemDrop } from './loot.js';
@@ -39,6 +39,7 @@ export function createPlayer(classId, name) {
     attackT: 0, attackIdx: 0, attacking: false, attackFired: false,
     dodgeT: 0, dodgeCd: 0, iframes: 0, dodgeDirX: 0, dodgeDirZ: 0,
     dead: false, deadT: 0, moving: false, buff: null, slowT: 0,
+    poisonT: 0, poisonDps: 0, poisonTick: 0, kbX: 0, kbZ: 0,
     trapCd: 0, lastPosSend: 0,
   };
   anim.play('Idle');
@@ -90,7 +91,28 @@ export function effectiveCrit() {
   return G.player.cls.crit + gearStat('crit') / 100;
 }
 export function effectiveArmor() {
-  return Math.min(0.6, gearStat('armor') / 100);
+  let a = gearStat('armor') / 100;
+  if (G.player.buff?.armorAdd) a += G.player.buff.armorAdd;
+  return Math.min(0.75, a);
+}
+export function effectiveAttackTime() {
+  const p = G.player;
+  const w = G.inv.weapon;
+  let t = w?.atkTime || p.cls.attackTime;
+  const af = affixOf(w);
+  if (af?.atkSpeed) t /= af.atkSpeed;
+  return t;
+}
+// on-hit effects granted by the equipped weapon (+ active buffs)
+export function weaponHitEffects(dmg) {
+  const af = affixOf(G.inv.weapon);
+  const fx = {};
+  if (af?.burn) fx.poison = { dps: Math.max(2, Math.round(dmg * af.burn.mult)), dur: af.burn.dur };
+  if (af?.slow) fx.slow = af.slow;
+  let steal = af?.lifesteal || 0;
+  if (G.player.buff?.lifesteal) steal += G.player.buff.lifesteal;
+  if (steal) fx.lifesteal = steal;
+  return Object.keys(fx).length ? fx : null;
 }
 export function effectiveManaRegen() {
   return (G.player.cls.manaRegen || 0) + gearStat('mregen');
@@ -119,6 +141,8 @@ export function damageLocalPlayer(amount, effects = null) {
   const reduced = Math.max(1, Math.round(amount * (1 - effectiveArmor())));
   p.hp -= reduced;
   if (effects?.slow) p.slowT = Math.max(p.slowT, effects.slow.dur);
+  if (effects?.poison) { p.poisonT = effects.poison.dur; p.poisonDps = effects.poison.dps; addMsg('You are poisoned!', 'bad'); }
+  if (effects?.kb) { p.kbX += effects.kb.x; p.kbZ += effects.kb.z; }
   sfx.hurt();
   flashVignette();
   if (p.hp <= 0) {
@@ -162,6 +186,24 @@ export function updatePlayer(dt) {
   if (p.dodgeCd > 0) p.dodgeCd -= dt;
   if (p.trapCd > 0) p.trapCd -= dt;
   if (p.slowT > 0) p.slowT -= dt;
+  // poison ticks (ignores armor and i-frames)
+  if (p.poisonT > 0 && !p.dead) {
+    p.poisonT -= dt;
+    p.poisonTick -= dt;
+    if (p.poisonTick <= 0) {
+      p.poisonTick = 0.5;
+      p.hp -= Math.max(1, Math.round(p.poisonDps * 0.5));
+      spawnBurst(p.obj.position.clone().setY(p.obj.position.y + 1.3), 0x66ff44, 4, 2, 0.08, 0.3);
+      if (p.hp <= 0) { p.hp = 0; die(); }
+      refreshHud();
+    }
+  }
+  // knockback impulse
+  if (Math.abs(p.kbX) > 0.1 || Math.abs(p.kbZ) > 0.1) {
+    moveWithCollision(p.obj.position, p.kbX * dt, p.kbZ * dt, 0.55, { y: p.obj.position.y });
+    p.kbX *= Math.pow(0.02, dt);
+    p.kbZ *= Math.pow(0.02, dt);
+  }
 
   if (p.dead) {
     p.deadT += dt;
@@ -192,11 +234,12 @@ export function updatePlayer(dt) {
   } else {
     if (p.attacking) {
       p.attackT += dt;
-      if (!p.attackFired && p.attackT >= p.cls.attackTime * 0.45) {
+      const atkTime = effectiveAttackTime();
+      if (!p.attackFired && p.attackT >= atkTime * 0.45) {
         p.attackFired = true;
         doAttackHit();
       }
-      if (p.attackT >= p.cls.attackTime) p.attacking = false;
+      if (p.attackT >= atkTime) p.attacking = false;
     }
     if (wantsMove) {
       const len = Math.hypot(ix, iz);
@@ -263,14 +306,18 @@ function doAttackHit() {
   const cls = p.cls;
   const dmg = effectiveDamage();
   const dir = aimDir();
-  if (cls.ranged) {
+  const wfx = weaponHitEffects(dmg);
+  const rangedAtk = cls.ranged || G.inv.weapon?.ranged;
+  if (rangedAtk) {
     // basic bolt is free; slight spread unless aiming
     const spread = p.aiming ? 0 : 0.035;
     const sx = (Math.random() - 0.5) * spread, sy = (Math.random() - 0.5) * spread, sz = (Math.random() - 0.5) * spread;
     const b = {
       x: p.obj.position.x + dir.x * 0.7, z: p.obj.position.z + dir.z * 0.7, y: p.obj.position.y + 1.45,
       dirX: dir.x + sx, dirY: dir.y + sy, dirZ: dir.z + sz,
-      speed: 20, dmg, owner: 'player', color: 0xff8833,
+      speed: G.inv.weapon?.ranged ? 26 : 20, dmg, owner: 'player',
+      color: G.inv.weapon?.ranged ? 0xddcc99 : 0xff8833,
+      slow: wfx?.slow || null, poison: wfx?.poison || null, lifesteal: wfx?.lifesteal || 0,
     };
     spawnBolt(b);
     sfx.bolt();
@@ -290,7 +337,7 @@ function doAttackHit() {
     while (ang < -Math.PI) ang += Math.PI * 2;
     if (Math.abs(ang) > cls.attackArc) continue;
     const crit = Math.random() < effectiveCrit();
-    damageEnemy(e, crit ? Math.round(dmg * 1.8) : dmg, crit);
+    damageEnemy(e, crit ? Math.round(dmg * 1.8) : dmg, crit, false, 'local', wfx);
   }
 }
 
@@ -300,10 +347,13 @@ export function tryAttack() {
   p.attacking = true;
   p.attackT = 0;
   p.attackFired = false;
-  const animName = p.cls.attackAnims[p.attackIdx % p.cls.attackAnims.length];
+  const atkTime = effectiveAttackTime();
+  let animName;
+  if (G.inv.weapon?.ranged && p.anim.has('2H_Ranged_Shoot')) animName = '2H_Ranged_Shoot';
+  else animName = p.cls.attackAnims[p.attackIdx % p.cls.attackAnims.length];
   p.attackIdx++;
   const act = p.anim.play(animName, { once: true });
-  if (act) act.timeScale = act.getClip().duration / p.cls.attackTime;
+  if (act) act.timeScale = act.getClip().duration / atkTime;
   p.moving = false;
 }
 

@@ -11,9 +11,35 @@ import { addMsg, refreshHud } from './ui.js';
 import { netSend } from './net.js';
 
 export const cooldowns = {}; // spellId -> remaining seconds
+const pendingAoes = [];      // delayed strikes (Judgement, Meteor)
 
 export function resetCooldowns() {
   for (const k of Object.keys(cooldowns)) delete cooldowns[k];
+  pendingAoes.length = 0;
+}
+
+// deal a random 3 spells from the class pool — a fresh kit every run
+export function dealSpells(classId) {
+  const pool = [...(G.player?.cls.spellPool || [])];
+  if (!pool.length) return [];
+  const picked = [];
+  while (picked.length < 3 && pool.length) {
+    picked.push(pool.splice(Math.floor(Math.random() * pool.length), 1)[0]);
+  }
+  G.run.spells = picked;
+  return picked;
+}
+
+// merchant's Spell Tome: swap a random slot for an unused spell from the pool
+export function rerollSpell() {
+  const pool = G.player.cls.spellPool.filter(s => !G.run.spells.includes(s));
+  if (!pool.length) return null;
+  const slot = Math.floor(Math.random() * G.run.spells.length);
+  const oldId = G.run.spells[slot];
+  const newId = pool[Math.floor(Math.random() * pool.length)];
+  G.run.spells[slot] = newId;
+  delete cooldowns[oldId];
+  return { old: SPELLS[oldId].name, now: SPELLS[newId].name, icon: SPELLS[newId].icon };
 }
 
 export function updateSpells(dt) {
@@ -24,7 +50,26 @@ export function updateSpells(dt) {
   const p = G.player;
   if (p?.buff) {
     p.buff.t -= dt;
-    if (p.buff.t <= 0) { p.buff = null; addMsg('Your rage subsides.'); }
+    if (p.buff.t <= 0) { p.buff = null; addMsg('The surge fades.'); }
+  }
+  // delayed target-point strikes
+  for (let i = pendingAoes.length - 1; i >= 0; i--) {
+    const a = pendingAoes[i];
+    a.t -= dt;
+    if (a.t > 0) {
+      if (Math.random() < 0.4) spawnBurst(new THREE.Vector3(a.x, a.y + 0.3, a.z), a.color, 3, 1.5, 0.08, 0.25);
+      continue;
+    }
+    pendingAoes.splice(i, 1);
+    sfx.trap(); sfx.hit();
+    spawnBurst(new THREE.Vector3(a.x, a.y + 0.6, a.z), a.color, 32, 9, 0.19, 0.6);
+    netSend({ t: 'fx', f: G.floor, x: a.x, y: a.y + 0.6, z: a.z, color: a.color, big: 1 });
+    for (const e of G.enemies) {
+      if (e.state === 'dead') continue;
+      const d = Math.hypot(e.obj.position.x - a.x, e.obj.position.z - a.z);
+      if (d > a.radius || Math.abs(e.obj.position.y - a.y) > 3) continue;
+      damageEnemy(e, a.dmg, false, false, 'local', a.effects);
+    }
   }
 }
 
@@ -37,7 +82,7 @@ function aimDir() {
 export function castSpell(slot, effectiveDamage) {
   const p = G.player;
   if (!p || p.dead || G.mode !== 'playing' || p.dodgeT > 0) return;
-  const spellId = p.cls.spells[slot];
+  const spellId = (G.run.spells || [])[slot];
   const sp = SPELLS[spellId];
   if (!sp) return;
   if (cooldowns[spellId] > 0) return;
@@ -66,7 +111,8 @@ export function castSpell(slot, effectiveDamage) {
           x: origin.x + dx * 0.7, z: origin.z + dz * 0.7, y: origin.y + 1.45,
           dirX: dx, dirY: dir.y, dirZ: dz,
           speed: sp.speed, dmg, owner: 'player', color: sp.color, size: sp.size || 1,
-          aoe: sp.aoe || 0, slow: sp.slow, poison: sp.poison ? { dps: Math.round(dmg * sp.poison.mult), dur: sp.poison.dur } : null,
+          aoe: sp.aoe || 0, slow: sp.slow, pierce: !!sp.pierce,
+          poison: sp.poison ? { dps: Math.round(dmg * sp.poison.mult), dur: sp.poison.dur } : null,
         };
         spawnBolt(b);
         netSend({ t: 'bolt', f: G.floor, b: { ...b, owner: 'fx' } });
@@ -92,21 +138,65 @@ export function castSpell(slot, effectiveDamage) {
     }
     case 'aoe': {
       sfx.trap(); sfx.hit();
-      spawnBurst(origin.clone().setY(origin.y + 0.5), 0xffaa44, 30, 8, 0.18, 0.6);
-      netSend({ t: 'fx', f: G.floor, x: origin.x, y: origin.y + 0.5, z: origin.z, color: 0xffaa44, big: 1 });
+      const col = sp.color || 0xffaa44;
+      spawnBurst(origin.clone().setY(origin.y + 0.5), col, 30, 8, 0.18, 0.6);
+      netSend({ t: 'fx', f: G.floor, x: origin.x, y: origin.y + 0.5, z: origin.z, color: col, big: 1 });
+      if (sp.selfIframes) p.iframes = Math.max(p.iframes, sp.selfIframes);
       for (const e of G.enemies) {
         if (e.state === 'dead') continue;
         const d = Math.hypot(e.obj.position.x - origin.x, e.obj.position.z - origin.z);
         if (d > sp.radius || Math.abs(e.obj.position.y - origin.y) > 2.5) continue;
-        damageEnemy(e, dmg, false, false, 'local', { stun: sp.stun });
+        const fx = { stun: sp.stun };
+        if (sp.slowAll) fx.slow = sp.slowAll;
+        if (sp.burn) fx.poison = { dps: Math.max(2, Math.round(dmg * sp.burn.mult)), dur: sp.burn.dur };
+        if (dmg > 0) damageEnemy(e, dmg, false, false, 'local', fx);
+        else if (fx.stun || fx.slow) damageEnemy(e, 1, false, false, 'local', fx);
       }
       break;
     }
     case 'buff': {
       sfx.levelup();
-      p.buff = { dmgMult: sp.dmgMult, speedMult: sp.speedMult, t: sp.dur };
+      p.buff = { dmgMult: sp.dmgMult || 1, speedMult: sp.speedMult || 1, armorAdd: sp.armorAdd || 0, lifesteal: sp.lifesteal || 0, t: sp.dur };
       spawnBurst(origin.clone().setY(origin.y + 1.2), 0xff4444, 22, 5, 0.15, 0.8);
-      addMsg(`${sp.name}! +${Math.round((sp.dmgMult - 1) * 100)}% damage`, 'gold');
+      addMsg(`${sp.name}!`, 'gold');
+      break;
+    }
+    case 'targetaoe': {
+      // strike where the crosshair points, after a short delay
+      sfx.bolt();
+      const from = origin.clone().setY(origin.y + 1.5);
+      let hit = null;
+      for (let d = 1; d < sp.range; d += 0.5) {
+        const px = from.x + dir.x * d, py = from.y + dir.y * d, pz = from.z + dir.z * d;
+        const g = groundHeightAt(px, pz, py);
+        if (py <= g + 0.2) { hit = { x: px, y: g, z: pz }; break; }
+        if (!hasLineOfSight(from.x, from.z, px, pz)) break;
+        hit = { x: px, y: Math.max(0, py - 1.5), z: pz };
+      }
+      if (!hit) { p.mana += sp.mana; cooldowns[spellId] = 0.4; break; }
+      hit.y = groundHeightAt(hit.x, hit.z, hit.y + 1);
+      const effects = sp.burn ? { poison: { dps: Math.max(2, Math.round(dmg * sp.burn.mult)), dur: sp.burn.dur } } : null;
+      pendingAoes.push({ ...hit, t: sp.delay, radius: sp.radius, dmg, color: sp.color, effects });
+      spawnBurst(new THREE.Vector3(hit.x, hit.y + 0.4, hit.z), sp.color, 10, 2, 0.12, sp.delay);
+      break;
+    }
+    case 'mark': {
+      // death mark: the enemy under your crosshair takes +50% damage
+      let target = null, best = 0.2;
+      const from = origin.clone().setY(origin.y + 1.5);
+      for (const e of G.enemies) {
+        if (e.state === 'dead' || e.state === 'inactive') continue;
+        const to = e.obj.position.clone().setY(e.obj.position.y + 1.1).sub(from);
+        const d = to.length();
+        if (d > sp.range) continue;
+        const ang = to.normalize().angleTo(dir);
+        if (ang < best && hasLineOfSight(from.x, from.z, e.obj.position.x, e.obj.position.z)) { best = ang; target = e; }
+      }
+      if (!target) { addMsg('No target in sight.', 'bad'); p.mana += sp.mana; cooldowns[spellId] = 0.4; break; }
+      sfx.crit();
+      damageEnemy(target, 1, false, false, 'local', { vuln: sp.dur });
+      spawnDamageNumber(target.obj.position.clone().setY(target.obj.position.y + 2.4), 'MARKED', '#ff88ff', true);
+      addMsg(`${sp.name}: your target is exposed!`, 'gold');
       break;
     }
     case 'heal': {
@@ -133,8 +223,22 @@ export function castSpell(slot, effectiveDamage) {
       origin.x = pos.x; origin.z = pos.z;
       origin.y = groundHeightAt(pos.x, pos.z, origin.y);
       p.iframes = Math.max(p.iframes, 0.3);
-      spawnBurst(origin.clone().setY(origin.y + 1), 0x8844ff, 14, 4, 0.13, 0.5);
-      netSend({ t: 'fx', f: G.floor, x: origin.x, y: origin.y + 1, z: origin.z, color: 0x8844ff });
+      const blinkCol = sp.landAoe ? 0xff8844 : 0x8844ff;
+      spawnBurst(origin.clone().setY(origin.y + 1), blinkCol, 14, 4, 0.13, 0.5);
+      netSend({ t: 'fx', f: G.floor, x: origin.x, y: origin.y + 1, z: origin.z, color: blinkCol });
+      // Savage Leap: damage where you land
+      if (sp.landAoe) {
+        sfx.trap();
+        const ldmg = Math.round(effectiveDamage() * sp.landAoe.dmgMult);
+        netSend({ t: 'fx', f: G.floor, x: origin.x, y: origin.y + 0.5, z: origin.z, color: 0xffaa44, big: 1 });
+        spawnBurst(origin.clone().setY(origin.y + 0.5), 0xffaa44, 24, 7, 0.16, 0.5);
+        for (const e of G.enemies) {
+          if (e.state === 'dead') continue;
+          const d = Math.hypot(e.obj.position.x - origin.x, e.obj.position.z - origin.z);
+          if (d > sp.landAoe.radius || Math.abs(e.obj.position.y - origin.y) > 2.5) continue;
+          damageEnemy(e, ldmg, false, false, 'local', { stun: sp.landAoe.stun });
+        }
+      }
       break;
     }
     case 'chain': {

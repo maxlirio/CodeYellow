@@ -10,8 +10,9 @@ import { generateFloorData, buildFloorMeshes, disposeAllFloors } from './dungeon
 import { spawnEnemiesForFloor, updateEnemies, damageEnemy, spawnEnemy, setEnemyState, killEnemy, refreshBossBarForFloor } from './enemies.js';
 import { spawnLootsForFloor, updateLoot, applyTakenSilently, dropItemLoot } from './loot.js';
 import { updateProjectiles, clearProjectiles } from './projectiles.js';
-import { castSpell, updateSpells, updateBeams, resetCooldowns, cooldowns } from './spells.js';
+import { castSpell, updateSpells, updateBeams, resetCooldowns, cooldowns, dealSpells, rerollSpell } from './spells.js';
 import { giveStartingGear, equipItem, salvageItem, rollTrinket, addToBag, rarityOf } from './items.js';
+import { SPELLS } from './config.js';
 import {
   createPlayer, resetPlayerForFloor, updatePlayer, updateRemotes, tryAttack, tryDodge, tryInteract,
   drinkPotion, onMouseMove, damageLocalPlayer, sendPos, effectiveMaxHp, effectiveDamage,
@@ -51,8 +52,10 @@ async function boot() {
   G.camera.position.set(0, 6, 8);
   G.camera.rotation.order = 'YXZ';
 
-  scene.add(new THREE.HemisphereLight(0x9988bb, 0x2a2016, 0.85));
-  scene.add(new THREE.AmbientLight(0x4a4260, 0.7));
+  const hemi = new THREE.HemisphereLight(0x9988bb, 0x2a2016, 0.85);
+  const amb = new THREE.AmbientLight(0x4a4260, 0.7);
+  scene.add(hemi, amb);
+  G.lights = { hemi, amb };
 
   initFx();
   await wireHandlers();
@@ -74,6 +77,7 @@ async function boot() {
 
   // debug/test hooks: ?auto=1 starts a solo run immediately, ?seed=xyz fixes the dungeon
   window.G = G;
+  window.jumpFloor = (n) => descendTo(n);
   const params = new URLSearchParams(location.search);
   if (params.get('auto')) {
     initAudio();
@@ -234,6 +238,8 @@ function startRun(seed) {
   createPlayer(classId, playerName());
   G.player.maxHp = effectiveMaxHp();
   G.player.hp = G.player.maxHp;
+  const spells = dealSpells(classId);
+  addMsg(`Your spells this run: ${spells.map(s => `${SPELLS[s].icon} ${SPELLS[s].name}`).join(' · ')}`, 'gold');
 
   setLocalFloor(1);
   spawnRemoteAvatars();
@@ -275,6 +281,7 @@ function setLocalFloor(n) {
   fs.lootGroup.visible = true;
   G.floor = n;
   setFloorAliases(fs);
+  applyThemeAtmosphere(fs);
   clearTransientFx();
   clearProjectiles();
   buildTorchFx();
@@ -282,9 +289,25 @@ function setLocalFloor(n) {
   refreshRemoteVisibility();
   refreshBossBarForFloor();
   refreshHud();
+  if (fs.mutator) addMsg(`⚠ ${fs.mutator.name}: ${fs.mutator.desc}`, 'bad');
   sendPos(true);
   netSend({ t: 'pfloor', n });
   if (G.net.role === 'guest') netSend({ t: 'freq', n });
+}
+
+// every theme recolors the whole floor's atmosphere
+function applyThemeAtmosphere(fs) {
+  const th = fs.theme;
+  if (!th) return;
+  G.scene.fog.color.setHex(th.fog);
+  G.scene.fog.density = th.density * (fs.mutator?.torchMult ? 1.25 : 1);
+  G.scene.background.setHex(th.fog);
+  G.lights.hemi.color.setHex(th.hemi);
+  G.lights.amb.color.setHex(th.amb);
+  const dark = fs.mutator?.torchMult ?? 1;
+  G.lights.hemi.intensity = 0.85 * (dark < 1 ? 0.55 : 1);
+  G.lights.amb.intensity = 0.7 * (dark < 1 ? 0.55 : 1);
+  G.torchColor = th.torch;
 }
 
 // apply the host's snapshot of what already happened on my new floor
@@ -340,6 +363,16 @@ function buyItem(id, price) {
     refreshHud();
     return;
   }
+  if (id === 'tome') {
+    const r = rerollSpell();
+    if (!r) { addMsg('You already know every spell of your school.', 'bad'); return; }
+    G.run.gold -= price;
+    G.run.buys[id] = (G.run.buys[id] || 0) + 1;
+    addMsg(`The tome unbinds <b>${r.old}</b> and teaches you ${r.icon} <b>${r.now}</b>!`, 'gold');
+    sfx.levelup();
+    refreshHud();
+    return;
+  }
   G.run.gold -= price;
   G.run.buys[id] = (G.run.buys[id] || 0) + 1;
   switch (id) {
@@ -354,11 +387,12 @@ function buyItem(id, price) {
 // personal descent: only I change floors; teammates stay where they are
 function descendTo(n) {
   G.mode = 'transition';
+  const fs = ensureFloor(n); // peek at what awaits for the banner
   showTransition(n, () => {
     setLocalFloor(n);
     G.mode = 'playing';
     lockPointer();
-  });
+  }, fs.theme?.name, fs.mutator ? `${fs.mutator.name} — ${fs.mutator.desc}` : null);
 }
 
 function victory(fromNet = false) {

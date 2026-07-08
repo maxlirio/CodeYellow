@@ -1,6 +1,6 @@
 // DOM HUD: bars, minimap, messages, prompts, crosshair, spell bar, inventory, overlays.
 import { G } from './state.js';
-import { CLASSES, SHOP_ITEMS, FLOOR_NAMES, XP_FOR_LEVEL, SPELLS, CAPE_COLORS } from './config.js';
+import { CLASSES, SHOP_ITEMS, XP_FOR_LEVEL, SPELLS, CAPE_COLORS } from './config.js';
 import { rarityOf } from './items.js';
 
 const $ = (id) => document.getElementById(id);
@@ -71,8 +71,8 @@ export function hitmarker(crit) {
 // ---------- spell bar ----------
 export function updateSpellBar(cooldowns) {
   const p = G.player;
-  if (!p) return;
-  p.cls.spells.forEach((spellId, i) => {
+  if (!p || !G.run.spells) return;
+  G.run.spells.forEach((spellId, i) => {
     const sp = SPELLS[spellId];
     const el = $(`spell${i}`);
     if (!el) return;
@@ -302,10 +302,11 @@ export function renderShop(onBuy) {
 }
 
 // ---------- transitions & end screens ----------
-export function showTransition(floor, cb) {
+export function showTransition(floor, cb, subtitle = null, warning = null) {
   const t = $('transition');
   $('transTitle').textContent = floor <= 9 ? `FLOOR ${floor}` : `FLOOR ${floor} — THE ENDLESS DARK`;
-  $('transSub').textContent = FLOOR_NAMES[Math.min(floor, 9)] || 'Deeper still…';
+  $('transSub').innerHTML = (subtitle || 'Deeper still…') +
+    (warning ? `<br><span style="color:#ff8c4a;letter-spacing:4px">⚠ ${warning}</span>` : '');
   t.classList.remove('hidden');
   t.style.opacity = '1';
   setTimeout(() => {
@@ -314,7 +315,7 @@ export function showTransition(floor, cb) {
       t.style.opacity = '0';
       setTimeout(() => t.classList.add('hidden'), 650);
     }, 450);
-  }, 700);
+  }, warning ? 1100 : 700);
 }
 
 export function runStatsHtml() {

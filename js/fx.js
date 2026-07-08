@@ -93,8 +93,9 @@ export function buildTorchFx() {
   torchLights = [];
   if (torchFlames) { G.scene.remove(torchFlames); torchFlames = null; }
   flameData = [];
+  const torchColor = G.torchColor ?? 0xff8c2a;
   for (let i = 0; i < LIGHT_POOL; i++) {
-    const l = new THREE.PointLight(0xff8c2a, 0, 16, 1.8);
+    const l = new THREE.PointLight(torchColor, 0, 16, 1.8);
     G.scene.add(l);
     torchLights.push(l);
   }
@@ -109,7 +110,7 @@ export function buildTorchFx() {
   });
   geo.setAttribute('position', new THREE.BufferAttribute(positions, 3));
   const mat = new THREE.PointsMaterial({
-    map: flameTex, color: 0xffc060, size: 1.15, transparent: true, depthWrite: false,
+    map: flameTex, color: G.torchColor ?? 0xffc060, size: 1.15, transparent: true, depthWrite: false,
     blending: THREE.AdditiveBlending, sizeAttenuation: true,
   });
   torchFlames = new THREE.Points(geo, mat);
