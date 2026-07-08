@@ -18,7 +18,7 @@ A **first-person** crawl through 9 procedurally generated floors — destroy **t
 - **Appearance customization** — helmet/hood and cape toggles plus six cape colors, with a live 3D preview in the menu; your look syncs to co-op teammates
 - **Loot & economy** — coins, chests, potions, a locked golden chest per floor (find the key), equipment drops from elites/bosses, and the Bone Merchant between floors
 - **Progression** — XP levels, upgrades, escalating difficulty per floor
-- **Co-op multiplayer (up to 4)** — host gets a 5-letter room code, friends join with it. Peer-to-peer via PeerJS, host-authoritative, shared dungeon seed. Fallen players respawn while a teammate lives.
+- **Co-op multiplayer (up to 4)** — host gets a 5-letter room code, friends join with it. Peer-to-peer via PeerJS, host-authoritative, shared dungeon seed. Fallen players respawn while a teammate lives. **Descending is personal**: race ahead and leave your teammates behind — everyone can be on a different floor, the party bar shows where each player is, and arriving on a floor a teammate already cleared shows its true state (opened chests, slain skeletons, unlocked boss gates).
 - **Procedural audio** — every sound is synthesized with WebAudio; no audio files
 
 ## Controls
