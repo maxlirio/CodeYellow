@@ -31,6 +31,12 @@ export const G = {
     level: 1, xp: 0, kills: 0, chests: 0, startTime: 0, buys: {},
   },
 
+  // equipment & inventory
+  inv: { weapon: null, offhand: null, trinket1: null, trinket2: null, bag: [] },
+
+  // appearance customization (synced to co-op peers)
+  look: { cape: true, helmet: true, capeColor: 0 },
+
   // networking
   net: { role: 'solo', peer: null, conns: [], code: '', players: new Map(), started: false },
 

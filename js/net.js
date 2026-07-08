@@ -1,6 +1,7 @@
 // PeerJS multiplayer (same approach as CodeBlue): the 5-letter room code IS the host's
 // peer id — no backend needed, PeerJS's free public broker does signaling.
 // Host-authoritative: host simulates enemies/loot; guests render snapshots.
+import * as THREE from 'three';
 import { G } from './state.js';
 import { addMsg } from './ui.js';
 
@@ -17,7 +18,9 @@ export async function wireHandlers() {
   const enemies = await import('./enemies.js');
   const loot = await import('./loot.js');
   const proj = await import('./projectiles.js');
-  H = { player, enemies, loot, proj };
+  const fx = await import('./fx.js');
+  const spells = await import('./spells.js');
+  H = { player, enemies, loot, proj, fx, spells };
 }
 
 export function isAuthority() { return G.net.role !== 'guest'; }
@@ -49,7 +52,7 @@ export function hostGame(name, classId) {
       G.net.peer = peer;
       G.net.code = code;
       G.net.conns = [];
-      G.net.players = new Map([['host', { name, classId, ready: true }]]);
+      G.net.players = new Map([['host', { name, classId, ready: true, look: { ...G.look } }]]);
       G.net.started = false;
       peer.on('connection', (conn) => onGuestConnect(conn));
       resolve(code);
@@ -77,7 +80,7 @@ function onGuestConnect(conn) {
 }
 
 function broadcastLobby() {
-  const players = [...G.net.players.entries()].map(([pid, p]) => ({ pid, name: p.name, classId: p.classId }));
+  const players = [...G.net.players.entries()].map(([pid, p]) => ({ pid, name: p.name, classId: p.classId, look: p.look }));
   netSend({ t: 'lobby', players });
   callbacks.onLobbyUpdate?.();
 }
@@ -91,7 +94,7 @@ function handleAsHost(conn, m) {
   const pid = conn.peer;
   switch (m.t) {
     case 'hello':
-      G.net.players.set(pid, { name: m.name, classId: m.classId, ready: true });
+      G.net.players.set(pid, { name: m.name, classId: m.classId, ready: true, look: m.look });
       broadcastLobby();
       if (G.net.started) sendTo(conn, { t: 'full' });
       break;
@@ -103,9 +106,21 @@ function handleAsHost(conn, m) {
       H?.proj.spawnBolt(m.b);
       relay(conn, { ...m, pid });
       break;
+    case 'fx':
+      H?.fx.spawnBurst(new THREE.Vector3(m.x, m.y, m.z), m.color, m.big ? 26 : 14, m.big ? 7 : 4, 0.15, 0.5);
+      relay(conn, { ...m, pid });
+      break;
+    case 'beam':
+      H?.spells.remoteBeam(m.a, m.b);
+      relay(conn, { ...m, pid });
+      break;
+    case 'equip':
+      H?.player.applyRemoteEquip(pid, m.meshes);
+      relay(conn, { ...m, pid });
+      break;
     case 'dmg': {
       const e = H?.enemies.enemyById(m.id);
-      if (e) H.enemies.damageEnemy(e, m.amount, m.crit, true, pid);
+      if (e) H.enemies.damageEnemy(e, m.amount, m.crit, true, pid, m.fx || null);
       break;
     }
     case 'lootReq':
@@ -144,7 +159,7 @@ export function joinGame(code, name, classId) {
         G.net.peer = peer;
         G.net.hostConn = conn;
         G.net.code = code.toUpperCase();
-        conn.send({ t: 'hello', name, classId });
+        conn.send({ t: 'hello', name, classId, look: { ...G.look } });
         clearTimeout(timeout);
         if (!settled) { settled = true; resolve(); }
       });
@@ -168,8 +183,20 @@ function handleAsGuest(m) {
       callbacks.onHostGone?.();
       break;
     case 'lobby':
-      G.net.players = new Map(m.players.map(p => [p.pid, { name: p.name, classId: p.classId }]));
+      G.net.players = new Map(m.players.map(p => [p.pid, { name: p.name, classId: p.classId, look: p.look }]));
       callbacks.onLobbyUpdate?.();
+      break;
+    case 'fx':
+      H?.fx.spawnBurst(new THREE.Vector3(m.x, m.y, m.z), m.color, m.big ? 26 : 14, m.big ? 7 : 4, 0.15, 0.5);
+      break;
+    case 'beam':
+      H?.spells.remoteBeam(m.a, m.b);
+      break;
+    case 'equip':
+      H?.player.applyRemoteEquip(m.pid, m.meshes);
+      break;
+    case 'ldrop':
+      H?.loot.dropItemLoot(m.item, m.x, m.z, m.y, true);
       break;
     case 'start':
       G.net.started = true;
@@ -198,7 +225,7 @@ function handleAsGuest(m) {
     case 'esnap': {
       for (const s of m.list) {
         const e = H?.enemies.enemyById(s[0]);
-        if (e) { e.netX = s[1]; e.netZ = s[2]; e.netYaw = s[3]; e.hp = s[4]; }
+        if (e) { e.netX = s[1]; e.netZ = s[2]; e.netYaw = s[3]; e.hp = s[4]; e.netY = s[5] || 0; }
       }
       break;
     }
@@ -208,7 +235,7 @@ function handleAsGuest(m) {
       break;
     }
     case 'espawn':
-      H?.enemies.spawnEnemy(m.type, m.x, m.z, true);
+      H?.enemies.spawnEnemy(m.type, m.x, m.z, true, m.y || 0);
       break;
     case 'phit':
       if (m.target === myId()) H?.player.damageLocalPlayer(m.dmg);
@@ -239,16 +266,14 @@ function handleAsGuest(m) {
 function ensureRemote(pid) {
   if (G.remotes.has(pid) || pid === myId()) return;
   const info = G.net.players.get(pid);
-  if (info) H?.player.addRemotePlayer(pid, info.name, info.classId);
+  if (info) H?.player.addRemotePlayer(pid, info.name, info.classId, info.look);
 }
 
-// host: create remote avatars for all lobby players at game start
+// create remote avatars for all lobby players at game start
 export function spawnRemoteAvatars() {
   for (const [pid, p] of G.net.players) {
     if (pid === myId()) continue;
-    if (G.net.role === 'guest' && pid === 'host') H?.player.addRemotePlayer(pid, p.name, p.classId);
-    else if (G.net.role === 'host') H?.player.addRemotePlayer(pid, p.name, p.classId);
-    else if (G.net.role === 'guest') H?.player.addRemotePlayer(pid, p.name, p.classId);
+    H?.player.addRemotePlayer(pid, p.name, p.classId, p.look);
   }
 }
 
@@ -262,7 +287,7 @@ export function updateNet(dt) {
   const list = [];
   for (const e of G.enemies) {
     if (e.state === 'dead') continue;
-    list.push([e.id, +e.obj.position.x.toFixed(2), +e.obj.position.z.toFixed(2), +e.obj.rotation.y.toFixed(2), e.hp]);
+    list.push([e.id, +e.obj.position.x.toFixed(2), +e.obj.position.z.toFixed(2), +e.obj.rotation.y.toFixed(2), e.hp, +e.obj.position.y.toFixed(2)]);
   }
   if (list.length) netSend({ t: 'esnap', list });
 }

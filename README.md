@@ -8,14 +8,16 @@ A 3D co-op dungeon crawler that runs entirely in the browser. No build step, no 
 
 ## The game
 
-Descend through 9 procedurally generated floors of the dungeon and destroy **the Bone King**. Bosses guard floors 3, 6 and 9 — the way down stays locked until they fall. After floor 9, keep going in endless mode.
+A **first-person** crawl through 9 procedurally generated floors — destroy **the Bone King** on floor 9. Bosses guard floors 3, 6 and 9; the way down stays locked until they fall. After floor 9, keep going in endless mode.
 
-- **4 classes** — Knight (sword & board), Barbarian (huge 2H axe), Rogue (fast twin daggers, crits), Mage (ranged fire bolts, mana)
-- **Real-time combat** — melee arcs, projectiles, dodge rolls with i-frames, crits, hit reactions
-- **Skeleton horde** — minions, rogues, warriors, mages; they sleep until you get close. Bosses summon adds.
-- **Loot & economy** — coins, chests, potions, a locked golden chest per floor (find the key), and the Bone Merchant between floors
-- **Progression** — XP levels, damage/HP/speed upgrades, escalating difficulty per floor
-- **Dungeon features** — fog-of-war minimap, spike traps, torches, banners, props, boss health bars
+- **4 classes, 12 spells** — Knight, Barbarian, Rogue, Mage. Each class has a basic attack plus three spells on keys 1/2/3: fireballs, chain lightning, frost shards, fan of knives, shadow-step blinks, ground slams, shield bashes, battle rage, heals…
+- **First-person combat** — crosshair that flares on targets, **Shift to aim** (FOV zoom, steadier shots), dodge dash with i-frames, hit markers, crits, knockback, slows, poison
+- **Verticality** — climbable staircases lead to railed platforms where skeleton archers guard treasure; walk under them, climb up, rain bolts down
+- **A bigger horde** — minions, rogues, warriors, mages, exploding **bombers**, slowing **frost mages**, **ghosts** that drift through obstacles, glowing **elite champions**, and summoning bosses
+- **Equipment & inventory (Tab)** — weapon / offhand / two trinket slots plus a 12-slot bag. Procedurally named drops in 5 rarity tiers (Common → Legendary) with damage, crit, armor, speed, HP and mana-regen stats. Right-click to salvage for gold.
+- **Appearance customization** — helmet/hood and cape toggles plus six cape colors, with a live 3D preview in the menu; your look syncs to co-op teammates
+- **Loot & economy** — coins, chests, potions, a locked golden chest per floor (find the key), equipment drops from elites/bosses, and the Bone Merchant between floors
+- **Progression** — XP levels, upgrades, escalating difficulty per floor
 - **Co-op multiplayer (up to 4)** — host gets a 5-letter room code, friends join with it. Peer-to-peer via PeerJS, host-authoritative, shared dungeon seed. Fallen players respawn while a teammate lives.
 - **Procedural audio** — every sound is synthesized with WebAudio; no audio files
 
@@ -26,9 +28,12 @@ Descend through 9 procedurally generated floors of the dungeon and destroy **the
 | WASD | Move |
 | Mouse | Look (click canvas to capture) |
 | Left click / F | Attack |
-| Space | Dodge roll (i-frames) |
-| E | Open chest / descend |
+| Shift | Aim (zoom + accuracy) |
+| 1 / 2 / 3 | Cast spells |
+| Space | Dodge dash (i-frames) |
+| E | Open chest / take item / descend |
 | Q | Drink potion |
+| Tab | Inventory & equipment |
 | M | Mute |
 | Esc | Pause |
 

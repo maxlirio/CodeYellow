@@ -1,30 +1,35 @@
 // Boot, scene setup, input, game-flow state machine, main loop.
 import * as THREE from 'three';
 import { G } from './state.js';
-import { WIN_FLOOR, BOSS_FLOORS } from './config.js';
+import { WIN_FLOOR, BOSS_FLOORS, CLASSES } from './config.js';
 import { randomSeed } from './rng.js';
-import { loadAll } from './assets.js';
+import { loadAll, makeCharacter, applyLook } from './assets.js';
 import { initFx, buildTorchFx, updateFx, clearTransientFx } from './fx.js';
 import { initAudio, resumeAudio, toggleMute, sfx } from './audio.js';
 import { generateFloor } from './dungeon.js';
 import { spawnEnemies, updateEnemies, anyBossAlive, clearEnemies, damageEnemy } from './enemies.js';
 import { spawnLoots, updateLoot, clearLoot } from './loot.js';
 import { updateProjectiles, clearProjectiles } from './projectiles.js';
+import { castSpell, updateSpells, updateBeams, resetCooldowns, cooldowns } from './spells.js';
+import { giveStartingGear, equipItem, salvageItem, rollTrinket, addToBag, rarityOf } from './items.js';
 import {
   createPlayer, resetPlayerForFloor, updatePlayer, updateRemotes, tryAttack, tryDodge, tryInteract,
-  drinkPotion, onMouseMove, damageLocalPlayer, sendPos, effectiveMaxHp,
+  drinkPotion, onMouseMove, damageLocalPlayer, sendPos, effectiveMaxHp, effectiveDamage,
+  effectiveSpeed, effectiveCrit, effectiveArmor, effectiveManaRegen, refreshEquipVisuals,
 } from './player.js';
 import {
   show, hide, setHidden, addMsg, refreshHud, updateMinimap, updateDodgeCooldown,
-  buildClassCards, renderShop, showTransition, runStatsHtml, updatePartyBar, hideBossBar,
+  buildClassCards, renderShop, showTransition, runStatsHtml, hideBossBar,
+  updateSpellBar, renderInventory, buildLookControls, setCrosshairAiming,
 } from './ui.js';
 import {
   setNetCallbacks, wireHandlers, hostGame, joinGame, hostStart, netSend, shutdownNet,
-  spawnRemoteAvatars, updateNet, isAuthority, myId,
+  spawnRemoteAvatars, updateNet, isAuthority,
 } from './net.js';
 
 const $ = (id) => document.getElementById(id);
 let getClass = () => 'knight';
+let invOpen = false;
 
 // ---------------- boot ----------------
 async function boot() {
@@ -38,19 +43,18 @@ async function boot() {
 
   const scene = new THREE.Scene();
   scene.background = new THREE.Color(0x0a0812);
-  scene.fog = new THREE.FogExp2(0x0a0812, 0.035);
+  scene.fog = new THREE.FogExp2(0x0a0812, 0.03);
   G.scene = scene;
 
-  G.camera = new THREE.PerspectiveCamera(58, innerWidth / innerHeight, 0.1, 120);
+  G.camera = new THREE.PerspectiveCamera(66, innerWidth / innerHeight, 0.08, 130);
   G.camera.position.set(0, 6, 8);
+  G.camera.rotation.order = 'YXZ';
 
   scene.add(new THREE.HemisphereLight(0x9988bb, 0x2a2016, 0.85));
   scene.add(new THREE.AmbientLight(0x4a4260, 0.7));
 
   initFx();
-
   await wireHandlers();
-
   await loadAll((f, url) => {
     $('loadfill').style.width = `${Math.round(f * 100)}%`;
     $('loadtext').textContent = `Loading ${url.split('/').pop()}…`;
@@ -59,7 +63,13 @@ async function boot() {
   hide('loading');
   show('menu');
   setupMenu();
+  setupPreview();
   setupInput();
+  addEventListener('resize', () => {
+    G.camera.aspect = innerWidth / innerHeight;
+    G.camera.updateProjectionMatrix();
+    renderer.setSize(innerWidth, innerHeight);
+  });
 
   // debug/test hooks: ?auto=1 starts a solo run immediately, ?seed=xyz fixes the dungeon
   window.G = G;
@@ -68,13 +78,37 @@ async function boot() {
     initAudio();
     startRun(params.get('seed') || randomSeed());
   }
-  addEventListener('resize', () => {
-    G.camera.aspect = innerWidth / innerHeight;
-    G.camera.updateProjectionMatrix();
-    renderer.setSize(innerWidth, innerHeight);
-  });
 
   requestAnimationFrame(loop);
+}
+
+// ---------------- menu preview (appearance customization) ----------------
+let pvRenderer = null, pvScene = null, pvCam = null, pvChar = null;
+function setupPreview() {
+  const canvas = $('lookPreview');
+  pvRenderer = new THREE.WebGLRenderer({ canvas, antialias: true, alpha: true });
+  pvRenderer.setSize(150, 170, false);
+  pvRenderer.toneMapping = THREE.ACESFilmicToneMapping;
+  pvScene = new THREE.Scene();
+  pvCam = new THREE.PerspectiveCamera(35, 150 / 170, 0.1, 20);
+  pvCam.position.set(0, 1.5, 4.6);
+  pvCam.lookAt(0, 1.0, 0);
+  pvScene.add(new THREE.HemisphereLight(0xbbaadd, 0x332619, 1.6));
+  const key = new THREE.PointLight(0xffb066, 30, 15);
+  key.position.set(2, 3, 3);
+  pvScene.add(key);
+  rebuildPreview();
+}
+function rebuildPreview() {
+  if (!pvScene) return;
+  if (pvChar) pvScene.remove(pvChar);
+  const classId = getClass();
+  const cls = CLASSES[classId];
+  const modelName = classId === 'rogue' && G.look.helmet ? 'Rogue_Hooded' : cls.model;
+  const { obj } = makeCharacter('char', modelName, cls.show);
+  applyLook(obj, G.look);
+  pvChar = obj;
+  pvScene.add(obj);
 }
 
 // ---------------- menu & lobby ----------------
@@ -84,7 +118,8 @@ function playerName() {
 }
 
 function setupMenu() {
-  getClass = buildClassCards();
+  getClass = buildClassCards(() => rebuildPreview());
+  buildLookControls(() => rebuildPreview());
   $('nameInput').value = localStorage.getItem('codeorange_name') || '';
   $('nameInput').addEventListener('change', () => localStorage.setItem('codeorange_name', $('nameInput').value));
 
@@ -147,13 +182,14 @@ function setupMenu() {
     if (isAuthority()) doFloorChange(G.floor + 1, true);
     else netSend({ t: 'stairsReq' });
   };
+  $('btnCloseInv').onclick = () => toggleInventory(false);
 
   setNetCallbacks({
     onLobbyUpdate: renderLobby,
     onStart: (seed) => startRun(seed),
     onFloorChange: (n, broadcast) => doFloorChange(n, broadcast),
-    onGameOver: () => gameOver(),
-    onVictory: () => victory(),
+    onGameOver: () => gameOver(true),
+    onVictory: () => victory(true),
     onHostGone: () => { shutdownNet(); hide('lobby'); show('menu'); },
     onPartyDeath: () => checkAllDead(),
   });
@@ -176,10 +212,14 @@ function startRun(seed) {
   G.floor = 1;
   G.endless = false;
   G.run = { gold: 0, potions: 1, keys: 0, atkBonus: 0, hpBonus: 0, speedBonus: 0, speedBuys: 0, level: 1, xp: 0, kills: 0, chests: 0, startTime: performance.now(), buys: {} };
-  hide('menu'); hide('lobby'); hide('merchant'); hide('dead'); hide('victory');
+  resetCooldowns();
+  hide('menu'); hide('lobby'); hide('merchant'); hide('dead'); hide('victory'); hide('inventory');
+  invOpen = false;
   setHidden('hud', false);
 
-  createPlayer(getClass(), playerName());
+  const classId = getClass();
+  giveStartingGear(classId);
+  createPlayer(classId, playerName());
   G.player.maxHp = effectiveMaxHp();
   G.player.hp = G.player.maxHp;
 
@@ -204,13 +244,11 @@ function buildFloor(n) {
   spawnLoots(lootSpawns);
   buildTorchFx();
   resetPlayerForFloor();
-  // co-op teammates also reset to spawn — their pos messages will move them
   for (const r of G.remotes.values()) {
     r.obj.position.set(G.grid.spawn.x, 0, G.grid.spawn.z);
-    r.netX = G.grid.spawn.x; r.netZ = G.grid.spawn.z;
+    r.netX = G.grid.spawn.x; r.netY = 0; r.netZ = G.grid.spawn.z;
     r.dead = false;
   }
-  // endless mode: reuse boss cadence past floor 9
   if (G.endless && n > WIN_FLOOR && n % 3 === 0) {
     G.grid.stairsLocked = true;
   }
@@ -218,7 +256,6 @@ function buildFloor(n) {
   sendPos(true);
 }
 
-// Called by stairs interaction (E). Opens the merchant first.
 function onStairsUsed() {
   if (G.mode !== 'playing') return;
   sfx.stairs();
@@ -230,14 +267,24 @@ function onStairsUsed() {
 
 function buyItem(id, price) {
   if (G.run.gold < price) return;
+  const p = G.player;
+  if (id === 'relic') {
+    if (G.inv.bag.length >= 12) { addMsg('Your bag is full!', 'bad'); return; }
+    G.run.gold -= price;
+    G.run.buys[id] = (G.run.buys[id] || 0) + 1;
+    const item = rollTrinket(G.floor, 0.3);
+    addToBag(item);
+    addMsg(`The merchant hands you <span style="color:${rarityOf(item).color}">${item.name}</span>`, 'gold');
+    sfx.chest();
+    refreshHud();
+    return;
+  }
   G.run.gold -= price;
   G.run.buys[id] = (G.run.buys[id] || 0) + 1;
-  const p = G.player;
   switch (id) {
     case 'potion': G.run.potions++; break;
     case 'atk': G.run.atkBonus += 3; break;
     case 'hp': G.run.hpBonus += 20; p.maxHp = effectiveMaxHp(); p.hp = Math.min(p.maxHp, p.hp + 20); break;
-    case 'speed': if (G.run.speedBuys < 3) { G.run.speedBonus += 0.5; G.run.speedBuys++; } break;
   }
   sfx.coin();
   refreshHud();
@@ -259,7 +306,6 @@ function victory(fromNet = false) {
   G.mode = 'victory';
   if (G.net.role === 'host' && !fromNet) netSend({ t: 'victory' });
   sfx.victory();
-  G.player?.anim.play('Cheer', { once: false });
   document.exitPointerLock?.();
   $('victoryStats').innerHTML = runStatsHtml();
   show('victory');
@@ -285,9 +331,45 @@ function checkAllDead() {
   if (!anyAlive) gameOver();
 }
 
+// ---------------- inventory ----------------
+function invStatsHtml() {
+  return `⚔ Damage: <b>${effectiveDamage()}</b><br>` +
+    `🎯 Crit: <b>${Math.round(effectiveCrit() * 100)}%</b> · 🛡 Reduction: <b>${Math.round(effectiveArmor() * 100)}%</b><br>` +
+    `👢 Speed: <b>${effectiveSpeed().toFixed(1)}</b> · 🔮 Mana/s: <b>${effectiveManaRegen().toFixed(1)}</b><br>` +
+    `❤ Max HP: <b>${effectiveMaxHp()}</b>`;
+}
+function rerenderInventory() {
+  renderInventory({
+    onEquip: (item) => {
+      if (item.classId && item.classId !== G.player.classId) { addMsg('Your class can’t use that.', 'bad'); return; }
+      equipItem(item);
+      refreshEquipVisuals();
+      sfx.key();
+      rerenderInventory();
+    },
+    onSalvage: (item) => {
+      const v = salvageItem(item);
+      if (v) { addMsg(`Salvaged for ${v} gold`, 'gold'); sfx.coin(); refreshHud(); rerenderInventory(); }
+    },
+    statsHtml: invStatsHtml(),
+  });
+}
+function toggleInventory(open = !invOpen) {
+  if (G.mode !== 'playing' && !invOpen) return;
+  invOpen = open;
+  if (invOpen) {
+    document.exitPointerLock?.();
+    rerenderInventory();
+    show('inventory');
+  } else {
+    hide('inventory');
+    lockPointer();
+  }
+}
+
 // ---------------- input ----------------
 function lockPointer() {
-  if (G.mode !== 'playing') return;
+  if (G.mode !== 'playing' || invOpen) return;
   try {
     const r = $('game').requestPointerLock?.();
     if (r && r.catch) r.catch(() => {});
@@ -297,7 +379,7 @@ function lockPointer() {
 function setupInput() {
   const canvas = $('game');
   canvas.addEventListener('click', () => {
-    if (G.mode === 'playing') {
+    if (G.mode === 'playing' && !invOpen) {
       resumeAudio();
       if (!document.pointerLockElement) lockPointer();
       else tryAttack();
@@ -307,14 +389,19 @@ function setupInput() {
     G.mouse.locked = document.pointerLockElement === canvas;
   });
   document.addEventListener('mousemove', (e) => {
-    if (G.mouse.locked && G.mode === 'playing') onMouseMove(e.movementX, e.movementY);
+    if (G.mouse.locked && G.mode === 'playing' && !invOpen) onMouseMove(e.movementX, e.movementY);
   });
   addEventListener('keydown', (e) => {
     G.keys[e.code] = true;
+    if (e.code === 'Tab') { e.preventDefault(); toggleInventory(); return; }
+    if (invOpen) { if (e.code === 'Escape') toggleInventory(false); return; }
     if (e.code === 'Space') { e.preventDefault(); tryDodge(); }
     if (e.code === 'KeyF') tryAttack();
     if (e.code === 'KeyE') tryInteract(onStairsUsed);
     if (e.code === 'KeyQ') drinkPotion();
+    if (e.code === 'Digit1') castSpell(0, effectiveDamage);
+    if (e.code === 'Digit2') castSpell(1, effectiveDamage);
+    if (e.code === 'Digit3') castSpell(2, effectiveDamage);
     if (e.code === 'KeyM') { const m = toggleMute(); addMsg(m ? 'Muted 🔇' : 'Sound on 🔊'); }
     if (e.code === 'Escape' && G.mode === 'playing') {
       G.mode = 'paused';
@@ -331,10 +418,9 @@ function updateDeath(dt) {
   const p = G.player;
   if (!p || !p.dead || G.mode !== 'playing') return;
   if (G.net.role === 'solo') {
-    if (p.deadT > 2.2) gameOver();
+    if (p.deadT > 2.6) gameOver();
     return;
   }
-  // co-op: respawn if a teammate is alive
   let teamAlive = false;
   for (const r of G.remotes.values()) if (!r.dead) teamAlive = true;
   if (!teamAlive) { checkAllDead(); return; }
@@ -344,6 +430,7 @@ function updateDeath(dt) {
     p.hp = Math.round(p.maxHp * 0.5);
     p.iframes = 2;
     p.obj.position.set(G.grid.spawn.x, 0, G.grid.spawn.z);
+    p.obj.visible = false;
     p.anim.play('Idle');
     addMsg('You rise again at the entrance.', 'gold');
     refreshHud();
@@ -366,6 +453,7 @@ function loop(t) {
   if (G.mode === 'playing') {
     updatePlayer(dt);
     updateDeath(dt);
+    setCrosshairAiming(!!G.player?.aiming);
   } else if (G.player && simActive) {
     G.player.anim.update(dt);
   }
@@ -375,30 +463,42 @@ function loop(t) {
     updateRemotes(dt);
     updateLoot(dt);
     updateProjectiles(dt, { damageEnemy, damageLocalPlayer });
+    updateSpells(dt);
+    updateBeams(dt);
     updateFx(dt);
     updateNet(dt);
 
-    // victory check (authority)
     if (isAuthority() && G.hadBoss && G.floor === WIN_FLOOR && !G.endless && G.mode === 'playing' && !anyBossAlive()) {
       victory();
     }
 
     minimapT += dt;
-    if (minimapT > 0.12) { minimapT = 0; updateMinimap(); updateDodgeCooldown(); }
+    if (minimapT > 0.12) {
+      minimapT = 0;
+      updateMinimap();
+      updateDodgeCooldown();
+      updateSpellBar(cooldowns);
+      refreshHudManaOnly();
+    }
     if (G.player?.dead && G.net.role !== 'solo' && respawnT > 0) {
       $('respawnMsg').textContent = `Respawning in ${Math.ceil(respawnT)}…`;
     }
-    if (G.player?.maxMana > 0 && G.mode === 'playing') refreshHudManaOnly();
+  }
+
+  // menu preview spin
+  if (G.mode === 'menu' || $('menu').classList.contains('show')) {
+    if (pvChar) {
+      pvChar.rotation.y += dt * 0.8;
+      pvRenderer.render(pvScene, pvCam);
+    }
   }
 
   if (G.scene && G.camera) G.renderer.render(G.scene, G.camera);
 }
 
-let manaT = 0;
 function refreshHudManaOnly() {
-  manaT++;
-  if (manaT % 6 !== 0) return;
   const p = G.player;
+  if (!p || p.maxMana <= 0) return;
   document.getElementById('manafill').style.width = `${(p.mana / p.maxMana) * 100}%`;
 }
 

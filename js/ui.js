@@ -1,6 +1,7 @@
-// DOM HUD: bars, minimap, messages, prompts, overlays.
+// DOM HUD: bars, minimap, messages, prompts, crosshair, spell bar, inventory, overlays.
 import { G } from './state.js';
-import { CLASSES, SHOP_ITEMS, FLOOR_NAMES, XP_FOR_LEVEL } from './config.js';
+import { CLASSES, SHOP_ITEMS, FLOOR_NAMES, XP_FOR_LEVEL, SPELLS, CAPE_COLORS } from './config.js';
+import { rarityOf } from './items.js';
 
 const $ = (id) => document.getElementById(id);
 
@@ -50,6 +51,107 @@ export function updateDodgeCooldown() {
   if (!p) return;
   const frac = p.dodgeCd > 0 ? 1 - p.dodgeCd / 1.15 : 1;
   $('dodgeCool').style.width = `${frac * 100}%`;
+}
+
+// ---------- crosshair & hitmarker ----------
+export function setCrosshairHostile(h) {
+  $('crosshair').classList.toggle('hostile', h);
+}
+export function setCrosshairAiming(a) {
+  $('crosshair').classList.toggle('aiming', a);
+}
+export function hitmarker(crit) {
+  const m = $('hitmark');
+  m.classList.toggle('crit', !!crit);
+  m.classList.remove('show');
+  void m.offsetWidth; // restart animation
+  m.classList.add('show');
+}
+
+// ---------- spell bar ----------
+export function updateSpellBar(cooldowns) {
+  const p = G.player;
+  if (!p) return;
+  p.cls.spells.forEach((spellId, i) => {
+    const sp = SPELLS[spellId];
+    const el = $(`spell${i}`);
+    if (!el) return;
+    const icon = el.querySelector('.sp-icon');
+    if (icon.textContent !== sp.icon) { icon.textContent = sp.icon; el.title = `${sp.name} (${sp.mana} mana)`; }
+    const cd = cooldowns[spellId] || 0;
+    el.querySelector('.cdmask').style.height = cd > 0 ? `${Math.min(100, (cd / sp.cd) * 100)}%` : '0%';
+    el.classList.toggle('nomana', p.mana < sp.mana);
+  });
+}
+
+// ---------- inventory ----------
+function itemStatsHtml(item) {
+  const bits = [];
+  for (const [k, v] of Object.entries(item.stats)) {
+    const label = { dmg: 'damage', armor: '% dmg reduction', crit: '% crit', speed: ' speed', hp: ' max HP', mregen: ' mana/s' }[k] || k;
+    bits.push(`${k === 'dmg' ? '' : '+'}${v}${label === 'damage' ? ' damage' : label}`);
+  }
+  return bits.join(' · ');
+}
+function itemHtml(item) {
+  const r = rarityOf(item);
+  return `<div class="item-name" style="color:${r.color}">${item.icon} ${item.name}</div>
+    <div class="item-stats">${r.name} · ${itemStatsHtml(item)}</div>`;
+}
+
+export function renderInventory({ onEquip, onSalvage, statsHtml }) {
+  const slots = $('equipSlots');
+  const labels = { weapon: 'Weapon', offhand: 'Offhand', trinket1: 'Trinket I', trinket2: 'Trinket II' };
+  slots.innerHTML = '';
+  for (const key of Object.keys(labels)) {
+    const it = G.inv[key];
+    const div = document.createElement('div');
+    div.className = 'eq-slot';
+    div.innerHTML = `<div class="slot-label">${labels[key]}</div>${it ? itemHtml(it) : '<span style="color:#55503f">— empty —</span>'}`;
+    slots.appendChild(div);
+  }
+  $('invStats').innerHTML = statsHtml;
+  const grid = $('bagGrid');
+  grid.innerHTML = '';
+  $('bagCount').textContent = `(${G.inv.bag.length}/12)`;
+  for (const item of G.inv.bag) {
+    const div = document.createElement('div');
+    div.className = 'bag-item';
+    div.innerHTML = itemHtml(item);
+    div.onclick = () => onEquip(item);
+    div.oncontextmenu = (e) => { e.preventDefault(); onSalvage(item); };
+    grid.appendChild(div);
+  }
+  if (!G.inv.bag.length) grid.innerHTML = '<div style="color:#55503f;font-size:13px">Empty — slay elites and open chests.</div>';
+}
+
+// ---------- appearance controls ----------
+export function buildLookControls(onChange) {
+  const saved = localStorage.getItem('codeorange_look');
+  if (saved) { try { Object.assign(G.look, JSON.parse(saved)); } catch {} }
+  $('lookHelmet').checked = G.look.helmet;
+  $('lookCape').checked = G.look.cape;
+  const persist = () => {
+    localStorage.setItem('codeorange_look', JSON.stringify(G.look));
+    onChange?.();
+  };
+  $('lookHelmet').onchange = (e) => { G.look.helmet = e.target.checked; persist(); };
+  $('lookCape').onchange = (e) => { G.look.cape = e.target.checked; persist(); };
+  const sw = $('capeSwatches');
+  sw.innerHTML = '';
+  CAPE_COLORS.forEach((c, i) => {
+    const d = document.createElement('div');
+    d.className = 'swatch' + (i === G.look.capeColor ? ' sel' : '');
+    d.style.background = '#' + c.hex.toString(16).padStart(6, '0');
+    d.title = c.name;
+    d.onclick = () => {
+      G.look.capeColor = i;
+      sw.querySelectorAll('.swatch').forEach(el => el.classList.remove('sel'));
+      d.classList.add('sel');
+      persist();
+    };
+    sw.appendChild(d);
+  });
 }
 
 export function flashVignette() {
@@ -117,6 +219,8 @@ export function updateMinimap() {
       if (cell === 3) ctx.fillStyle = G.grid.stairsLocked ? '#7a3fd0' : '#ff8c1a';
       else if (cell === 4) ctx.fillStyle = '#7d4040';
       else if (cell === 5) ctx.fillStyle = '#3a3348';
+      else if (cell === 6) ctx.fillStyle = '#6b5f85'; // stairs up
+      else if (G.grid.elev[y * w + x]) ctx.fillStyle = '#7a7099'; // platform
       else ctx.fillStyle = '#4c445e';
       ctx.fillRect(sx, sy, scale + 0.5, scale + 0.5);
     }

@@ -55,6 +55,16 @@ input:focus { border-color: var(--orange-dim); }
 .ccard .cname { font-weight: bold; margin: 4px 0 2px; color: #f0e6d2; }
 .ccard .cdesc { font-size: 11px; color: #9c8f77; line-height: 1.35; }
 
+/* appearance customization */
+.customize { display: flex; gap: 16px; align-items: center; justify-content: center; margin-bottom: 16px; }
+#lookPreview { background: radial-gradient(circle at 50% 35%, #241c30, #120e1a); border: 1px solid var(--border); border-radius: 10px; }
+.lookopts { text-align: left; }
+.lookrow { margin-bottom: 8px; font-size: 14px; color: #cfc3a8; }
+.lookrow input { width: auto; }
+.swatches { display: flex; gap: 6px; }
+.swatch { width: 22px; height: 22px; border-radius: 50%; cursor: pointer; border: 2px solid #2b2436; }
+.swatch.sel { border-color: #fff; box-shadow: 0 0 8px rgba(255,255,255,0.4); }
+
 .menu-buttons { display: flex; flex-direction: column; gap: 10px; align-items: center; margin-top: 6px; }
 button.big {
   font-size: 17px; padding: 12px 34px; border-radius: 8px; cursor: pointer; min-width: 260px;
@@ -121,6 +131,55 @@ button.orange-btn:hover { filter: brightness(1.15); }
 .pcard .pbar { height: 7px; background: #1c1520; border-radius: 3px; overflow: hidden; margin-top: 3px; }
 .pcard .pfill { height: 100%; background: #e04545; }
 .pcard.dead { opacity: 0.45; }
+
+/* crosshair */
+#crosshair { position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%); width: 40px; height: 40px; }
+.ch-dot { position: absolute; left: 50%; top: 50%; width: 3px; height: 3px; margin: -1.5px; background: #f0e6d2; border-radius: 50%; box-shadow: 0 0 3px #000; }
+.ch-l { position: absolute; background: #f0e6d2; box-shadow: 0 0 3px #000; transition: all 0.12s; }
+.ch-t { left: 50%; top: 0; width: 2px; height: 9px; margin-left: -1px; }
+.ch-b { left: 50%; bottom: 0; width: 2px; height: 9px; margin-left: -1px; }
+.ch-lf { top: 50%; left: 0; height: 2px; width: 9px; margin-top: -1px; }
+.ch-rt { top: 50%; right: 0; height: 2px; width: 9px; margin-top: -1px; }
+#crosshair.aiming .ch-t { height: 6px; top: 6px; }
+#crosshair.aiming .ch-b { height: 6px; bottom: 6px; }
+#crosshair.aiming .ch-lf { width: 6px; left: 6px; }
+#crosshair.aiming .ch-rt { width: 6px; right: 6px; }
+#crosshair.hostile .ch-l, #crosshair.hostile .ch-dot { background: #ff8c4a; }
+#hitmark {
+  position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%) scale(0.5);
+  color: #ffdd66; font-size: 26px; font-weight: bold; opacity: 0; text-shadow: 0 0 4px #000;
+}
+#hitmark.crit { color: #ff5533; }
+#hitmark.show { animation: hitpop 0.28s; }
+@keyframes hitpop { 0% { opacity: 1; transform: translate(-50%, -50%) scale(1.4); } 100% { opacity: 0; transform: translate(-50%, -50%) scale(0.7); } }
+
+/* spell slots */
+.slot.spell { position: relative; min-width: 52px; text-align: center; }
+.slot.spell .sp-icon { font-size: 19px; }
+.slot.spell .cdmask { position: absolute; left: 0; bottom: 0; width: 100%; height: 0%; background: rgba(10,8,14,0.82); pointer-events: none; }
+.slot.spell.nomana .sp-icon { filter: grayscale(1) brightness(0.6); }
+
+/* inventory */
+.inv-panel { max-width: 760px; width: min(94vw, 760px); }
+.inv-cols { display: flex; gap: 22px; text-align: left; }
+.equip-col { width: 250px; }
+.bag-col { flex: 1; }
+.equip-title { color: var(--orange); letter-spacing: 2px; font-size: 13px; margin-bottom: 8px; text-transform: uppercase; }
+.eq-slot {
+  border: 1px solid var(--border); border-radius: 8px; padding: 8px 10px; margin-bottom: 7px;
+  background: #16121e; min-height: 44px; font-size: 13px;
+}
+.eq-slot .slot-label { font-size: 10px; color: #7d7260; text-transform: uppercase; letter-spacing: 1px; }
+.item-name { font-weight: bold; }
+.item-stats { font-size: 11px; color: #9c8f77; }
+.bag-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 7px; }
+.bag-item {
+  border: 1px solid var(--border); border-radius: 8px; padding: 7px 9px; cursor: pointer;
+  background: #16121e; font-size: 12px; transition: all 0.1s; min-height: 52px;
+}
+.bag-item:hover { border-color: var(--orange-dim); transform: translateY(-1px); }
+.inv-stats { margin-top: 12px; font-size: 12.5px; color: #b3a68c; line-height: 1.8; border-top: 1px solid #262032; padding-top: 8px; }
+.inv-hint { margin-top: 10px; font-size: 11px; color: #7d7260; }
 
 #hitVignette {
   position: absolute; inset: 0; pointer-events: none; opacity: 0;

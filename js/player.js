@@ -1,63 +1,99 @@
-// Local player: third-person controller, camera, melee/ranged combat, dodge, potions,
-// XP/levels, traps, death/respawn. Remote player avatars are also maintained here.
+// Local player: FIRST-PERSON controller — mouse look, aim (shift), gravity & climbing,
+// melee/ranged combat, spells, dodge dash, potions, XP/levels, traps, death cam.
+// Remote player avatars (full 3D models) are also maintained here.
 import * as THREE from 'three';
 import { G } from './state.js';
-import { CLASSES, XP_FOR_LEVEL } from './config.js';
-import { makeCharacter } from './assets.js';
+import { CLASSES, XP_FOR_LEVEL, CAPE_COLORS } from './config.js';
+import { makeCharacter, setEquipMeshes, applyLook } from './assets.js';
 import { makeBlobShadow, spawnDamageNumber, spawnBurst } from './fx.js';
 import { sfx } from './audio.js';
-import { moveWithCollision } from './dungeon.js';
+import { moveWithCollision, groundHeightAt } from './dungeon.js';
 import { spawnBolt } from './projectiles.js';
 import { damageEnemy } from './enemies.js';
-import { addMsg, refreshHud, showPrompt, hidePrompt, flashVignette, updatePartyBar } from './ui.js';
+import { gearStat, weaponDamage, equippedMeshes } from './items.js';
+import { addMsg, refreshHud, showPrompt, hidePrompt, flashVignette, updatePartyBar, hitmarker, setCrosshairHostile } from './ui.js';
 import { netSend } from './net.js';
-import { nearestChest, takeLoot } from './loot.js';
+import { nearestChest, takeLoot, nearestItemDrop } from './loot.js';
 
-const CAM_DIST = 7.5, CAM_HEIGHT = 3.4, CAM_PITCH_MIN = -0.15, CAM_PITCH_MAX = 1.1;
+const EYE = 1.62;
+const BASE_FOV = 66, AIM_FOV = 44;
 
 export function createPlayer(classId, name) {
   const cls = CLASSES[classId];
-  const { obj, anim } = makeCharacter('char', cls.model, cls.show);
-  obj.add(makeBlobShadow(0.85));
+  const modelName = classId === 'rogue' && G.look.helmet ? 'Rogue_Hooded' : cls.model;
+  const { obj, anim } = makeCharacter('char', modelName, cls.show);
+  applyLook(obj, G.look);
+  obj.visible = false; // first person: own body hidden until death cam
+  G.scene.add(obj);
   // warm lantern glow that follows the hero
   const lantern = new THREE.PointLight(0xffb066, 14, 13, 1.7);
   lantern.position.set(0, 2.4, 0);
   obj.add(lantern);
-  G.scene.add(obj);
   const p = {
     classId, cls, name,
     obj, anim,
     hp: cls.hp, maxHp: cls.hp,
     mana: cls.mana, maxMana: cls.mana,
-    yaw: 0, camYaw: 0, camPitch: 0.45,
+    yaw: 0, camYaw: 0, camPitch: 0,
+    vy: 0, aiming: false, bobT: 0,
     attackT: 0, attackIdx: 0, attacking: false, attackFired: false,
     dodgeT: 0, dodgeCd: 0, iframes: 0, dodgeDirX: 0, dodgeDirZ: 0,
-    dead: false, deadT: 0, moving: false,
+    dead: false, deadT: 0, moving: false, buff: null, slowT: 0,
     trapCd: 0, lastPosSend: 0,
   };
   anim.play('Idle');
   G.player = p;
+  refreshEquipVisuals();
   return p;
+}
+
+export function refreshEquipVisuals() {
+  const p = G.player;
+  if (!p) return;
+  const meshes = equippedMeshes(p.classId);
+  setEquipMeshes(p.obj, meshes);
+  p.maxHp = effectiveMaxHp();
+  p.hp = Math.min(p.hp, p.maxHp);
+  netSend({ t: 'equip', meshes });
+  refreshHud();
 }
 
 export function resetPlayerForFloor() {
   const p = G.player;
   p.obj.position.set(G.grid.spawn.x, 0, G.grid.spawn.z);
-  p.obj.visible = true;
+  p.vy = 0;
+  p.obj.visible = false;
   if (p.dead) { p.dead = false; p.hp = Math.round(p.maxHp * 0.6); }
   p.attacking = false;
   p.anim.play('Idle');
 }
 
+// ---------- stats (class + level + run bonuses + gear + buffs) ----------
 export function effectiveDamage() {
   const p = G.player;
-  return p.cls.dmg + G.run.atkBonus + (G.run.level - 1) * 2;
+  let d = weaponDamage(p.cls) + G.run.atkBonus + (G.run.level - 1) * 2;
+  if (p.buff) d *= p.buff.dmgMult;
+  return Math.round(d);
 }
 export function effectiveSpeed() {
-  return G.player.cls.speed + G.run.speedBonus;
+  const p = G.player;
+  let s = p.cls.speed + G.run.speedBonus + gearStat('speed');
+  if (p.buff) s *= p.buff.speedMult;
+  if (p.slowT > 0) s *= 0.55;
+  if (p.aiming) s *= 0.6;
+  return s;
 }
 export function effectiveMaxHp() {
-  return G.player.cls.hp + G.run.hpBonus + (G.run.level - 1) * 8;
+  return G.player.cls.hp + G.run.hpBonus + (G.run.level - 1) * 8 + Math.round(gearStat('hp'));
+}
+export function effectiveCrit() {
+  return G.player.cls.crit + gearStat('crit') / 100;
+}
+export function effectiveArmor() {
+  return Math.min(0.6, gearStat('armor') / 100);
+}
+export function effectiveManaRegen() {
+  return (G.player.cls.manaRegen || 0) + gearStat('mregen');
 }
 
 export function gainXp(amount) {
@@ -72,19 +108,19 @@ export function gainXp(amount) {
     p.hp = p.maxHp;
     sfx.levelup();
     addMsg(`⭐ Level ${G.run.level}! Fully healed.`, 'gold');
-    spawnBurst(p.obj.position.clone().setY(1.2), 0xffd35c, 24, 6, 0.16, 0.9);
-    spawnDamageNumber(p.obj.position.clone().setY(2.4), `LEVEL ${G.run.level}`, '#ffd35c', true);
+    spawnBurst(p.obj.position.clone().setY(p.obj.position.y + 1.2), 0xffd35c, 24, 6, 0.16, 0.9);
   }
   refreshHud();
 }
 
-export function damageLocalPlayer(amount) {
+export function damageLocalPlayer(amount, effects = null) {
   const p = G.player;
   if (!p || p.dead || p.iframes > 0) return;
-  p.hp -= amount;
+  const reduced = Math.max(1, Math.round(amount * (1 - effectiveArmor())));
+  p.hp -= reduced;
+  if (effects?.slow) p.slowT = Math.max(p.slowT, effects.slow.dur);
   sfx.hurt();
   flashVignette();
-  spawnDamageNumber(p.obj.position.clone().setY(2.2), `-${amount}`, '#ff6655');
   if (p.hp <= 0) {
     p.hp = 0;
     die();
@@ -100,10 +136,10 @@ function die() {
   p.dead = true;
   p.deadT = 0;
   p.attacking = false;
+  p.obj.visible = true; // death cam shows your body
   p.anim.play('Death_A', { once: true, clamp: true });
   sfx.death();
   netSend({ t: 'pdead' });
-  // main.js decides solo game-over vs co-op respawn via its update hook
 }
 
 export function drinkPotion() {
@@ -111,14 +147,13 @@ export function drinkPotion() {
   if (p.dead || G.run.potions <= 0 || p.hp >= p.maxHp) return;
   G.run.potions--;
   p.hp = Math.min(p.maxHp, p.hp + Math.round(p.maxHp * 0.45));
-  p.anim.play('Use_Item', { once: true });
   sfx.potion();
-  spawnBurst(p.obj.position.clone().setY(1.4), 0x44ff77, 14, 4, 0.13);
+  spawnBurst(p.obj.position.clone().setY(p.obj.position.y + 1.4), 0x44ff77, 14, 4, 0.13);
   addMsg('You drink a potion 🧪');
   refreshHud();
 }
 
-// ---------- input-driven update ----------
+// ---------- per-frame update ----------
 export function updatePlayer(dt) {
   const p = G.player;
   if (!p) return;
@@ -126,17 +161,16 @@ export function updatePlayer(dt) {
   if (p.iframes > 0) p.iframes -= dt;
   if (p.dodgeCd > 0) p.dodgeCd -= dt;
   if (p.trapCd > 0) p.trapCd -= dt;
+  if (p.slowT > 0) p.slowT -= dt;
 
   if (p.dead) {
     p.deadT += dt;
-    updateCamera(dt);
+    updateDeathCam(dt);
     return;
   }
 
-  // mana regen
-  if (p.maxMana > 0) {
-    p.mana = Math.min(p.maxMana, p.mana + (p.cls.manaRegen || 0) * dt);
-  }
+  p.mana = Math.min(p.maxMana, p.mana + effectiveManaRegen() * dt);
+  p.aiming = !!(G.keys['ShiftLeft'] || G.keys['ShiftRight']);
 
   const k = G.keys;
   let ix = 0, iz = 0;
@@ -144,62 +178,64 @@ export function updatePlayer(dt) {
   if (k['KeyS']) iz += 1;
   if (k['KeyA']) ix -= 1;
   if (k['KeyD']) ix += 1;
+  const wantsMove = ix !== 0 || iz !== 0;
 
-  // dodge roll
+  // facing follows the camera in first person
+  p.yaw = p.camYaw + Math.PI;
+
+  const pos = p.obj.position;
+
   if (p.dodgeT > 0) {
     p.dodgeT -= dt;
-    const sp = 16 * (p.dodgeT > 0.15 ? 1 : 0.5);
-    moveWithCollision(p.obj.position, p.dodgeDirX * sp * dt, p.dodgeDirZ * sp * dt);
-  } else if (p.attacking) {
-    p.attackT += dt;
-    const cls = p.cls;
-    const hitMoment = cls.attackTime * 0.45;
-    if (!p.attackFired && p.attackT >= hitMoment) {
-      p.attackFired = true;
-      doAttackHit();
+    const sp = 17 * (p.dodgeT > 0.15 ? 1 : 0.5);
+    moveWithCollision(pos, p.dodgeDirX * sp * dt, p.dodgeDirZ * sp * dt, 0.55, { y: pos.y });
+  } else {
+    if (p.attacking) {
+      p.attackT += dt;
+      if (!p.attackFired && p.attackT >= p.cls.attackTime * 0.45) {
+        p.attackFired = true;
+        doAttackHit();
+      }
+      if (p.attackT >= p.cls.attackTime) p.attacking = false;
     }
-    if (p.attackT >= cls.attackTime) p.attacking = false;
-  } else if (ix !== 0 || iz !== 0) {
-    // camera-relative movement
-    const len = Math.hypot(ix, iz);
-    ix /= len; iz /= len;
-    const sin = Math.sin(p.camYaw), cos = Math.cos(p.camYaw);
-    const wx = ix * cos - iz * sin;
-    const wz = ix * sin + iz * cos;
-    const sp = effectiveSpeed();
-    moveWithCollision(p.obj.position, wx * sp * dt, wz * sp * dt);
-    p.yaw = Math.atan2(wx, wz);
-    if (!p.moving) { p.anim.play('Running_A'); p.moving = true; }
-  } else if (p.moving || (p.anim.currentName !== 'Idle' && !p.attacking && p.dodgeT <= 0 && isLoopDone(p))) {
-    p.anim.play('Idle');
-    p.moving = false;
-  }
-  if ((ix === 0 && iz === 0) && p.moving && p.dodgeT <= 0 && !p.attacking) {
-    p.anim.play('Idle');
-    p.moving = false;
+    if (wantsMove) {
+      const len = Math.hypot(ix, iz);
+      ix /= len; iz /= len;
+      // camera forward is (-sin(yaw), -cos(yaw)); right is (cos(yaw), -sin(yaw))
+      const sin = Math.sin(p.camYaw), cos = Math.cos(p.camYaw);
+      const wx = ix * cos + iz * sin;
+      const wz = -ix * sin + iz * cos;
+      const sp = effectiveSpeed() * (p.attacking ? 0.55 : 1);
+      moveWithCollision(pos, wx * sp * dt, wz * sp * dt, 0.55, { y: pos.y });
+      p.bobT += dt * sp * 1.35;
+      if (!p.moving) { p.anim.play('Running_A'); p.moving = true; }
+    } else if (p.moving) {
+      p.anim.play('Idle');
+      p.moving = false;
+    }
   }
 
-  // smooth facing
-  let dy = p.yaw - p.obj.rotation.y;
-  while (dy > Math.PI) dy -= Math.PI * 2;
-  while (dy < -Math.PI) dy += Math.PI * 2;
-  p.obj.rotation.y += dy * Math.min(1, dt * 12);
+  // gravity & ground snap (platforms, stairs)
+  const ground = groundHeightAt(pos.x, pos.z, pos.y);
+  if (pos.y > ground + 0.02) {
+    p.vy -= 26 * dt;
+    pos.y = Math.max(ground, pos.y + p.vy * dt);
+    if (pos.y === ground) p.vy = 0;
+  } else if (ground > pos.y) {
+    if (ground - pos.y <= 1.6) { pos.y = ground; p.vy = 0; } // stick to ramps while climbing
+  } else {
+    p.vy = 0;
+  }
 
-  // traps
+  p.obj.rotation.y = p.yaw;
+
   checkTraps();
-
-  // interact prompt
   updateInteractPrompt();
+  updateCamera(dt, wantsMove);
+  updateCrosshairHover();
 
-  updateCamera(dt);
-
-  // network position updates
   p.lastPosSend += dt;
   if (p.lastPosSend > 0.09) sendPos();
-}
-
-function isLoopDone(p) {
-  return !p.anim.current || !p.anim.current.isRunning();
 }
 
 export function sendPos(force = false) {
@@ -208,64 +244,67 @@ export function sendPos(force = false) {
   p.lastPosSend = 0;
   netSend({
     t: 'pos',
-    x: +p.obj.position.x.toFixed(2), z: +p.obj.position.z.toFixed(2),
-    yaw: +p.obj.rotation.y.toFixed(2),
+    x: +p.obj.position.x.toFixed(2), y: +p.obj.position.y.toFixed(2), z: +p.obj.position.z.toFixed(2),
+    yaw: +p.yaw.toFixed(2),
     anim: p.anim.currentName,
     hp: p.hp, mhp: p.maxHp, dead: p.dead,
   });
+}
+
+// ---------- combat ----------
+function aimDir() {
+  const v = new THREE.Vector3();
+  G.camera.getWorldDirection(v);
+  return v;
 }
 
 function doAttackHit() {
   const p = G.player;
   const cls = p.cls;
   const dmg = effectiveDamage();
+  const dir = aimDir();
   if (cls.ranged) {
-    if (p.mana < cls.manaCost) return;
-    p.mana -= cls.manaCost;
-    const dx = Math.sin(p.yaw), dz = Math.cos(p.yaw);
-    const bolt = { x: p.obj.position.x + dx * 0.7, z: p.obj.position.z + dz * 0.7, dirX: dx, dirZ: dz, speed: 18, dmg, owner: 'player', color: 0xff8833, y: 1.5 };
-    spawnBolt(bolt);
+    // basic bolt is free; slight spread unless aiming
+    const spread = p.aiming ? 0 : 0.035;
+    const sx = (Math.random() - 0.5) * spread, sy = (Math.random() - 0.5) * spread, sz = (Math.random() - 0.5) * spread;
+    const b = {
+      x: p.obj.position.x + dir.x * 0.7, z: p.obj.position.z + dir.z * 0.7, y: p.obj.position.y + 1.45,
+      dirX: dir.x + sx, dirY: dir.y + sy, dirZ: dir.z + sz,
+      speed: 20, dmg, owner: 'player', color: 0xff8833,
+    };
+    spawnBolt(b);
     sfx.bolt();
-    netSend({ t: 'bolt', b: { ...bolt, owner: 'fx' } });
-    refreshHud();
+    netSend({ t: 'bolt', b: { ...b, owner: 'fx' } });
     return;
   }
   sfx.swing();
-  let hitAny = false;
   for (const e of G.enemies) {
     if (e.state === 'dead') continue;
     const dx = e.obj.position.x - p.obj.position.x;
     const dz = e.obj.position.z - p.obj.position.z;
     const d = Math.hypot(dx, dz);
     if (d > cls.attackRange * (e.boss ? 1.4 : 1)) continue;
-    const angTo = Math.atan2(dx, dz);
-    let ang = angTo - p.yaw;
+    if (Math.abs(e.obj.position.y - p.obj.position.y) > 2.2) continue;
+    let ang = Math.atan2(dx, dz) - p.yaw;
     while (ang > Math.PI) ang -= Math.PI * 2;
     while (ang < -Math.PI) ang += Math.PI * 2;
     if (Math.abs(ang) > cls.attackArc) continue;
-    const crit = Math.random() < cls.crit;
+    const crit = Math.random() < effectiveCrit();
     damageEnemy(e, crit ? Math.round(dmg * 1.8) : dmg, crit);
-    hitAny = true;
   }
-  if (!hitAny) { /* whiff */ }
 }
 
 export function tryAttack() {
   const p = G.player;
   if (!p || p.dead || p.attacking || p.dodgeT > 0 || G.mode !== 'playing') return;
-  const cls = p.cls;
-  if (cls.ranged && p.mana < cls.manaCost) { addMsg('Not enough mana!', 'bad'); return; }
   p.attacking = true;
   p.attackT = 0;
   p.attackFired = false;
-  p.moving = false;
-  const animName = cls.attackAnims[p.attackIdx % cls.attackAnims.length];
+  const animName = p.cls.attackAnims[p.attackIdx % p.cls.attackAnims.length];
   p.attackIdx++;
   const act = p.anim.play(animName, { once: true });
-  if (act) act.timeScale = act.getClip().duration / cls.attackTime;
-  // face camera direction for aiming
-  p.yaw = p.camYaw + Math.PI;
-  netSend({ t: 'atk' });
+  if (act) act.timeScale = act.getClip().duration / p.cls.attackTime;
+  p.moving = false;
 }
 
 export function tryDodge() {
@@ -277,25 +316,22 @@ export function tryDodge() {
   if (k['KeyS']) iz += 1;
   if (k['KeyA']) ix -= 1;
   if (k['KeyD']) ix += 1;
-  if (ix === 0 && iz === 0) iz = -1; // default forward
+  if (ix === 0 && iz === 0) iz = -1;
   const len = Math.hypot(ix, iz);
   ix /= len; iz /= len;
   const sin = Math.sin(p.camYaw), cos = Math.cos(p.camYaw);
-  p.dodgeDirX = ix * cos - iz * sin;
-  p.dodgeDirZ = ix * sin + iz * cos;
-  p.yaw = Math.atan2(p.dodgeDirX, p.dodgeDirZ);
-  p.dodgeT = 0.42;
+  p.dodgeDirX = ix * cos + iz * sin;
+  p.dodgeDirZ = -ix * sin + iz * cos;
+  p.dodgeT = 0.4;
   p.dodgeCd = 1.15;
   p.iframes = 0.45;
   p.attacking = false;
-  p.moving = false;
-  p.anim.play('Dodge_Forward', { once: true, timeScale: 1.4 });
   sfx.dodge();
 }
 
 function checkTraps() {
   const p = G.player;
-  if (p.trapCd > 0 || p.iframes > 0) return;
+  if (p.trapCd > 0 || p.iframes > 0 || p.obj.position.y > 0.6) return;
   for (const t of G.traps) {
     if (Math.abs(p.obj.position.x - t.x) < 1.6 && Math.abs(p.obj.position.z - t.z) < 1.6) {
       p.trapCd = 1.2;
@@ -307,13 +343,13 @@ function checkTraps() {
   }
 }
 
+// ---------- interaction ----------
 let interactTarget = null;
 function updateInteractPrompt() {
   const p = G.player;
   interactTarget = null;
-  // stairs
   const s = G.grid.stairs;
-  if (Math.hypot(p.obj.position.x - s.x, p.obj.position.z - s.z) < 2.6) {
+  if (p.obj.position.y < 1 && Math.hypot(p.obj.position.x - s.x, p.obj.position.z - s.z) < 2.6) {
     if (G.grid.stairsLocked) {
       showPrompt('🔒 Defeat the boss to descend');
     } else {
@@ -329,6 +365,12 @@ function updateInteractPrompt() {
     interactTarget = { kind: 'chest', chest };
     return;
   }
+  const drop = nearestItemDrop(p.obj.position);
+  if (drop) {
+    showPrompt(`<b>E</b> — Take <span style="color:${drop.itemColor}">${drop.item.name}</span>`);
+    interactTarget = { kind: 'drop', drop };
+    return;
+  }
   hidePrompt();
 }
 
@@ -340,63 +382,75 @@ export function tryInteract(onStairs) {
   } else if (interactTarget.kind === 'chest') {
     const c = interactTarget.chest;
     if (c.kind === 'goldchest' && G.run.keys < 1) return;
-    p.anim.play('Interact', { once: true });
     takeLoot(c.id, 'local');
+  } else if (interactTarget.kind === 'drop') {
+    takeLoot(interactTarget.drop.id, 'local');
   }
 }
 
-// ---------- camera ----------
-const camTarget = new THREE.Vector3();
-function cameraBlocked(px, py, pz, x, y, z) {
-  // sample along the ray; only walls below their 4u height block the view
-  if (!G.grid) return false;
-  const steps = Math.ceil(Math.hypot(x - px, z - pz) / 0.5);
-  for (let i = 1; i <= steps; i++) {
-    const t = i / steps;
-    const sy = py + (y - py) * t;
-    if (sy > 3.7) continue;
-    const sx = px + (x - px) * t, sz = pz + (z - pz) * t;
-    const cx = Math.round(sx / 4), cy2 = Math.round(sz / 4);
-    if (cx < 0 || cy2 < 0 || cx >= G.grid.w || cy2 >= G.grid.h) return true;
-    if (G.grid.cells[cy2 * G.grid.w + cx] === 0) return true;
-  }
-  return false;
-}
-function updateCamera(dt) {
+// ---------- first-person camera ----------
+function updateCamera(dt, moving) {
   const p = G.player;
   const cam = G.camera;
-  const pitch = p.camPitch;
-  const hx = p.obj.position.x, hy = p.obj.position.y + 1.6, hz = p.obj.position.z;
-  // pull the camera in until it no longer intersects walls
-  let dist = CAM_DIST;
-  for (; dist > 2.2; dist -= 0.4) {
-    const cx = hx + Math.sin(p.camYaw) * Math.cos(pitch) * dist;
-    const cz = hz + Math.cos(p.camYaw) * Math.cos(pitch) * dist;
-    const cy = hy + Math.sin(pitch) * dist;
-    if (!cameraBlocked(hx, hy, hz, cx, cy, cz)) break;
+  const bob = moving && p.dodgeT <= 0 ? Math.sin(p.bobT) * 0.055 : 0;
+  cam.position.set(p.obj.position.x, p.obj.position.y + EYE + bob, p.obj.position.z);
+  cam.rotation.set(p.camPitch, p.camYaw, 0, 'YXZ');
+  // aim zoom
+  const targetFov = p.aiming ? AIM_FOV : BASE_FOV;
+  if (Math.abs(cam.fov - targetFov) > 0.1) {
+    cam.fov += (targetFov - cam.fov) * Math.min(1, dt * 10);
+    cam.updateProjectionMatrix();
   }
-  const cx = hx + Math.sin(p.camYaw) * Math.cos(pitch) * dist;
-  const cz = hz + Math.cos(p.camYaw) * Math.cos(pitch) * dist;
-  const cy = hy + Math.sin(pitch) * dist;
-  camTarget.set(cx, cy, cz);
-  cam.position.lerp(camTarget, Math.min(1, dt * 12));
-  cam.lookAt(hx, p.obj.position.y + 1.7, hz);
+}
+
+function updateDeathCam(dt) {
+  const p = G.player;
+  const cam = G.camera;
+  const a = p.deadT * 0.35 + p.camYaw;
+  const dist = Math.min(7, 3 + p.deadT * 1.5);
+  cam.position.set(
+    p.obj.position.x + Math.sin(a) * dist,
+    p.obj.position.y + 3.2,
+    p.obj.position.z + Math.cos(a) * dist,
+  );
+  cam.lookAt(p.obj.position.x, p.obj.position.y + 0.6, p.obj.position.z);
 }
 
 export function onMouseMove(dx, dy) {
   const p = G.player;
-  if (!p) return;
-  p.camYaw -= dx * 0.0028;
-  p.camPitch = Math.min(CAM_PITCH_MAX, Math.max(CAM_PITCH_MIN, p.camPitch + dy * 0.002));
+  if (!p || p.dead) return;
+  const sens = p.aiming ? 0.0013 : 0.0023;
+  p.camYaw -= dx * sens;
+  p.camPitch = Math.min(1.45, Math.max(-1.45, p.camPitch - dy * sens));
 }
 
+// crosshair turns hostile when an enemy is under it
+function updateCrosshairHover() {
+  const p = G.player;
+  const dir = aimDir();
+  const eye = new THREE.Vector3(p.obj.position.x, p.obj.position.y + EYE, p.obj.position.z);
+  let hostile = false;
+  for (const e of G.enemies) {
+    if (e.state === 'dead' || e.state === 'inactive') continue;
+    const to = e.obj.position.clone().setY(e.obj.position.y + 1.1 * e.scale).sub(eye);
+    const d = to.length();
+    if (d > 30) continue;
+    if (to.normalize().angleTo(dir) < Math.atan2(1.0 * e.scale, d)) { hostile = true; break; }
+  }
+  setCrosshairHostile(hostile);
+}
+
+export function notifyHit(crit) { hitmarker(crit); }
+
 // ---------- remote players ----------
-export function addRemotePlayer(pid, name, classId) {
+export function addRemotePlayer(pid, name, classId, look, equip) {
   if (G.remotes.has(pid)) return G.remotes.get(pid);
   const cls = CLASSES[classId] || CLASSES.knight;
-  const { obj, anim } = makeCharacter('char', cls.model, cls.show);
+  const lk = look || { cape: true, helmet: true, capeColor: 0 };
+  const modelName = classId === 'rogue' && lk.helmet ? 'Rogue_Hooded' : cls.model;
+  const { obj, anim } = makeCharacter('char', modelName, equip || cls.show);
+  applyLook(obj, lk);
   obj.add(makeBlobShadow(0.85));
-  // name tag
   const c = document.createElement('canvas');
   c.width = 256; c.height = 48;
   const g = c.getContext('2d');
@@ -411,7 +465,7 @@ export function addRemotePlayer(pid, name, classId) {
   tag.position.y = 2.6;
   obj.add(tag);
   G.scene.add(obj);
-  const r = { pid, name, classId, cls, obj, anim, netX: 0, netZ: 0, netYaw: 0, hp: cls.hp, maxHp: cls.hp, dead: false, lastAnim: 'Idle' };
+  const r = { pid, name, classId, cls, obj, anim, netX: 0, netY: 0, netZ: 0, netYaw: 0, hp: cls.hp, maxHp: cls.hp, dead: false, lastAnim: 'Idle' };
   anim.play('Idle');
   G.remotes.set(pid, r);
   updatePartyBar();
@@ -426,10 +480,16 @@ export function removeRemotePlayer(pid) {
   updatePartyBar();
 }
 
+export function applyRemoteEquip(pid, meshes) {
+  const r = G.remotes.get(pid);
+  if (r) setEquipMeshes(r.obj, meshes);
+}
+
 export function updateRemotes(dt) {
   for (const r of G.remotes.values()) {
     r.anim.update(dt);
     r.obj.position.x += (r.netX - r.obj.position.x) * Math.min(1, dt * 12);
+    r.obj.position.y += (r.netY - r.obj.position.y) * Math.min(1, dt * 12);
     r.obj.position.z += (r.netZ - r.obj.position.z) * Math.min(1, dt * 12);
     let dy = r.netYaw - r.obj.rotation.y;
     while (dy > Math.PI) dy -= Math.PI * 2;
@@ -441,13 +501,13 @@ export function updateRemotes(dt) {
 export function applyRemotePos(pid, m) {
   const r = G.remotes.get(pid);
   if (!r) return;
-  r.netX = m.x; r.netZ = m.z; r.netYaw = m.yaw;
+  r.netX = m.x; r.netY = m.y || 0; r.netZ = m.z; r.netYaw = m.yaw;
   r.hp = m.hp; r.maxHp = m.mhp;
   if (m.dead && !r.dead) { r.dead = true; r.anim.play('Death_A', { once: true, clamp: true }); }
   if (!m.dead && r.dead) { r.dead = false; r.anim.play('Idle'); }
   if (!r.dead && m.anim && m.anim !== r.lastAnim) {
     r.lastAnim = m.anim;
-    const oneShot = m.anim.includes('Attack') || m.anim.includes('Dodge') || m.anim.includes('Use_Item') || m.anim.includes('Interact') || m.anim.includes('Spellcast');
+    const oneShot = m.anim.includes('Attack') || m.anim.includes('Dodge') || m.anim.includes('Use_Item') || m.anim.includes('Interact') || m.anim.includes('Spellcast') || m.anim.includes('Block');
     r.anim.play(m.anim, oneShot ? { once: true } : {});
   }
   updatePartyBar();

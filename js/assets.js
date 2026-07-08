@@ -3,15 +3,17 @@ import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import * as SkeletonUtils from 'three/addons/utils/SkeletonUtils.js';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import { G } from './state.js';
-import { WEAPON_MESHES } from './config.js';
+import { WEAPON_MESHES, CAPE_COLORS } from './config.js';
 
-const CHAR_MODELS = ['Knight', 'Mage', 'Rogue', 'Barbarian'];
+const CHAR_MODELS = ['Knight', 'Mage', 'Rogue', 'Rogue_Hooded', 'Barbarian'];
 const ENEMY_MODELS = ['Skeleton_Minion', 'Skeleton_Warrior', 'Skeleton_Rogue', 'Skeleton_Mage'];
+const WEAPON_MODELS = ['sword_1handed', 'sword_2handed', 'axe_1handed', 'axe_2handed', 'dagger', 'staff', 'wand', 'shield_round', 'shield_badge', 'shield_spikes'];
 const DUNGEON_PIECES = [
   'wall', 'wall_corner', 'wall_doorway', 'wall_endcap', 'wall_Tsplit', 'wall_crossing', 'wall_broken', 'wall_cracked', 'wall_gated',
   'floor_tile_large', 'floor_tile_small', 'floor_tile_small_broken_A', 'floor_tile_small_broken_B',
   'floor_tile_small_weeds_A', 'floor_tile_small_decorated', 'floor_dirt_large',
   'pillar', 'pillar_decorated', 'torch_mounted', 'torch_lit', 'stairs',
+  'barrier', 'barrier_half', 'barrier_corner', 'barrier_column',
   'chest', 'chest_gold', 'key', 'coin', 'coin_stack_small', 'coin_stack_medium', 'coin_stack_large',
   'barrel_large', 'barrel_small', 'box_small', 'box_large', 'crates_stacked', 'table_medium', 'chair',
   'banner_patternA_red', 'banner_patternA_blue', 'bottle_A_green', 'bottle_A_brown', 'bottle_B_brown',
@@ -25,10 +27,11 @@ export async function loadAll(onProgress) {
   const load = (url) => new Promise((res, rej) => loader.load(url, res, undefined, rej));
 
   const jobs = [];
-  const assets = { char: {}, enemy: {}, piece: {} };
+  const assets = { char: {}, enemy: {}, piece: {}, weapon: {} };
   for (const m of CHAR_MODELS) jobs.push(load(`assets/characters/${m}.glb`).then(g => assets.char[m] = g));
   for (const m of ENEMY_MODELS) jobs.push(load(`assets/enemies/${m}.glb`).then(g => assets.enemy[m] = g));
   for (const p of DUNGEON_PIECES) jobs.push(load(`assets/dungeon/${p}.glb`).then(g => assets.piece[p] = g));
+  for (const w of WEAPON_MODELS) jobs.push(load(`assets/weapons/${w}.gltf`).then(g => assets.weapon[w] = g));
   await Promise.all(jobs);
 
   // Pre-bake static piece geometry (world-transform applied, attributes normalized)
@@ -63,6 +66,44 @@ export function makeCharacter(kind, modelName, showMeshes = []) {
   });
   const anim = new Animator(obj, src.animations);
   return { obj, anim };
+}
+
+// show exactly this set of weapon/offhand meshes on a character rig
+export function setEquipMeshes(obj, meshes) {
+  obj.traverse((n) => {
+    if ((n.isMesh || n.isSkinnedMesh) && WEAPON_MESHES.includes(n.name)) n.visible = meshes.includes(n.name);
+  });
+}
+
+// tint every mesh of a rig (elite/ghost/monster variants)
+export function tintCharacter(obj, color, { ghost = false, emissive = 0 } = {}) {
+  obj.traverse((n) => {
+    if (!n.isMesh && !n.isSkinnedMesh) return;
+    if (n.material.isMeshBasicMaterial) return; // blob shadows / glows — no emissive uniform
+    n.material = n.material.clone();
+    if (color) n.material.color = new THREE.Color(color);
+    if (emissive) { n.material.emissive = new THREE.Color(emissive); n.material.emissiveIntensity = 0.55; }
+    if (ghost) {
+      n.material.transparent = true;
+      n.material.opacity = 0.45;
+      n.material.depthWrite = false;
+    }
+  });
+}
+
+// appearance customization: capes / helmets / hats + cape color
+export function applyLook(obj, look) {
+  obj.traverse((n) => {
+    if (!n.isMesh && !n.isSkinnedMesh) return;
+    if (/Cape|Hood$/.test(n.name)) {
+      n.visible = !!look.cape;
+      if (look.cape) {
+        n.material = n.material.clone();
+        n.material.color = new THREE.Color(CAPE_COLORS[look.capeColor % CAPE_COLORS.length].hex);
+      }
+    }
+    if (/Helmet|Hat/.test(n.name)) n.visible = !!look.helmet;
+  });
 }
 
 export class Animator {
@@ -125,6 +166,11 @@ export function buildMergedStatic(placements) {
 // A single (non-merged) instance of a piece, for interactive props.
 export function makePiece(name) {
   const gltf = G.assets.piece[name];
-  const obj = gltf.scene.clone(true);
-  return obj;
+  return gltf.scene.clone(true);
+}
+
+// A weapon/shield model instance (for ground drops & previews).
+export function makeWeaponModel(name) {
+  const gltf = G.assets.weapon[name];
+  return gltf ? gltf.scene.clone(true) : makePiece('key');
 }
