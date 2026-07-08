@@ -1,0 +1,151 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>CodeOrange — Depths of the Bone King</title>
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🏰</text></svg>">
+<link rel="stylesheet" href="css/style.css">
+<script src="https://unpkg.com/peerjs@1.5.4/dist/peerjs.min.js"></script>
+<script type="importmap">
+{
+  "imports": {
+    "three": "https://cdn.jsdelivr.net/npm/three@0.165.0/build/three.module.js",
+    "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.165.0/examples/jsm/"
+  }
+}
+</script>
+</head>
+<body>
+<canvas id="game"></canvas>
+
+<!-- Loading -->
+<div id="loading" class="overlay show">
+  <div class="panel loading-panel">
+    <h1 class="title">CODE<span class="orange">ORANGE</span></h1>
+    <div class="subtitle">Depths of the Bone King</div>
+    <div class="loadbar"><div id="loadfill"></div></div>
+    <div id="loadtext">Summoning skeletons…</div>
+  </div>
+</div>
+
+<!-- Main menu -->
+<div id="menu" class="overlay">
+  <div class="panel menu-panel">
+    <h1 class="title">CODE<span class="orange">ORANGE</span></h1>
+    <div class="subtitle">Depths of the Bone King — a 3D co-op dungeon crawler</div>
+    <div class="row">
+      <label>Your name</label>
+      <input id="nameInput" maxlength="12" placeholder="Adventurer" autocomplete="off">
+    </div>
+    <div class="classes" id="classCards"></div>
+    <div class="menu-buttons">
+      <button id="btnSolo" class="big orange-btn">⚔ Enter the Dungeon</button>
+      <button id="btnHost" class="big">🕸 Host Co-op</button>
+      <div class="joinrow">
+        <input id="joinCode" maxlength="5" placeholder="CODE" autocomplete="off">
+        <button id="btnJoin" class="big">Join Co-op</button>
+      </div>
+    </div>
+    <div class="menu-note">WASD move · Mouse look · Click attack · Space dodge · E interact · Q potion</div>
+    <div class="credits">Assets: <a href="https://kaylousberg.com" target="_blank">KayKit</a> (CC0) · three.js · PeerJS</div>
+  </div>
+</div>
+
+<!-- Multiplayer lobby -->
+<div id="lobby" class="overlay">
+  <div class="panel">
+    <h2>Co-op Lobby</h2>
+    <div id="roomCodeWrap">Room code: <span id="roomCode" class="roomcode">·····</span></div>
+    <div id="lobbyStatus" class="lobby-status"></div>
+    <ul id="lobbyList" class="lobby-list"></ul>
+    <div class="menu-buttons">
+      <button id="btnStart" class="big orange-btn hidden">⚔ Start the Descent</button>
+      <button id="btnLeaveLobby" class="big">Leave</button>
+    </div>
+  </div>
+</div>
+
+<!-- HUD -->
+<div id="hud" class="hidden">
+  <div id="topleft">
+    <div class="statname" id="hudName"></div>
+    <div class="bar hpbar"><div id="hpfill"></div><span id="hptext"></span></div>
+    <div class="bar manabar hidden" id="manabarWrap"><div id="manafill"></div></div>
+    <div class="bar xpbar"><div id="xpfill"></div><span id="xptext"></span></div>
+  </div>
+  <div id="topright"><canvas id="minimap" width="220" height="220"></canvas></div>
+  <div id="bossbarWrap" class="hidden"><div class="bossname" id="bossName"></div><div class="bar bossbar"><div id="bossfill"></div></div></div>
+  <div id="bottombar">
+    <div class="slot" id="slotPotion">🧪 <b id="potionCount">0</b> <span class="key">Q</span></div>
+    <div class="slot" id="slotDodge">💨 <span class="key">SPACE</span><div class="cool" id="dodgeCool"></div></div>
+    <div class="slot">💰 <b id="goldCount">0</b></div>
+    <div class="slot">🏰 Floor <b id="floorNum">1</b></div>
+  </div>
+  <div id="prompt" class="hidden"></div>
+  <div id="msgs"></div>
+  <div id="partyBar"></div>
+  <div id="hitVignette"></div>
+</div>
+
+<!-- Floor transition -->
+<div id="transition" class="hidden"><div id="transTitle"></div><div id="transSub"></div></div>
+
+<!-- Merchant -->
+<div id="merchant" class="overlay">
+  <div class="panel">
+    <h2>🕯 The Bone Merchant</h2>
+    <div class="subtitle">“Spend your gold before the dark spends you…”</div>
+    <div class="shop" id="shopItems"></div>
+    <div class="shop-gold">Your gold: <b id="shopGold">0</b></div>
+    <div class="menu-buttons"><button id="btnDescend" class="big orange-btn">⬇ Descend</button></div>
+  </div>
+</div>
+
+<!-- Death -->
+<div id="dead" class="overlay">
+  <div class="panel">
+    <h2 id="deadTitle">You have fallen…</h2>
+    <div id="deadStats" class="runstats"></div>
+    <div id="respawnMsg" class="lobby-status hidden"></div>
+    <div class="menu-buttons"><button id="btnRestart" class="big orange-btn hidden">☠ Rise Again</button></div>
+  </div>
+</div>
+
+<!-- Victory -->
+<div id="victory" class="overlay">
+  <div class="panel">
+    <h2>👑 The Bone King is destroyed!</h2>
+    <div class="subtitle">Light returns to the depths.</div>
+    <div id="victoryStats" class="runstats"></div>
+    <div class="menu-buttons">
+      <button id="btnEndless" class="big">⬇ Keep descending (endless)</button>
+      <button id="btnMenu" class="big orange-btn">🏰 Back to menu</button>
+    </div>
+  </div>
+</div>
+
+<!-- Pause / help -->
+<div id="pause" class="overlay">
+  <div class="panel">
+    <h2>Paused</h2>
+    <table class="keys">
+      <tr><td>WASD</td><td>Move</td></tr>
+      <tr><td>Mouse</td><td>Look (click canvas to capture)</td></tr>
+      <tr><td>Left click / F</td><td>Attack</td></tr>
+      <tr><td>Space</td><td>Dodge roll (i-frames)</td></tr>
+      <tr><td>E</td><td>Open chest / descend stairs</td></tr>
+      <tr><td>Q</td><td>Drink health potion</td></tr>
+      <tr><td>M</td><td>Mute</td></tr>
+      <tr><td>Esc</td><td>Pause</td></tr>
+    </table>
+    <div class="menu-buttons">
+      <button id="btnResume" class="big orange-btn">Resume</button>
+      <button id="btnQuit" class="big">Abandon run</button>
+    </div>
+  </div>
+</div>
+
+<script type="module" src="js/main.js"></script>
+</body>
+</html>
