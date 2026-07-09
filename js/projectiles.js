@@ -7,6 +7,7 @@ import { makeGlowSprite, spawnBurst } from './fx.js';
 import { groundHeightAt } from './dungeon.js';
 import { makeWeaponModel, makePiece } from './assets.js';
 import { sfx } from './audio.js';
+import { netSend } from './net.js';
 
 const CELL = 4;
 
@@ -199,6 +200,17 @@ export function updateProjectiles(dt, hooks) {
     let dead = p.life > 2.2 || solidAt(p.x, p.z) ||
       p.y < groundHeightAt(p.x, p.z, p.y) + 0.12 || p.y > 16;
 
+    if (!dead && p.owner === 'player' && G.runMode === 'duel') {
+      for (const [pid, r] of G.remotes) {
+        if (r.dead || r.floor !== G.floor) continue;
+        if (Math.hypot(r.obj.position.x - p.x, r.obj.position.z - p.z) < 0.85 &&
+            Math.abs(r.obj.position.y + 1.3 - p.y) < 1.6) {
+          netSend({ t: 'pvp', target: pid, dmg: p.dmg, by: G.player?.name });
+          dead = true;
+          break;
+        }
+      }
+    }
     if (!dead && p.owner === 'player') {
       for (const e of G.enemies) {
         if (e.state === 'dead' || e.state === 'inactive') continue;

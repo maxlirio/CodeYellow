@@ -128,6 +128,31 @@ export function renderInventory({ onEquip, onSalvage, statsHtml }) {
   if (!G.inv.bag.length) grid.innerHTML = '<div style="color:#55503f;font-size:13px">Empty — slay elites and open chests.</div>';
 }
 
+// ---------- home stash ----------
+export function renderStash({ stash, onToStash, onToBag }) {
+  const bagGrid = $('stashBagGrid');
+  bagGrid.innerHTML = '';
+  for (const item of G.inv.bag) {
+    const div = document.createElement('div');
+    div.className = 'bag-item';
+    div.innerHTML = itemHtml(item);
+    div.onclick = () => onToStash(item);
+    bagGrid.appendChild(div);
+  }
+  if (!G.inv.bag.length) bagGrid.innerHTML = '<div style="color:#55503f;font-size:13px">Bag is empty.</div>';
+  const grid = $('stashGrid');
+  grid.innerHTML = '';
+  $('stashCount').textContent = `(${stash.length}/12)`;
+  for (const item of stash) {
+    const div = document.createElement('div');
+    div.className = 'bag-item';
+    div.innerHTML = itemHtml(item);
+    div.onclick = () => onToBag(item);
+    grid.appendChild(div);
+  }
+  if (!stash.length) grid.innerHTML = '<div style="color:#55503f;font-size:13px">Nothing stored yet.</div>';
+}
+
 // ---------- appearance controls ----------
 export function buildLookControls(onChange) {
   const saved = localStorage.getItem('codeorange_look');
@@ -339,7 +364,7 @@ export function renderBoardList(games, onJoin) {
     const div = document.createElement('div');
     div.className = 'board-game';
     div.innerHTML = `<div><div class="bg-name">${escapeHtml(g.name || 'Adventurer')}'s party</div>
-      <div class="bg-meta">${g.mode === 'horde' ? '🏰 Last Stand' : '⚔ Campaign'} · code ${g.code}</div></div>`;
+      <div class="bg-meta">${g.mode === 'horde' ? '🏰 Last Stand' : g.mode === 'duel' ? '⚔ Duel (PvP)' : '⚔ Campaign'} · code ${g.code}</div></div>`;
     const btn = document.createElement('button');
     btn.textContent = 'Join';
     btn.onclick = () => onJoin(g.code);

@@ -31,13 +31,15 @@ const SHOPS = [
 ];
 
 const HOMES = [
-  { piece: 'town_home_red', at: [11, 4], scale: 7, yaw: Math.PI },
-  { piece: 'town_home_blue', at: [19, 4], scale: 7, yaw: Math.PI },
-  { piece: 'town_home_green', at: [4, 14], scale: 7, yaw: Math.PI / 2 },
-  { piece: 'town_home_yellow', at: [25, 14], scale: 7, yaw: -Math.PI / 2 },
-  { piece: 'town_home_blue', at: [12, 24], scale: 7, yaw: 0 },
-  { piece: 'town_home_red', at: [18, 24], scale: 7, yaw: 0 },
+  { piece: 'town_home_red', at: [11, 4], scale: 7, yaw: Math.PI, door: [11, 6], hx: 3.2, hz: 3.4 },
+  { piece: 'town_home_blue', at: [19, 4], scale: 7, yaw: Math.PI, door: [19, 6], hx: 3.2, hz: 3.4 },
+  { piece: 'town_home_green', at: [4, 14], scale: 7, yaw: Math.PI / 2, door: [6, 14], hx: 3.4, hz: 3.2 },
+  { piece: 'town_home_yellow', at: [25, 14], scale: 7, yaw: -Math.PI / 2, door: [23, 14], hx: 3.4, hz: 3.2 },
+  { piece: 'town_home_blue', at: [12, 24], scale: 7, yaw: 0, door: [12, 22], hx: 3.2, hz: 3.4 },
+  { piece: 'town_home_red', at: [18, 24], scale: 7, yaw: 0, door: [18, 22], hx: 3.2, hz: 3.4 },
 ];
+// building-shaped box colliders (half-extents), replacing fat cell stamps
+const SHOP_BOX = { blacksmith: [5.6, 5.4], tavern: [5.1, 5.8], alchemist: [3.4, 3.6], arcanum: [4.6, 4.2] };
 
 const TREES = [[4, 4], [26, 8], [3, 9], [10, 8], [20, 8], [4, 20], [26, 22], [10, 19], [20, 19], [25, 25], [3, 25]];
 
@@ -63,15 +65,13 @@ export function generateTownData() {
   // village square
   for (let y = 12; y <= 16; y++) for (let x = 13; x <= 17; x++) addPath(x, y);
 
-  // building footprints block movement (coarse cells fit these big models)
-  const stamp = (cx, cy, rw, rh) => {
-    for (let y = cy - rh; y <= cy + rh; y++) for (let x = cx - rw; x <= cx + rw; x++) {
-      if (x > 1 && y > 1 && x < 28 && y < 28) set(x, y, OBSTACLE);
-    }
-  };
-  for (const s of SHOPS) stamp(s.at[0], s.at[1], 1, 1);
-  for (const b of HOMES) stamp(b.at[0], b.at[1], 1, 1);
-  stamp(26, 4, 1, 1); // windmill
+  // buildings collide as boxes shaped like the model, not fat cell stamps
+  for (const s of SHOPS) {
+    const [hx, hz] = SHOP_BOX[s.type] || [4, 4];
+    colliders.push({ x: s.at[0] * CELL, z: s.at[1] * CELL, hx, hz });
+  }
+  for (const b of HOMES) colliders.push({ x: b.at[0] * CELL, z: b.at[1] * CELL, hx: b.hx, hz: b.hz });
+  colliders.push({ x: 26 * CELL, z: 4 * CELL, hx: 3.4, hz: 2.6 }); // windmill
 
   // dungeon portal in the north wall
   const portal = { x: 15, y: 2, dx: 0, dy: -1 };
@@ -118,7 +118,6 @@ export function generateTownData() {
         place(grass[Math.floor(rand() * grass.length)], wx + (rand() * 2 - 1), 0.01, wz + (rand() * 2 - 1), Math.floor(rand() * 4) * Math.PI / 2);
       }
     }
-    if (c === OBSTACLE) continue; // building footprint: ground only, no walls
     for (const d of wallDirs) {
       const nx = x + d.dx, ny = y + d.dy;
       const neighbor = (nx < 0 || ny < 0 || nx >= w || ny >= h) ? SOLID : at(nx, ny);
@@ -171,7 +170,6 @@ export function generateTownData() {
   const npcs = [];
   interiors.forEach(({ x0, shop }, i) => {
     const cx = (x0 + 2) * CELL, cz = 34.5 * CELL;
-    place('town_rug', cx, 0.06, cz, 0, 5);
     place('town_cabinet', (x0 + 0.6) * CELL, 0, 33.4 * CELL, Math.PI / 2, 2.6);
     place('table_medium', (x0 + 3.4) * CELL, 0, 33.6 * CELL, 0);
     place('candle_triple', (x0 + 3.4) * CELL, 1.05, 33.6 * CELL, rand() * 6);
@@ -203,6 +201,7 @@ export function generateTownData() {
     doors.push({ x: cx, z: 36.5 * CELL, label: '🚪 Leave the shop', tx: outX, tz: outZ + 2, tyaw: Math.PI });
   });
 
+  const homeDoors = HOMES.map((b, i) => ({ idx: i, x: b.door[0] * CELL, z: b.door[1] * CELL }));
   const grid = {
     w, h, cells, elev, ramps, colliders,
     rooms: [{ x: 3, y: 3, w: 24, h: 24, cx: 15, cy: 13 }],
@@ -216,8 +215,18 @@ export function generateTownData() {
     grid, torches, traps: [], ropes: [], placements, enemySpawns: [], lootSpawns: [],
     explored: new Uint8Array(w * h), hadBoss: false,
     theme: TOWN_THEME, mutator: null, layoutId: 'town',
-    npcs, doors,
+    npcs, doors, homeDoors,
   };
+}
+
+// claimable houses: nearest home door
+export function nearestHomeDoor(pos) {
+  const fs = G.floors.get(G.floor);
+  if (!fs?.homeDoors) return null;
+  for (const d of fs.homeDoors) {
+    if (Math.hypot(pos.x - d.x, pos.z - d.z) < 2.4) return d;
+  }
+  return null;
 }
 
 // ---------------- doors (street <-> interior teleports) ----------------
@@ -347,7 +356,26 @@ export function spawnTownNpcs(fs) {
   if (fs.npcObjs || !fs.npcs) return;
   fs.npcObjs = [];
   for (const n of fs.npcs) {
-    if (n.noModel) { fs.npcObjs.push({ ...n, obj: null, anim: null }); continue; }
+    if (n.noModel) {
+      // a visible floating sign (e.g. the tavern's Public Games board)
+      const c2 = document.createElement('canvas');
+      c2.width = 512; c2.height = 96;
+      const g2 = c2.getContext('2d');
+      g2.fillStyle = 'rgba(20,14,8,0.85)';
+      g2.fillRect(0, 0, 512, 96);
+      g2.strokeStyle = '#c9a13b'; g2.lineWidth = 6;
+      g2.strokeRect(4, 4, 504, 88);
+      g2.font = 'bold 44px Trebuchet MS';
+      g2.textAlign = 'center';
+      g2.fillStyle = '#ffe9c0';
+      g2.fillText(n.label || n.name, 256, 60);
+      const sign = new THREE.Sprite(new THREE.SpriteMaterial({ map: new THREE.CanvasTexture(c2), transparent: true }));
+      sign.scale.set(3.4, 0.65, 1);
+      sign.position.set(n.x, 2.4, n.z);
+      fs.meshGroup.add(sign);
+      fs.npcObjs.push({ ...n, obj: sign, anim: null });
+      continue;
+    }
     const { obj, anim } = makeCharacter('char', n.model, n.show || []);
     applyLook(obj, n.look || { cape: true, helmet: true, capeColor: 4 });
     applySkin(obj, n.tints);
@@ -396,7 +424,7 @@ export function nearestShopkeeper(pos) {
   const fs = G.floors.get(G.floor);
   if (!fs?.npcObjs) return null;
   for (const n of fs.npcObjs) {
-    if (Math.hypot(pos.x - n.x, pos.z - n.z) < 2.6) return n;
+    if (Math.hypot(pos.x - n.x, pos.z - n.z) < (n.noModel ? 3.6 : 2.6)) return n;
   }
   return null;
 }

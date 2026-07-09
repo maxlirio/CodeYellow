@@ -33,7 +33,7 @@ import {
   show, hide, setHidden, addMsg, refreshHud, updateMinimap, updateDodgeCooldown,
   buildClassCards, renderShop, showTransition, runStatsHtml, hideBossBar,
   updateSpellBar, renderInventory, buildLookControls, setCrosshairAiming,
-  renderBoardList,
+  renderBoardList, renderStash,
 } from './ui.js';
 import {
   setNetCallbacks, wireHandlers, hostGame, joinGame, hostStart, netSend, shutdownNet,
@@ -97,6 +97,10 @@ async function boot() {
   if (params.get('auto')) {
     initAudio();
     startRun(params.get('seed') || randomSeed(), params.get('mode') || 'campaign');
+  } else if (params.get('join')) {
+    history.replaceState(null, '', location.pathname);
+    $('joinCode').value = params.get('join').toUpperCase();
+    setTimeout(() => $('btnJoin').click(), 300);
   }
 
   requestAnimationFrame(loop);
@@ -158,6 +162,11 @@ function setupMenu() {
     $('boardList').innerHTML = '<div class="board-empty">Checking the board…</div>';
     const games = await fetchPublicGames();
     renderBoardList(games.filter(g => g.code !== G.net.code), (code) => {
+      if (G.mode !== 'menu' || G.net.role !== 'solo') {
+        // mid-run: hand off to a clean session that auto-joins
+        location.href = location.pathname + '?join=' + code;
+        return;
+      }
       hide('tavernBoard');
       $('joinCode').value = code;
       $('btnJoin').click();
@@ -232,6 +241,7 @@ function setupMenu() {
 
   // shop overlay
   $('btnCloseShop').onclick = () => { hide('merchant'); G.mode = 'playing'; lockPointer(); };
+  $('btnCloseStash').onclick = () => { hide('stash'); G.mode = 'playing'; lockPointer(); };
   $('btnHireSword').onclick = () => { hide('hireDialog'); tryHireMerc('sword'); lockPointer(); };
   $('btnHireBow').onclick = () => { hide('hireDialog'); tryHireMerc('bow'); lockPointer(); };
   $('btnHireCancel').onclick = () => { hide('hireDialog'); lockPointer(); };
@@ -274,6 +284,7 @@ function renderLobby() {
 function startRun(seed, mode = 'campaign') {
   G.seed = seed || randomSeed();
   runMode = mode;
+  G.runMode = mode;
   G.floor = mode === 'horde' ? 1 : 0;
   G.endless = false;
   G.pendingVictory = false;
@@ -303,6 +314,10 @@ function startRun(seed, mode = 'campaign') {
   if (mode === 'horde') {
     setLocalFloor(1);
     startHorde();
+  } else if (mode === 'duel') {
+    G.run.gold = 300;
+    setLocalFloor(1);
+    addMsg('⚔ DUEL — build with B, fight your rivals. Gold trickles in over time.', 'gold');
   } else {
     setLocalFloor(0);
     addMsg('Welcome to Emberlight Village. The dungeon gate is in the north wall.', 'gold');
@@ -323,7 +338,7 @@ function ensureFloor(n) {
   const fs = floorState(n);
   if (!fs.grid) {
     if (n === 0) Object.assign(fs, generateTownData());
-    else if (runMode === 'horde') Object.assign(fs, generateArenaData());
+    else if (runMode !== 'campaign') Object.assign(fs, generateArenaData());
     else Object.assign(fs, generateFloorData(G.seed, n));
   }
   if (!fs.spawned) {
@@ -436,6 +451,57 @@ function onStairsUsed() {
 }
 
 // shopkeeper interaction (E in town)
+// claim a house / open your persistent stash
+function loadStash() {
+  try { return JSON.parse(localStorage.getItem('codeorange_stash') || '[]'); } catch { return []; }
+}
+function saveStash(s) { localStorage.setItem('codeorange_stash', JSON.stringify(s)); }
+
+function onHomeDoor(home) {
+  const mine = localStorage.getItem('codeorange_home');
+  if (mine === null) {
+    localStorage.setItem('codeorange_home', String(home.idx));
+    addMsg('🏠 This house is yours now! Your stash lives inside — items stored there survive between runs.', 'gold');
+    sfx.chest();
+    return;
+  }
+  if (+mine !== home.idx) return;
+  openStash();
+}
+
+function openStash() {
+  G.mode = 'merchant';
+  document.exitPointerLock?.();
+  const rerender = () => {
+    const stash = loadStash();
+    renderStash({
+      stash,
+      onToStash: (item) => {
+        const s = loadStash();
+        if (s.length >= 12) { addMsg('Stash is full!', 'bad'); return; }
+        const i = G.inv.bag.indexOf(item);
+        if (i >= 0) G.inv.bag.splice(i, 1);
+        s.push(item);
+        saveStash(s);
+        sfx.coin();
+        rerender();
+      },
+      onToBag: (item) => {
+        if (G.inv.bag.length >= 12) { addMsg('Bag is full!', 'bad'); return; }
+        const s = loadStash();
+        const i = s.findIndex(x => x.uid === item.uid && x.name === item.name);
+        if (i >= 0) s.splice(i, 1);
+        saveStash(s);
+        G.inv.bag.push(item);
+        sfx.coin();
+        rerender();
+      },
+    });
+  };
+  rerender();
+  show('stash');
+}
+
 // choose which mercenary to hire
 function openHireDialog() {
   if (!G.player || G.player.dead) return;
@@ -644,11 +710,11 @@ function setupInput() {
     if (invOpen) { if (e.code === 'Escape') toggleInventory(false); return; }
     if (e.code === 'Space') { e.preventDefault(); tryDodge(); }
     if (e.code === 'KeyF') tryAttack();
-    if (e.code === 'KeyE') tryInteract(onStairsUsed, onShopOpened);
+    if (e.code === 'KeyE') tryInteract(onStairsUsed, onShopOpened, onHomeDoor);
     if (e.code === 'KeyQ') drinkPotion();
-    if (e.code === 'KeyB' && horde.active) toggleBuildMode();
+    if (e.code === 'KeyB' && (horde.active || G.runMode === 'duel')) toggleBuildMode();
     if (e.code === 'KeyH' && horde.active) openHireDialog();
-    if (e.code === 'KeyP' && horde.active) buyItem('arrows', 20);
+    if (e.code === 'KeyP' && (horde.active || G.runMode === 'duel')) buyItem('arrows', 20);
     if (e.code === 'Digit1') castSpell(0, effectiveDamage);
     if (e.code === 'Digit2') castSpell(1, effectiveDamage);
     if (e.code === 'Digit3') castSpell(2, effectiveDamage);
@@ -671,6 +737,24 @@ function updateDeath(dt) {
     if (p.deadT > 2.6) gameOver();
     return;
   }
+  if (G.runMode === 'duel') {
+    // duels always respawn you at your corner
+    if (p.deadT > 5) {
+      p.dead = false;
+      p.hp = p.maxHp;
+      p.iframes = 2;
+      p.obj.position.set(G.grid.spawn.x + (Math.random() * 12 - 6), 0, G.grid.spawn.z + (Math.random() * 6 - 3));
+      p.obj.visible = false;
+      p.anim.play('Idle');
+      addMsg('Back into the fray!', 'gold');
+      refreshHud();
+      sendPos(true);
+    } else {
+      setHidden('respawnMsg', false);
+      $('respawnMsg').textContent = `Respawning in ${Math.ceil(5 - p.deadT)}…`;
+    }
+    return;
+  }
   let teamAlive = false;
   for (const r of G.remotes.values()) if (!r.dead) teamAlive = true;
   if (!teamAlive) { checkAllDead(); return; }
@@ -691,7 +775,7 @@ function updateDeath(dt) {
 }
 
 // ---------------- main loop ----------------
-let last = 0, minimapT = 0;
+let last = 0, minimapT = 0, duelGoldT = 0;
 function loop(t) {
   requestAnimationFrame(loop);
   const dt = Math.min(0.05, (t - last) / 1000 || 0.016);
@@ -726,6 +810,17 @@ function loop(t) {
     updateMinions(dt);
     updateHorde(dt);
     updateBuildGhost();
+    if (G.runMode === 'duel' && G.mode === 'playing') {
+      duelGoldT += dt;
+      if (duelGoldT > 5) {
+        duelGoldT = 0;
+        G.run.gold += 15;
+        refreshHud();
+      }
+      const wh = document.getElementById('waveHud');
+      wh.classList.remove('hidden');
+      wh.textContent = '⚔ DUEL — B build · P arrows · last one standing';
+    }
     updateNet(dt);
 
     if (G.pendingVictory) {

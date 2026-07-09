@@ -642,10 +642,16 @@ export function moveWithCollision(pos, dx, dz, radius = 0.55, opts = {}) {
     if (!checks.every(([cx, cz]) => !cellBlocked(g, cx, cz, y, ghost, ref, onPlatform))) return false;
     // precise cylinder colliders for props/trees/furniture (sized to the model)
     if (g.colliders && !ghost && y < 3) {
+      const pr = radius * 0.55; // hug props tighter than walls
       for (const c of g.colliders) {
-        const ddx = nx - c.x, ddz = nz - c.z;
-        const rr = radius * 0.55 + c.r; // hug props tighter than walls
-        if (ddx * ddx + ddz * ddz < rr * rr) return false;
+        if (c.hx !== undefined) {
+          // building-shaped box collider
+          if (Math.abs(nx - c.x) < c.hx + pr && Math.abs(nz - c.z) < c.hz + pr) return false;
+        } else {
+          const ddx = nx - c.x, ddz = nz - c.z;
+          const rr = pr + c.r;
+          if (ddx * ddx + ddz * ddz < rr * rr) return false;
+        }
       }
     }
     return true;

@@ -176,6 +176,10 @@ function handleAsHost(conn, m) {
     case 'hire':
       H?.minions.spawnMinion(m.kind, pid, m.f, m.x, m.z);
       break;
+    case 'pvp':
+      if (m.target === myId()) H?.player.damageLocalPlayer(m.dmg);
+      else relay(conn, m);
+      break;
     case 'build':
       H?.builds.applyBuild(m, false);
       relay(conn, { ...m, pid });
@@ -331,6 +335,9 @@ function handleAsGuest(m) {
     }
     case 'phit':
       if (m.target === myId()) H?.player.damageLocalPlayer(m.dmg, m.fx || null);
+      break;
+    case 'pvp':
+      if (m.target === myId()) H?.player.damageLocalPlayer(m.dmg);
       break;
     case 'lootTaken':
       H?.loot.takeLoot(m.f, m.id, m.by === myId() ? 'local' : 'remote', true);

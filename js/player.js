@@ -17,7 +17,7 @@ import { nearestChest, takeLoot, nearestItemDrop } from './loot.js';
 import { triggerSwing, setViewmodelWeapon } from './viewmodel.js';
 import { WEAPON_TYPES } from './config.js';
 import { nearestRope, grabRope, releaseRope, updateRopePhysics } from './ropes.js';
-import { nearestShopkeeper, nearestDoor, useDoor } from './town.js';
+import { nearestShopkeeper, nearestDoor, useDoor, nearestHomeDoor } from './town.js';
 
 const EYE = 1.62;
 const BASE_FOV = 66, AIM_FOV = 44;
@@ -355,6 +355,23 @@ function doAttackHit() {
     return;
   }
   sfx.swing();
+  // Duel: blades find other players
+  if (G.runMode === 'duel') {
+    for (const [pid, r] of G.remotes) {
+      if (r.dead || r.floor !== G.floor) continue;
+      const dx = r.obj.position.x - p.obj.position.x;
+      const dz = r.obj.position.z - p.obj.position.z;
+      const d = Math.hypot(dx, dz);
+      if (d > cls.attackRange || Math.abs(r.obj.position.y - p.obj.position.y) > 2.2) continue;
+      let ang = Math.atan2(dx, dz) - p.yaw;
+      while (ang > Math.PI) ang -= Math.PI * 2;
+      while (ang < -Math.PI) ang += Math.PI * 2;
+      if (Math.abs(ang) > cls.attackArc) continue;
+      const crit = Math.random() < effectiveCrit();
+      netSend({ t: 'pvp', target: pid, dmg: crit ? Math.round(dmg * 1.8) : dmg, by: p.name });
+      notifyHit(crit);
+    }
+  }
   for (const e of G.enemies) {
     if (e.state === 'dead') continue;
     const dx = e.obj.position.x - p.obj.position.x;
@@ -392,28 +409,17 @@ export function tryAttack() {
   p.moving = false;
 }
 
+// Space: jump (grounded), or let go of a rope
 export function tryDodge() {
   const p = G.player;
   if (!p || p.dead || G.mode !== 'playing') return;
   if (p.rope) { releaseRope(1.3); return; }
-  if (p.dodgeCd > 0 || p.dodgeT > 0) return;
-  const k = G.keys;
-  let ix = 0, iz = 0;
-  if (k['KeyW']) iz -= 1;
-  if (k['KeyS']) iz += 1;
-  if (k['KeyA']) ix -= 1;
-  if (k['KeyD']) ix += 1;
-  if (ix === 0 && iz === 0) iz = -1;
-  const len = Math.hypot(ix, iz);
-  ix /= len; iz /= len;
-  const sin = Math.sin(p.camYaw), cos = Math.cos(p.camYaw);
-  p.dodgeDirX = ix * cos + iz * sin;
-  p.dodgeDirZ = -ix * sin + iz * cos;
-  p.dodgeT = 0.4;
-  p.dodgeCd = 1.15;
-  p.iframes = 0.45;
-  p.attacking = false;
-  sfx.dodge();
+  const ground = groundHeightAt(p.obj.position.x, p.obj.position.z, p.obj.position.y);
+  if (p.obj.position.y <= ground + 0.08) {
+    p.vy = 9;
+    p.obj.position.y = ground + 0.1;
+    sfx.dodge();
+  }
 }
 
 // ---------- interaction ----------
@@ -433,6 +439,18 @@ function updateInteractPrompt() {
     showPrompt(`<b>E</b> — ${door.label}`);
     interactTarget = { kind: 'door', door };
     return;
+  }
+  // claimable houses
+  const home = nearestHomeDoor(p.obj.position);
+  if (home) {
+    const mine = localStorage.getItem('codeorange_home');
+    if (mine === null) showPrompt('<b>E</b> — 🏠 Claim this house');
+    else if (+mine === home.idx) showPrompt('<b>E</b> — 🏠 Your stash');
+    else showPrompt('🏠 A neighbour lives here');
+    if (mine === null || +mine === home.idx) {
+      interactTarget = { kind: 'home', home };
+      return;
+    }
   }
   // town shopkeepers & the notice board
   const keeper = nearestShopkeeper(p.obj.position);
@@ -467,7 +485,7 @@ function updateInteractPrompt() {
   hidePrompt();
 }
 
-export function tryInteract(onStairs, onShop) {
+export function tryInteract(onStairs, onShop, onHome) {
   const p = G.player;
   if (!p || p.dead || G.mode !== 'playing') return;
   if (p.rope) { releaseRope(); return; }
@@ -478,6 +496,8 @@ export function tryInteract(onStairs, onShop) {
     useDoor(interactTarget.door);
   } else if (interactTarget.kind === 'shop') {
     onShop?.(interactTarget.shop);
+  } else if (interactTarget.kind === 'home') {
+    onHome?.(interactTarget.home);
   } else if (interactTarget.kind === 'stairs') {
     onStairs();
   } else if (interactTarget.kind === 'chest') {
