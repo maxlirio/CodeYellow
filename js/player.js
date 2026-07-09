@@ -14,6 +14,10 @@ import { gearStat, weaponDamage, equippedMeshes, affixOf } from './items.js';
 import { addMsg, refreshHud, showPrompt, hidePrompt, flashVignette, updatePartyBar, hitmarker, setCrosshairHostile } from './ui.js';
 import { netSend } from './net.js';
 import { nearestChest, takeLoot, nearestItemDrop } from './loot.js';
+import { triggerSwing, setViewmodelWeapon } from './viewmodel.js';
+import { WEAPON_TYPES } from './config.js';
+import { nearestRope, grabRope, releaseRope, updateRopePhysics } from './ropes.js';
+import { nearestShopkeeper } from './town.js';
 
 const EYE = 1.62;
 const BASE_FOV = 66, AIM_FOV = 44;
@@ -40,6 +44,7 @@ export function createPlayer(classId, name) {
     dodgeT: 0, dodgeCd: 0, iframes: 0, dodgeDirX: 0, dodgeDirZ: 0,
     dead: false, deadT: 0, moving: false, buff: null, slowT: 0,
     poisonT: 0, poisonDps: 0, poisonTick: 0, kbX: 0, kbZ: 0,
+    rope: null, airVX: 0, airVZ: 0,
     trapCd: 0, lastPosSend: 0,
   };
   anim.play('Idle');
@@ -53,6 +58,7 @@ export function refreshEquipVisuals() {
   if (!p) return;
   const meshes = equippedMeshes(p.classId);
   setEquipMeshes(p.obj, meshes);
+  setViewmodelWeapon(G.inv.weapon?.model || WEAPON_TYPES[p.classId][0].model);
   p.maxHp = effectiveMaxHp();
   p.hp = Math.min(p.hp, p.maxHp);
   netSend({ t: 'equip', meshes });
@@ -171,6 +177,7 @@ export function drinkPotion() {
   if (p.dead || G.run.potions <= 0 || p.hp >= p.maxHp) return;
   G.run.potions--;
   p.hp = Math.min(p.maxHp, p.hp + Math.round(p.maxHp * 0.45));
+  triggerSwing('drink', 0.6);
   sfx.potion();
   spawnBurst(p.obj.position.clone().setY(p.obj.position.y + 1.4), 0x44ff77, 14, 4, 0.13);
   addMsg('You drink a potion 🧪');
@@ -213,6 +220,20 @@ export function updatePlayer(dt) {
 
   p.mana = Math.min(p.maxMana, p.mana + effectiveManaRegen() * dt);
   p.aiming = !!(G.keys['ShiftLeft'] || G.keys['ShiftRight']);
+
+  // swinging on a rope replaces normal movement
+  if (p.rope) {
+    updateRopePhysics(dt);
+    if (p.anim.currentName !== 'Jump_Idle') p.anim.play('Jump_Idle');
+    p.yaw = p.camYaw + Math.PI;
+    p.obj.rotation.y = p.yaw;
+    showPrompt('<b>E</b> / <b>SPACE</b> — Let go');
+    updateCamera(dt, false);
+    updateCrosshairHover();
+    p.lastPosSend += dt;
+    if (p.lastPosSend > 0.09) sendPos();
+    return;
+  }
 
   const k = G.keys;
   let ix = 0, iz = 0;
@@ -261,9 +282,11 @@ export function updatePlayer(dt) {
   // gravity & ground snap (platforms, stairs)
   const ground = groundHeightAt(pos.x, pos.z, pos.y);
   if (pos.y > ground + 0.02) {
+    // momentum from a rope release carries through the air
+    if (p.airVX || p.airVZ) moveWithCollision(pos, p.airVX * dt, p.airVZ * dt, 0.55, { y: pos.y });
     p.vy -= 26 * dt;
     pos.y = Math.max(ground, pos.y + p.vy * dt);
-    if (pos.y === ground) p.vy = 0;
+    if (pos.y === ground) { p.vy = 0; p.airVX = 0; p.airVZ = 0; }
   } else if (ground > pos.y) {
     if (ground - pos.y <= 1.6) { pos.y = ground; p.vy = 0; } // stick to ramps while climbing
   } else {
@@ -272,7 +295,6 @@ export function updatePlayer(dt) {
 
   p.obj.rotation.y = p.yaw;
 
-  checkTraps();
   updateInteractPrompt();
   updateCamera(dt, wantsMove);
   updateCrosshairHover();
@@ -354,12 +376,15 @@ export function tryAttack() {
   p.attackIdx++;
   const act = p.anim.play(animName, { once: true });
   if (act) act.timeScale = act.getClip().duration / atkTime;
+  triggerSwing(G.inv.weapon?.ranged || p.cls.ranged ? 'ranged' : 'melee', atkTime * 0.9);
   p.moving = false;
 }
 
 export function tryDodge() {
   const p = G.player;
-  if (!p || p.dead || p.dodgeCd > 0 || p.dodgeT > 0 || G.mode !== 'playing') return;
+  if (!p || p.dead || G.mode !== 'playing') return;
+  if (p.rope) { releaseRope(1.3); return; }
+  if (p.dodgeCd > 0 || p.dodgeT > 0) return;
   const k = G.keys;
   let ix = 0, iz = 0;
   if (k['KeyW']) iz -= 1;
@@ -379,31 +404,30 @@ export function tryDodge() {
   sfx.dodge();
 }
 
-function checkTraps() {
-  const p = G.player;
-  if (p.trapCd > 0 || p.iframes > 0 || p.obj.position.y > 0.6) return;
-  for (const t of G.traps) {
-    if (Math.abs(p.obj.position.x - t.x) < 1.6 && Math.abs(p.obj.position.z - t.z) < 1.6) {
-      p.trapCd = 1.2;
-      sfx.trap();
-      damageLocalPlayer(Math.round(6 + G.floor * 1.5));
-      addMsg('Spikes! Watch your step.', 'bad');
-      return;
-    }
-  }
-}
-
 // ---------- interaction ----------
 let interactTarget = null;
 function updateInteractPrompt() {
   const p = G.player;
   interactTarget = null;
+  const rope = nearestRope(p.obj.position);
+  if (rope) {
+    showPrompt('<b>E</b> — Grab the rope');
+    interactTarget = { kind: 'rope', rope };
+    return;
+  }
+  // town shopkeepers & the notice board
+  const keeper = nearestShopkeeper(p.obj.position);
+  if (keeper) {
+    showPrompt(`<b>E</b> — ${keeper.label}`);
+    interactTarget = { kind: 'shop', shop: keeper.shop };
+    return;
+  }
   const s = G.grid.stairs;
   if (p.obj.position.y < 1 && Math.hypot(p.obj.position.x - s.x, p.obj.position.z - s.z) < 2.6) {
     if (G.grid.stairsLocked) {
       showPrompt('🔒 Defeat the boss to descend');
     } else {
-      showPrompt('<b>E</b> — Descend deeper');
+      showPrompt(G.grid.town ? '<b>E</b> — Enter the dungeon' : '<b>E</b> — The way onward');
       interactTarget = { kind: 'stairs' };
     }
     return;
@@ -424,10 +448,16 @@ function updateInteractPrompt() {
   hidePrompt();
 }
 
-export function tryInteract(onStairs) {
+export function tryInteract(onStairs, onShop) {
   const p = G.player;
-  if (!p || p.dead || !interactTarget || G.mode !== 'playing') return;
-  if (interactTarget.kind === 'stairs') {
+  if (!p || p.dead || G.mode !== 'playing') return;
+  if (p.rope) { releaseRope(); return; }
+  if (!interactTarget) return;
+  if (interactTarget.kind === 'rope') {
+    grabRope(interactTarget.rope);
+  } else if (interactTarget.kind === 'shop') {
+    onShop?.(interactTarget.shop);
+  } else if (interactTarget.kind === 'stairs') {
     onStairs();
   } else if (interactTarget.kind === 'chest') {
     const c = interactTarget.chest;

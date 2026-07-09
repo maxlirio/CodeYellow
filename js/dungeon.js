@@ -243,6 +243,15 @@ export function generateFloorData(seedStr, floor) {
     platforms.push({ cells: plan.cells, ramps: plan.ramps, room: r });
   }
 
+  // ---- swinging ropes in tall rooms ----
+  const ropes = [];
+  for (const r of rooms) {
+    if (r.w < 7 || r.h < 7 || !rng.chance(0.45)) continue;
+    const rx = r.cx + rng.int(-1, 1), ry = r.cy + rng.int(-1, 1);
+    if (at(rx, ry) !== FLOOR || elev[idxOf(rx, ry)]) continue;
+    ropes.push({ x: rx * CELL + rng.next() * 1.5 - 0.75, z: ry * CELL + rng.next() * 1.5 - 0.75, ay: 7.4, len: 5.0 });
+  }
+
   // ---- traps ----
   const traps = [];
   const isCorridorCell = (x, y) => {
@@ -313,8 +322,9 @@ export function generateFloorData(seedStr, floor) {
     if (c === SOLID) continue;
     const wx = x * CELL, wz = y * CELL;
     if (c === TRAP) {
+      // pressure plate: flat grate; the spikes are a dynamic pop-up (traps.js)
       place('floor_tile_large', wx, 0, wz);
-      place('floor_tile_big_spikes', wx, 0.02, wz);
+      place('floor_tile_grate', wx, 0.03, wz, 0, 1.6);
     } else if (c === RAMP) {
       place('floor_tile_large', wx, 0, wz);
     } else if (c === OBSTACLE && carved.halls) {
@@ -510,7 +520,7 @@ export function generateFloorData(seedStr, floor) {
     portal: { dx: portal.dx, dy: portal.dy, yaw: wallDirs.find(d => d.dx === portal.dx && d.dy === portal.dy).yaw },
   };
   return {
-    grid, torches, traps, placements, enemySpawns, lootSpawns,
+    grid, torches, traps, ropes, placements, enemySpawns, lootSpawns,
     explored: new Uint8Array(w * h), hadBoss: isBossFloor,
     theme, mutator, layoutId,
   };

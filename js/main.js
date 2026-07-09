@@ -11,8 +11,16 @@ import { spawnEnemiesForFloor, updateEnemies, damageEnemy, spawnEnemy, setEnemyS
 import { spawnLootsForFloor, updateLoot, applyTakenSilently, dropItemLoot } from './loot.js';
 import { updateProjectiles, clearProjectiles } from './projectiles.js';
 import { castSpell, updateSpells, updateBeams, resetCooldowns, cooldowns, dealSpells, rerollSpell } from './spells.js';
-import { giveStartingGear, equipItem, salvageItem, rollTrinket, addToBag, rarityOf } from './items.js';
-import { SPELLS } from './config.js';
+import { giveStartingGear, equipItem, salvageItem, rollTrinket, rollWeapon, rollOffhand, addToBag, rarityOf } from './items.js';
+import { SPELLS, SHOP_TABLES } from './config.js';
+import { generateTownData, generateArenaData, spawnTownNpcs, updateTownNpcs } from './town.js';
+import { initViewmodel, updateViewmodel } from './viewmodel.js';
+import { updateWalls, clearWalls } from './walls.js';
+import { initFloorTraps, updateTraps } from './traps.js';
+import { buildRopesForFloor, updateRopes } from './ropes.js';
+import { updateMinions, clearMinions, moveMinionsToFloor, refreshMinionVisibility } from './minions.js';
+import { horde, startHorde, stopHorde, updateHorde, tryBuildBarricade, tryHireMerc } from './horde.js';
+import { fetchPublicGames, publishGame, unpublishGame } from './board.js';
 import {
   createPlayer, resetPlayerForFloor, updatePlayer, updateRemotes, tryAttack, tryDodge, tryInteract,
   drinkPotion, onMouseMove, damageLocalPlayer, sendPos, effectiveMaxHp, effectiveDamage,
@@ -23,15 +31,17 @@ import {
   show, hide, setHidden, addMsg, refreshHud, updateMinimap, updateDodgeCooldown,
   buildClassCards, renderShop, showTransition, runStatsHtml, hideBossBar,
   updateSpellBar, renderInventory, buildLookControls, setCrosshairAiming,
+  renderBoardList,
 } from './ui.js';
 import {
   setNetCallbacks, wireHandlers, hostGame, joinGame, hostStart, netSend, shutdownNet,
-  spawnRemoteAvatars, updateNet, isAuthority,
+  spawnRemoteAvatars, updateNet, isAuthority, myId,
 } from './net.js';
 
 const $ = (id) => document.getElementById(id);
 let getClass = () => 'knight';
 let invOpen = false;
+let runMode = 'campaign';
 
 // ---------------- boot ----------------
 async function boot() {
@@ -54,10 +64,13 @@ async function boot() {
 
   const hemi = new THREE.HemisphereLight(0x9988bb, 0x2a2016, 0.85);
   const amb = new THREE.AmbientLight(0x4a4260, 0.7);
-  scene.add(hemi, amb);
-  G.lights = { hemi, amb };
+  const sun = new THREE.DirectionalLight(0xfff1cc, 0); // only shines in town
+  sun.position.set(40, 70, 25);
+  scene.add(hemi, amb, sun);
+  G.lights = { hemi, amb, sun };
 
   initFx();
+  initViewmodel();
   await wireHandlers();
   await loadAll((f, url) => {
     $('loadfill').style.width = `${Math.round(f * 100)}%`;
@@ -81,7 +94,7 @@ async function boot() {
   const params = new URLSearchParams(location.search);
   if (params.get('auto')) {
     initAudio();
-    startRun(params.get('seed') || randomSeed());
+    startRun(params.get('seed') || randomSeed(), params.get('mode') || 'campaign');
   }
 
   requestAnimationFrame(loop);
@@ -128,7 +141,32 @@ function setupMenu() {
   $('nameInput').value = localStorage.getItem('codeorange_name') || '';
   $('nameInput').addEventListener('change', () => localStorage.setItem('codeorange_name', $('nameInput').value));
 
-  $('btnSolo').onclick = () => { initAudio(); startRun(randomSeed()); };
+  // game mode selector
+  document.querySelectorAll('.modebtn').forEach((el) => {
+    el.onclick = () => {
+      document.querySelectorAll('.modebtn').forEach(b => b.classList.remove('sel'));
+      el.classList.add('sel');
+      runMode = el.dataset.mode;
+    };
+  });
+
+  // tavern board (public games)
+  const openBoard = async () => {
+    show('tavernBoard');
+    $('boardList').innerHTML = '<div class="board-empty">Checking the board…</div>';
+    const games = await fetchPublicGames();
+    renderBoardList(games.filter(g => g.code !== G.net.code), (code) => {
+      hide('tavernBoard');
+      $('joinCode').value = code;
+      $('btnJoin').click();
+    });
+  };
+  $('btnBoard').onclick = openBoard;
+  window.openTavernBoard = openBoard; // the in-town notice board uses this too
+  $('btnBoardRefresh').onclick = openBoard;
+  $('btnBoardClose').onclick = () => { hide('tavernBoard'); if (G.mode === 'playing') lockPointer(); };
+
+  $('btnSolo').onclick = () => { initAudio(); startRun(randomSeed(), runMode); };
 
   $('btnHost').onclick = async () => {
     initAudio();
@@ -140,6 +178,9 @@ function setupMenu() {
       $('lobbyStatus').textContent = 'Share this code with your friends. Up to 4 players.';
       setHidden('btnStart', false);
       renderLobby();
+      if ($('pubToggle').checked) {
+        publishGame(code, { name: playerName(), mode: runMode, players: 1 });
+      }
     } catch (e) {
       addMsg('Could not open a room (signaling server unreachable).', 'bad');
     }
@@ -166,40 +207,46 @@ function setupMenu() {
 
   $('btnStart').onclick = () => {
     G.seed = randomSeed();
-    hostStart();
-    startRun(G.seed);
+    unpublishGame();
+    hostStart(runMode);
+    startRun(G.seed, runMode);
   };
-  $('btnLeaveLobby').onclick = () => { shutdownNet(); hide('lobby'); show('menu'); };
+  $('btnLeaveLobby').onclick = () => { unpublishGame(); shutdownNet(); hide('lobby'); show('menu'); };
 
   $('btnRestart').onclick = () => location.reload();
   $('btnMenu').onclick = () => location.reload();
   $('btnEndless').onclick = () => {
     G.endless = true;
     hide('victory');
-    G.mode = 'merchant';
-    show('merchant');
-    renderShop(buyItem);
+    descendTo(G.floor + 1);
   };
   $('btnResume').onclick = () => { hide('pause'); G.mode = 'playing'; G.paused = false; lockPointer(); };
   $('btnQuit').onclick = () => location.reload();
-  $('btnDescend').onclick = () => {
-    hide('merchant');
-    descendTo(G.floor + 1);
-  };
+
+  // stairs choice (dungeon floors)
+  $('btnGoDown').onclick = () => { hide('stairsDialog'); descendTo(G.floor + 1); };
+  $('btnToTown').onclick = () => { hide('stairsDialog'); descendTo(0); };
+  $('btnStayHere').onclick = () => { hide('stairsDialog'); G.mode = 'playing'; lockPointer(); };
+
+  // shop overlay
+  $('btnCloseShop').onclick = () => { hide('merchant'); G.mode = 'playing'; lockPointer(); };
   $('btnCloseInv').onclick = () => toggleInventory(false);
 
   setNetCallbacks({
     onLobbyUpdate: renderLobby,
-    onStart: (seed) => startRun(seed),
+    onStart: (seed, mode) => startRun(seed, mode),
     onGameOver: () => gameOver(true),
     onVictory: () => victory(true),
     onHostGone: () => { shutdownNet(); hide('lobby'); show('menu'); },
     onPartyDeath: () => checkAllDead(),
     // a teammate moved to floor n: host must simulate it; everyone updates the party bar
     onPeerFloor: (pid, n) => {
-      if (isAuthority()) ensureFloor(n);
+      if (isAuthority()) {
+        ensureFloor(n);
+        moveMinionsToFloor(pid, n);
+      }
       const p = G.net.players.get(pid);
-      addMsg(`${p?.name || 'A teammate'} ${n > 1 ? 'descended to' : 'is on'} floor ${n}`);
+      addMsg(`${p?.name || 'A teammate'} ${n === 0 ? 'returned to town' : 'moved to floor ' + n}`);
     },
     ensureFloorSim: (n) => ensureFloor(n),
     onFstate: (m) => applyFstate(m),
@@ -218,20 +265,24 @@ function renderLobby() {
 }
 
 // ---------------- run flow ----------------
-function startRun(seed) {
+function startRun(seed, mode = 'campaign') {
   G.seed = seed || randomSeed();
-  G.floor = 1;
+  runMode = mode;
+  G.floor = mode === 'horde' ? 1 : 0;
   G.endless = false;
   G.pendingVictory = false;
-  G.run = { gold: 0, potions: 1, keys: 0, atkBonus: 0, hpBonus: 0, speedBonus: 0, speedBuys: 0, level: 1, xp: 0, kills: 0, chests: 0, startTime: performance.now(), buys: {} };
+  G.run = { gold: mode === 'horde' ? 60 : 0, potions: 1, keys: 0, atkBonus: 0, hpBonus: 0, speedBonus: 0, speedBuys: 0, level: 1, xp: 0, kills: 0, chests: 0, startTime: performance.now(), buys: {}, deepest: 1 };
   resetCooldowns();
-  hide('menu'); hide('lobby'); hide('merchant'); hide('dead'); hide('victory'); hide('inventory');
+  stopHorde();
+  hide('menu'); hide('lobby'); hide('merchant'); hide('dead'); hide('victory'); hide('inventory'); hide('stairsDialog'); hide('tavernBoard');
   invOpen = false;
   setHidden('hud', false);
 
   disposeAllFloors();
   clearTransientFx();
   clearProjectiles();
+  clearWalls();
+  clearMinions();
 
   const classId = getClass();
   giveStartingGear(classId);
@@ -241,22 +292,31 @@ function startRun(seed) {
   const spells = dealSpells(classId);
   addMsg(`Your spells this run: ${spells.map(s => `${SPELLS[s].icon} ${SPELLS[s].name}`).join(' · ')}`, 'gold');
 
-  setLocalFloor(1);
+  if (mode === 'horde') {
+    setLocalFloor(1);
+    startHorde();
+  } else {
+    setLocalFloor(0);
+    addMsg('Welcome to Emberlight Village. The dungeon gate is in the north wall.', 'gold');
+    addMsg('Visit the shops — then descend and destroy the Bone King on floor 9.');
+  }
   spawnRemoteAvatars();
   refreshRemoteVisibility();
   G.mode = 'playing';
   refreshHud();
-  addMsg('Descend. Survive. Destroy the Bone King on floor 9.', 'gold');
   addMsg('Click the screen to capture the mouse.');
   lockPointer();
 }
 
 // make sure a floor's data + entities exist (no visuals) — used by the host for
-// floors teammates are on, and locally before entering one
+// floors teammates are on, and locally before entering one.
+// Floor 0 is the town; in horde mode floor 1 is the arena.
 function ensureFloor(n) {
   const fs = floorState(n);
   if (!fs.grid) {
-    Object.assign(fs, generateFloorData(G.seed, n));
+    if (n === 0) Object.assign(fs, generateTownData());
+    else if (runMode === 'horde') Object.assign(fs, generateArenaData());
+    else Object.assign(fs, generateFloorData(G.seed, n));
   }
   if (!fs.spawned) {
     spawnEnemiesForFloor(fs);
@@ -276,6 +336,9 @@ function setLocalFloor(n) {
   }
   const fs = ensureFloor(n);
   buildFloorMeshes(fs);
+  initFloorTraps(fs);
+  buildRopesForFloor(fs);
+  if (fs.npcs) spawnTownNpcs(fs);
   fs.meshGroup.visible = true;
   fs.enemyGroup.visible = true;
   fs.lootGroup.visible = true;
@@ -287,6 +350,8 @@ function setLocalFloor(n) {
   buildTorchFx();
   resetPlayerForFloor();
   refreshRemoteVisibility();
+  refreshMinionVisibility();
+  if (G.net.role !== 'guest') moveMinionsToFloor(myId(), n);
   refreshBossBarForFloor();
   refreshHud();
   if (fs.mutator) addMsg(`⚠ ${fs.mutator.name}: ${fs.mutator.desc}`, 'bad');
@@ -305,8 +370,10 @@ function applyThemeAtmosphere(fs) {
   G.lights.hemi.color.setHex(th.hemi);
   G.lights.amb.color.setHex(th.amb);
   const dark = fs.mutator?.torchMult ?? 1;
-  G.lights.hemi.intensity = 0.85 * (dark < 1 ? 0.55 : 1);
-  G.lights.amb.intensity = 0.7 * (dark < 1 ? 0.55 : 1);
+  const sunny = th.sun ? 1.35 : 1;
+  G.lights.hemi.intensity = 0.85 * (dark < 1 ? 0.55 : 1) * sunny;
+  G.lights.amb.intensity = 0.7 * (dark < 1 ? 0.55 : 1) * sunny;
+  G.lights.sun.intensity = th.sun ? 1.2 : 0; // daylight only above ground
   G.torchColor = th.torch;
 }
 
@@ -314,6 +381,13 @@ function applyThemeAtmosphere(fs) {
 function applyFstate(m) {
   const fs = G.floors.get(m.f);
   if (!fs || !fs.spawned) return;
+  // self-heal: rebuild ANY living enemy we somehow don't have (missed message)
+  for (const s of m.ealive || []) {
+    if (!fs.enemies.find(e => e.id === s[0])) {
+      const e = spawnEnemy(fs, s[1], s[2], s[3], { y: s[4], elite: !!s[5], id: s[0] });
+      setEnemyState(e, 'awaken', true);
+    }
+  }
   for (const s of m.summons) {
     if (!fs.enemies.find(e => e.id === s.id)) {
       const e = spawnEnemy(fs, s.type, s.x, s.z, { y: s.y, id: s.id });
@@ -343,10 +417,26 @@ function applyFstate(m) {
 function onStairsUsed() {
   if (G.mode !== 'playing') return;
   sfx.stairs();
+  if (G.grid.town) {
+    // the village gate leads to your deepest floor
+    descendTo(Math.max(1, G.run.deepest));
+    return;
+  }
   G.mode = 'merchant';
   document.exitPointerLock?.();
+  $('stairsSub').textContent = `Floor ${G.floor} cleared? Floor ${G.floor + 1} awaits below — or head home to spend your gold.`;
+  show('stairsDialog');
+}
+
+// shopkeeper interaction (E in town)
+function onShopOpened(type) {
+  if (type === 'board') { document.exitPointerLock?.(); window.openTavernBoard(); return; }
+  const table = SHOP_TABLES[type];
+  if (!table) return;
+  G.mode = 'merchant';
+  document.exitPointerLock?.();
+  renderShop(buyItem, table);
   show('merchant');
-  renderShop(buyItem);
 }
 
 function buyItem(id, price) {
@@ -373,6 +463,24 @@ function buyItem(id, price) {
     refreshHud();
     return;
   }
+  if (id === 'reforge' || id === 'offhand') {
+    if (G.inv.bag.length >= 12) { addMsg('Your bag is full!', 'bad'); return; }
+    G.run.gold -= price;
+    G.run.buys[id] = (G.run.buys[id] || 0) + 1;
+    const item = id === 'reforge'
+      ? rollWeapon(p.classId, Math.max(G.floor, G.run.deepest), 0.4)
+      : rollOffhand(p.classId, Math.max(G.floor, G.run.deepest), 0.4);
+    addToBag(item);
+    addMsg(`Forged: <span style="color:${rarityOf(item).color}">${item.name}</span> — Tab to equip`, 'gold');
+    sfx.chest();
+    refreshHud();
+    return;
+  }
+  if (id === 'merc') {
+    // price handled inside tryHireMerc (fixed cost)
+    tryHireMerc();
+    return;
+  }
   G.run.gold -= price;
   G.run.buys[id] = (G.run.buys[id] || 0) + 1;
   switch (id) {
@@ -384,9 +492,10 @@ function buyItem(id, price) {
   refreshHud();
 }
 
-// personal descent: only I change floors; teammates stay where they are
+// personal descent (or a trip home): only I change floors; teammates stay put
 function descendTo(n) {
   G.mode = 'transition';
+  if (n > 0) G.run.deepest = Math.max(G.run.deepest || 1, n);
   const fs = ensureFloor(n); // peek at what awaits for the banner
   showTransition(n, () => {
     setLocalFloor(n);
@@ -411,7 +520,7 @@ function gameOver(fromNet = false) {
   if (G.net.role === 'host' && !fromNet) netSend({ t: 'gover' });
   document.exitPointerLock?.();
   $('deadTitle').textContent = G.net.role === 'solo' ? 'You have fallen…' : 'The whole party has fallen…';
-  $('deadStats').innerHTML = runStatsHtml();
+  $('deadStats').innerHTML = (horde.active ? `🌊 Waves survived: <b>${Math.max(0, horde.wave - (horde.phase === 'combat' ? 1 : 0))}</b><br>` : '') + runStatsHtml();
   setHidden('respawnMsg', true);
   setHidden('btnRestart', false);
   show('dead');
@@ -491,8 +600,10 @@ function setupInput() {
     if (invOpen) { if (e.code === 'Escape') toggleInventory(false); return; }
     if (e.code === 'Space') { e.preventDefault(); tryDodge(); }
     if (e.code === 'KeyF') tryAttack();
-    if (e.code === 'KeyE') tryInteract(onStairsUsed);
+    if (e.code === 'KeyE') tryInteract(onStairsUsed, onShopOpened);
     if (e.code === 'KeyQ') drinkPotion();
+    if (e.code === 'KeyB' && horde.active) tryBuildBarricade();
+    if (e.code === 'KeyH' && horde.active) tryHireMerc();
     if (e.code === 'Digit1') castSpell(0, effectiveDamage);
     if (e.code === 'Digit2') castSpell(1, effectiveDamage);
     if (e.code === 'Digit3') castSpell(2, effectiveDamage);
@@ -542,7 +653,9 @@ function loop(t) {
   last = t;
   G.time = t / 1000;
 
-  const simActive = G.mode === 'playing' || (G.mode !== 'menu' && G.net.role !== 'solo' && G.net.started && G.mode !== 'transition');
+  // CodeBlue lesson: in co-op the world NEVER pauses for one player's overlays —
+  // the host keeps simulating through its own pause/transition/inventory/death.
+  const simActive = G.mode === 'playing' || (G.mode !== 'menu' && G.net.role !== 'solo' && G.net.started);
 
   if (G.mode === 'playing') {
     updatePlayer(dt);
@@ -551,6 +664,7 @@ function loop(t) {
   } else if (G.player && simActive) {
     G.player.anim.update(dt);
   }
+  updateViewmodel(dt);
 
   if (simActive) {
     updateEnemies(dt);
@@ -560,6 +674,12 @@ function loop(t) {
     updateSpells(dt);
     updateBeams(dt);
     updateFx(dt);
+    updateWalls(dt);
+    updateTraps(dt);
+    updateRopes(dt);
+    updateTownNpcs(dt);
+    updateMinions(dt);
+    updateHorde(dt);
     updateNet(dt);
 
     if (G.pendingVictory) {

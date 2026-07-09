@@ -10,7 +10,7 @@ export const CLASSES = {
     hp: 125, dmg: 16, speed: 8.2, crit: 0.06, attackAnims: ['1H_Melee_Attack_Slice_Horizontal', '1H_Melee_Attack_Chop'],
     attackTime: 0.7, attackRange: 3.0, attackArc: 1.1, mana: 60, manaRegen: 5,
     show: ['1H_Sword', 'Round_Shield'],
-    spellPool: ['holybolt', 'shieldbash', 'warcry', 'judgement', 'consecrate', 'bulwark'],
+    spellPool: ['holybolt', 'shieldbash', 'warcry', 'judgement', 'consecrate', 'bulwark', 'bonewall'],
   },
   barbarian: {
     name: 'Barbarian', icon: '🪓', model: 'Barbarian',
@@ -18,7 +18,7 @@ export const CLASSES = {
     hp: 150, dmg: 26, speed: 7.7, crit: 0.1, attackAnims: ['2H_Melee_Attack_Chop', '2H_Melee_Attack_Slice'],
     attackTime: 0.92, attackRange: 3.4, attackArc: 1.35, mana: 60, manaRegen: 5,
     show: ['2H_Axe'],
-    spellPool: ['axethrow', 'groundslam', 'rage', 'whirlwind', 'leap', 'bloodlust'],
+    spellPool: ['axethrow', 'groundslam', 'rage', 'whirlwind', 'leap', 'bloodlust', 'bonewall'],
   },
   rogue: {
     name: 'Rogue', icon: '🗡', model: 'Rogue',
@@ -26,7 +26,7 @@ export const CLASSES = {
     hp: 92, dmg: 11, speed: 9.4, crit: 0.28, attackAnims: ['Dualwield_Melee_Attack_Slice', 'Dualwield_Melee_Attack_Stab'],
     attackTime: 0.44, attackRange: 2.6, attackArc: 1.0, mana: 70, manaRegen: 6,
     show: ['Knife', 'Knife_Offhand'],
-    spellPool: ['knifefan', 'shadowstep', 'venomvial', 'smokebomb', 'deathmark', 'shurikenstorm'],
+    spellPool: ['knifefan', 'shadowstep', 'venomvial', 'smokebomb', 'deathmark', 'shurikenstorm', 'bonewall'],
   },
   mage: {
     name: 'Mage', icon: '🔮', model: 'Mage',
@@ -34,7 +34,7 @@ export const CLASSES = {
     hp: 84, dmg: 20, speed: 8.4, crit: 0.08, attackAnims: ['Spellcast_Shoot'],
     attackTime: 0.55, attackRange: 26, attackArc: 0, mana: 110, manaRegen: 9,
     show: ['2H_Staff'], ranged: true,
-    spellPool: ['fireball', 'frostshard', 'chainlightning', 'meteor', 'blizzard', 'arcaneorb'],
+    spellPool: ['fireball', 'frostshard', 'chainlightning', 'meteor', 'blizzard', 'arcaneorb', 'bonewall'],
   },
 };
 
@@ -68,6 +68,8 @@ export const SPELLS = {
   meteor:     { name: 'Meteor', icon: '☄️', mana: 26, cd: 11, type: 'targetaoe', dmgMult: 2.2, radius: 4.5, range: 24, delay: 0.9, color: 0xff6622, burn: { mult: 0.3, dur: 3 } },
   blizzard:   { name: 'Blizzard', icon: '🌨️', mana: 22, cd: 10, type: 'aoe', dmgMult: 0.6, radius: 7, slowAll: { mult: 0.4, dur: 4 }, color: 0xaaddff },
   arcaneorb:  { name: 'Arcane Orb', icon: '🔮', mana: 20, cd: 8, type: 'proj', dmgMult: 1.1, speed: 10, color: 0xcc66ff, size: 2.2, pierce: true },
+  // universal
+  bonewall:   { name: 'Bone Wall', icon: '🦴', mana: 16, cd: 12, type: 'wall', dur: 10, range: 12 },
 };
 
 // ---------------- weapon affixes (rare+ weapons) ----------------
@@ -254,7 +256,18 @@ export const SHOP_ITEMS = [
   { id: 'hp', icon: '❤', name: 'Bone Charm', desc: '+20 max HP and heal 20.', base: 40, grow: 22 },
   { id: 'relic', icon: '💍', name: 'Mystery Relic', desc: 'A random trinket. Rarity scales with depth.', base: 70, grow: 25 },
   { id: 'tome', icon: '📖', name: 'Spell Tome', desc: 'Replace one of your spells with another from your school.', base: 55, grow: 20 },
+  { id: 'reforge', icon: '🔨', name: 'Reforge Weapon', desc: 'A brand-new random weapon for your class.', base: 60, grow: 18 },
+  { id: 'offhand', icon: '🛡', name: 'Forge Offhand', desc: 'A random offhand item for your class.', base: 45, grow: 15 },
+  { id: 'merc', icon: '🤺', name: 'Hire Mercenary', desc: 'A sellsword or marksman fights beside you until slain.', base: 120, grow: 60 },
 ];
+
+// which building sells what (the old floor-merchant is gone — shop in town)
+export const SHOP_TABLES = {
+  blacksmith: { title: '⚒ The Blacksmith', greet: '“Steel solves most problems.”', items: ['atk', 'reforge', 'offhand'] },
+  alchemist: { title: '🧪 The Alchemist', greet: '“Drink up. Probably not poison.”', items: ['potion', 'hp'] },
+  arcanum: { title: '🔮 The Arcanum', greet: '“Knowledge has a price.”', items: ['tome', 'relic'] },
+  tavern: { title: '🍺 The Cracked Flagon', greet: '“Swords for hire, ale for sale.”', items: ['merc', 'potion'] },
+};
 
 // Weapon-ish meshes we hide by default; equipment then re-shows its kit.
 export const WEAPON_MESHES = [

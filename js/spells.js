@@ -9,6 +9,8 @@ import { damageEnemy } from './enemies.js';
 import { moveWithCollision, groundHeightAt, hasLineOfSight } from './dungeon.js';
 import { addMsg, refreshHud } from './ui.js';
 import { netSend } from './net.js';
+import { triggerSwing } from './viewmodel.js';
+import { placeWall } from './walls.js';
 
 export const cooldowns = {}; // spellId -> remaining seconds
 const pendingAoes = [];      // delayed strikes (Judgement, Meteor)
@@ -97,6 +99,7 @@ export function castSpell(slot, effectiveDamage) {
   p.attacking = false;
   const castAnim = sp.type === 'cone' ? 'Block_Attack' : sp.type === 'aoe' ? '2H_Melee_Attack_Spin' : 'Spellcast_Shoot';
   p.anim.play(p.anim.has(castAnim) ? castAnim : 'Spellcast_Shoot', { once: true, timeScale: 1.6 });
+  triggerSwing('cast', 0.5);
   p.yaw = Math.atan2(dir.x, dir.z);
 
   switch (sp.type) {
@@ -178,6 +181,24 @@ export function castSpell(slot, effectiveDamage) {
       const effects = sp.burn ? { poison: { dps: Math.max(2, Math.round(dmg * sp.burn.mult)), dur: sp.burn.dur } } : null;
       pendingAoes.push({ ...hit, t: sp.delay, radius: sp.radius, dmg, color: sp.color, effects });
       spawnBurst(new THREE.Vector3(hit.x, hit.y + 0.4, hit.z), sp.color, 10, 2, 0.12, sp.delay);
+      break;
+    }
+    case 'wall': {
+      // raise a wall at the aimed cell — monsters can't get you
+      const from = origin.clone().setY(origin.y + 1.5);
+      let hit = null;
+      for (let d = 2; d < sp.range; d += 0.5) {
+        const px = from.x + dir.x * d, pz = from.z + dir.z * d;
+        if (!hasLineOfSight(from.x, from.z, px, pz)) break;
+        hit = { x: px, z: pz };
+      }
+      if (!hit) { p.mana += sp.mana; cooldowns[spellId] = 0.4; break; }
+      const cx = Math.round(hit.x / 4), cy = Math.round(hit.z / 4);
+      const yaw = Math.abs(dir.x) > Math.abs(dir.z) ? Math.PI / 2 : 0;
+      const ok = placeWall(G.floor, cx, cy, { dur: sp.dur, yaw });
+      if (!ok) { addMsg('No room for a wall there.', 'bad'); p.mana += sp.mana; cooldowns[spellId] = 0.4; break; }
+      sfx.bones();
+      addMsg('A wall of bone erupts from the ground!');
       break;
     }
     case 'mark': {

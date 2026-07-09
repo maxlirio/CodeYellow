@@ -282,21 +282,65 @@ export function buildClassCards(onSelect) {
   return () => selected;
 }
 
-// ---------- merchant ----------
-export function renderShop(onBuy) {
+// ---------- shops (town buildings) ----------
+export function renderShop(onBuy, table) {
   const wrap = $('shopItems');
   wrap.innerHTML = '';
   $('shopGold').textContent = G.run.gold;
-  for (const item of SHOP_ITEMS) {
+  if (table) {
+    $('shopTitle').textContent = table.title;
+    $('shopGreet').textContent = table.greet;
+  }
+  const ids = table ? table.items : SHOP_ITEMS.map(i => i.id);
+  for (const id of ids) {
+    const item = SHOP_ITEMS.find(i => i.id === id);
+    if (!item) continue;
     const bought = G.run.buys[item.id] || 0;
     const price = item.base + bought * item.grow;
-    const maxed = item.id === 'speed' && G.run.speedBuys >= 3;
-    const afford = G.run.gold >= price && !maxed;
+    const afford = G.run.gold >= price;
     const div = document.createElement('div');
     div.className = 'shopitem' + (afford ? '' : ' off');
     div.innerHTML = `<div class="sicon">${item.icon}</div><div class="sname">${item.name}</div>
-      <div class="sdesc">${item.desc}</div><div class="sprice">${maxed ? 'SOLD OUT' : price + ' g'}</div>`;
-    if (afford) div.onclick = () => { onBuy(item.id, price); renderShop(onBuy); };
+      <div class="sdesc">${item.desc}</div><div class="sprice">${price} g</div>`;
+    if (afford) div.onclick = () => { onBuy(item.id, price); renderShop(onBuy, table); };
+    wrap.appendChild(div);
+  }
+}
+
+// ---------- horde wave HUD ----------
+export function showWaveBanner(n) {
+  const b = $('waveBanner');
+  b.textContent = `WAVE ${n}`;
+  b.classList.remove('hidden', 'show');
+  void b.offsetWidth;
+  b.classList.add('show');
+}
+export function updateWaveHud(horde) {
+  const el = $('waveHud');
+  if (!horde.active) { el.classList.add('hidden'); return; }
+  el.classList.remove('hidden');
+  el.textContent = horde.phase === 'build'
+    ? `🔨 BUILD — wave ${horde.wave + 1} in ${Math.max(0, Math.ceil(horde.t))}s · B barricade · H hire`
+    : `🌊 WAVE ${horde.wave} — hold the line!`;
+}
+
+// ---------- tavern board ----------
+export function renderBoardList(games, onJoin) {
+  const wrap = $('boardList');
+  if (!games.length) {
+    wrap.innerHTML = '<div class="board-empty">No public games right now. Host one and check “List my game”!</div>';
+    return;
+  }
+  wrap.innerHTML = '';
+  for (const g of games) {
+    const div = document.createElement('div');
+    div.className = 'board-game';
+    div.innerHTML = `<div><div class="bg-name">${escapeHtml(g.name || 'Adventurer')}'s party</div>
+      <div class="bg-meta">${g.mode === 'horde' ? '🏰 Last Stand' : '⚔ Campaign'} · code ${g.code}</div></div>`;
+    const btn = document.createElement('button');
+    btn.textContent = 'Join';
+    btn.onclick = () => onJoin(g.code);
+    div.appendChild(btn);
     wrap.appendChild(div);
   }
 }
@@ -304,7 +348,7 @@ export function renderShop(onBuy) {
 // ---------- transitions & end screens ----------
 export function showTransition(floor, cb, subtitle = null, warning = null) {
   const t = $('transition');
-  $('transTitle').textContent = floor <= 9 ? `FLOOR ${floor}` : `FLOOR ${floor} — THE ENDLESS DARK`;
+  $('transTitle').textContent = floor === 0 ? 'HOMEWARD' : floor <= 9 ? `FLOOR ${floor}` : `FLOOR ${floor} — THE ENDLESS DARK`;
   $('transSub').innerHTML = (subtitle || 'Deeper still…') +
     (warning ? `<br><span style="color:#ff8c4a;letter-spacing:4px">⚠ ${warning}</span>` : '');
   t.classList.remove('hidden');

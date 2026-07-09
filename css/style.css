@@ -208,6 +208,43 @@ button.orange-btn:hover { filter: brightness(1.15); }
 .shopitem .sprice { margin-top: 5px; color: #ffd35c; font-weight: bold; }
 .shop-gold { color: #ffd35c; margin-bottom: 8px; }
 
+/* game mode selector */
+.moderow { display: flex; gap: 10px; justify-content: center; margin-bottom: 14px; }
+.modebtn {
+  border: 2px solid var(--border); border-radius: 10px; padding: 10px 18px; cursor: pointer;
+  background: #16121e; font-weight: bold; color: #f0e6d2; transition: all 0.15s; font-size: 15px;
+}
+.modebtn span { display: block; font-weight: normal; font-size: 11px; color: #9c8f77; margin-top: 2px; }
+.modebtn:hover { border-color: var(--orange-dim); }
+.modebtn.sel { border-color: var(--orange); background: #241a12; box-shadow: 0 0 14px rgba(255,140,26,0.2); }
+.publabel { font-size: 12.5px; color: #9c8f77; cursor: pointer; }
+.publabel input { width: auto; }
+
+/* tavern board */
+.board-list { max-height: 300px; overflow-y: auto; margin: 12px 0; text-align: left; }
+.board-game {
+  display: flex; align-items: center; justify-content: space-between; gap: 10px;
+  border: 1px solid var(--border); border-radius: 8px; background: #16121e; padding: 10px 14px; margin-bottom: 8px;
+}
+.board-game .bg-name { font-weight: bold; color: #f0e6d2; }
+.board-game .bg-meta { font-size: 12px; color: #9c8f77; }
+.board-game button { font-size: 14px; padding: 7px 18px; border-radius: 6px; cursor: pointer; background: linear-gradient(180deg, #d97613, #a04f00); color: #fff8ec; border: 1px solid #ffab4a; }
+.board-empty { color: #7d7260; text-align: center; padding: 18px; }
+
+/* horde wave hud */
+#waveHud {
+  position: absolute; top: 60px; left: 50%; transform: translateX(-50%);
+  background: rgba(14,11,20,0.85); border: 1px solid var(--border); border-radius: 8px;
+  padding: 7px 18px; font-size: 15px; color: #ffd9a8; letter-spacing: 1px;
+}
+#waveBanner {
+  position: absolute; top: 34%; left: 50%; transform: translate(-50%, -50%); pointer-events: none;
+  font-size: 52px; font-weight: bold; letter-spacing: 10px; color: var(--orange);
+  text-shadow: 0 0 40px rgba(255,140,26,0.6), 0 3px 6px #000; opacity: 0;
+}
+#waveBanner.show { animation: wavein 2.4s ease-out; }
+@keyframes wavein { 0% { opacity: 0; transform: translate(-50%, -50%) scale(1.6); } 15% { opacity: 1; transform: translate(-50%, -50%) scale(1); } 75% { opacity: 1; } 100% { opacity: 0; } }
+
 .runstats { margin: 14px 0; line-height: 1.9; font-size: 16px; }
 .runstats b { color: var(--orange); }
 .keys { margin: 10px auto 16px; border-collapse: collapse; }

@@ -47,13 +47,19 @@
         <div class="lookrow swatches" id="capeSwatches"></div>
       </div>
     </div>
+    <div class="moderow">
+      <div class="modebtn sel" data-mode="campaign">⚔ Campaign<span>Descend &amp; slay the Bone King</span></div>
+      <div class="modebtn" data-mode="horde">🏰 Last Stand<span>Build, hire, survive the waves</span></div>
+    </div>
     <div class="menu-buttons">
-      <button id="btnSolo" class="big orange-btn">⚔ Enter the Dungeon</button>
+      <button id="btnSolo" class="big orange-btn">⚔ Play Solo</button>
       <button id="btnHost" class="big">🕸 Host Co-op</button>
+      <label class="publabel"><input type="checkbox" id="pubToggle"> 📜 List my game on the tavern board</label>
       <div class="joinrow">
         <input id="joinCode" maxlength="5" placeholder="CODE" autocomplete="off">
         <button id="btnJoin" class="big">Join Co-op</button>
       </div>
+      <button id="btnBoard" class="big">🍺 Browse public games</button>
     </div>
     <div class="menu-note">First-person · WASD move · Click attack · Shift aim · 1-3 spells · Space dash · E interact · Tab inventory</div>
     <div class="credits">Assets: <a href="https://kaylousberg.com" target="_blank">KayKit</a> (CC0) · three.js · PeerJS</div>
@@ -84,6 +90,8 @@
   </div>
   <div id="topright"><canvas id="minimap" width="220" height="220"></canvas></div>
   <div id="bossbarWrap" class="hidden"><div class="bossname" id="bossName"></div><div class="bar bossbar"><div id="bossfill"></div></div></div>
+  <div id="waveHud" class="hidden"></div>
+  <div id="waveBanner" class="hidden"></div>
   <div id="crosshair"><div class="ch-dot"></div><div class="ch-l ch-t"></div><div class="ch-l ch-b"></div><div class="ch-l ch-lf"></div><div class="ch-l ch-rt"></div><div id="hitmark">✕</div></div>
   <div id="bottombar">
     <div class="slot spell" id="spell0"><span class="sp-icon"></span><span class="key">1</span><div class="cdmask"></div></div>
@@ -124,14 +132,40 @@
 <!-- Floor transition -->
 <div id="transition" class="hidden"><div id="transTitle"></div><div id="transSub"></div></div>
 
-<!-- Merchant -->
+<!-- Shop (town buildings) -->
 <div id="merchant" class="overlay">
   <div class="panel">
-    <h2>🕯 The Bone Merchant</h2>
-    <div class="subtitle">“Spend your gold before the dark spends you…”</div>
+    <h2 id="shopTitle">🕯 Shop</h2>
+    <div class="subtitle" id="shopGreet"></div>
     <div class="shop" id="shopItems"></div>
     <div class="shop-gold">Your gold: <b id="shopGold">0</b></div>
-    <div class="menu-buttons"><button id="btnDescend" class="big orange-btn">⬇ Descend</button></div>
+    <div class="menu-buttons"><button id="btnCloseShop" class="big orange-btn">Done</button></div>
+  </div>
+</div>
+
+<!-- Stairs choice -->
+<div id="stairsDialog" class="overlay">
+  <div class="panel">
+    <h2>⬇ The way onward</h2>
+    <div class="subtitle" id="stairsSub"></div>
+    <div class="menu-buttons">
+      <button id="btnGoDown" class="big orange-btn">⬇ Descend</button>
+      <button id="btnToTown" class="big">🏰 Return to town</button>
+      <button id="btnStayHere" class="big">Stay here</button>
+    </div>
+  </div>
+</div>
+
+<!-- Tavern notice board: public games -->
+<div id="tavernBoard" class="overlay">
+  <div class="panel">
+    <h2>📜 Public Games</h2>
+    <div class="subtitle">Adventurers looking for company. Listed rooms live while their host's tavern tab is open.</div>
+    <div id="boardList" class="board-list"><div class="board-empty">Checking the board…</div></div>
+    <div class="menu-buttons">
+      <button id="btnBoardRefresh" class="big">🔄 Refresh</button>
+      <button id="btnBoardClose" class="big orange-btn">Close</button>
+    </div>
   </div>
 </div>
 
@@ -172,6 +206,7 @@
       <tr><td>E</td><td>Open chest / take item / descend</td></tr>
       <tr><td>Q</td><td>Drink health potion</td></tr>
       <tr><td>Tab</td><td>Inventory & equipment</td></tr>
+      <tr><td>B / H</td><td>Last Stand: build barricade / hire mercenary</td></tr>
       <tr><td>M</td><td>Mute</td></tr>
       <tr><td>Esc</td><td>Pause</td></tr>
     </table>

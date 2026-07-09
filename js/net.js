@@ -22,7 +22,22 @@ export async function wireHandlers() {
   const proj = await import('./projectiles.js');
   const fx = await import('./fx.js');
   const spells = await import('./spells.js');
-  H = { player, enemies, loot, proj, fx, spells };
+  const walls = await import('./walls.js');
+  const minions = await import('./minions.js');
+  const horde = await import('./horde.js');
+  H = { player, enemies, loot, proj, fx, spells, walls, minions, horde };
+}
+
+// CodeBlue lesson: if a guest ever references an entity it doesn't have (missed
+// message), self-heal by re-requesting the floor snapshot — throttled per floor.
+const healReq = new Map(); // floor -> last request time
+function requestFloorHeal(f) {
+  const fs = G.floors.get(f);
+  if (!fs || !fs.spawned || G.net.role !== 'guest') return;
+  const now = performance.now();
+  if (now - (healReq.get(f) || 0) < 5000) return;
+  healReq.set(f, now);
+  netSend({ t: 'freq', n: f });
 }
 
 export function isAuthority() { return G.net.role !== 'guest'; }
@@ -87,12 +102,14 @@ function broadcastLobby() {
   callbacks.onLobbyUpdate?.();
 }
 
-export function hostStart() {
+export function hostStart(mode = 'campaign') {
   G.net.started = true;
-  netSend({ t: 'start', seed: G.seed });
+  netSend({ t: 'start', seed: G.seed, mode });
 }
 
-// snapshot of everything that already happened on a floor
+// snapshot of everything that already happened on a floor. `ealive` carries the
+// full roster so a guest that missed any spawn message can rebuild it (CodeBlue
+// lesson: self-heal on miss instead of desyncing forever).
 function buildFstate(n) {
   const fs = floorState(n);
   return {
@@ -100,6 +117,7 @@ function buildFstate(n) {
     taken: fs.loots.filter(l => l.taken).map(l => l.id),
     dead: fs.enemies.filter(e => e.state === 'dead').map(e => e.id),
     hp: fs.enemies.filter(e => e.state !== 'dead' && e.hp < e.maxHp).map(e => [e.id, e.hp]),
+    ealive: fs.enemies.filter(e => e.state !== 'dead').map(e => [e.id, e.type, +e.obj.position.x.toFixed(1), +e.obj.position.z.toFixed(1), +e.obj.position.y.toFixed(1), e.elite ? 1 : 0]),
     summons: fs.summons,
     drops: fs.drops,
     locked: fs.grid ? fs.grid.stairsLocked : false,
@@ -149,6 +167,13 @@ function handleAsHost(conn, m) {
     }
     case 'lootReq':
       H?.loot.takeLoot(m.f, m.id, pid, true);
+      break;
+    case 'wall':
+      H?.walls.placeWall(m.f, m.cx, m.cy, { dur: m.dur, yaw: m.yaw, barricade: m.barricade, hp: m.hp, broadcast: false });
+      relay(conn, { ...m, pid });
+      break;
+    case 'hire':
+      H?.minions.spawnMinion(m.kind, pid, m.f, m.x, m.z);
       break;
     case 'pdead': {
       const p = G.net.players.get(pid);
@@ -206,7 +231,39 @@ function handleAsGuest(m) {
       break;
     case 'start':
       G.net.started = true;
-      callbacks.onStart?.(m.seed);
+      callbacks.onStart?.(m.seed, m.mode || 'campaign');
+      break;
+    case 'wall':
+      H?.walls.placeWall(m.f, m.cx, m.cy, { dur: m.dur, yaw: m.yaw, barricade: m.barricade, hp: m.hp, broadcast: false });
+      break;
+    case 'wallhp': {
+      const w = H?.walls.wallAt(m.f, m.cx, m.cy);
+      if (w) w.hp = m.hp;
+      break;
+    }
+    case 'wallbreak': {
+      const w = H?.walls.wallAt(m.f, m.cx, m.cy);
+      if (w) H.walls.breakWall(w, true);
+      break;
+    }
+    case 'mspawn':
+      if (!H?.minions.minionById(m.id)) H?.minions.spawnMinion(m.kind, m.owner, m.f, m.x, m.z, m.id, false);
+      break;
+    case 'msnap':
+      H?.minions.applyMinionSnapshot(m.list);
+      break;
+    case 'mhp': {
+      const mn = H?.minions.minionById(m.id);
+      if (mn) mn.hp = m.hp;
+      break;
+    }
+    case 'mdie': {
+      const mn = H?.minions.minionById(m.id);
+      if (mn && !mn.dead) H.minions.damageMinion(mn, mn.hp + 999, true);
+      break;
+    }
+    case 'wave':
+      H?.horde.applyWaveMsg(m);
       break;
     case 'pos':
       ensureRemote(m.pid);
@@ -234,11 +291,13 @@ function handleAsGuest(m) {
     case 'ehp': {
       const e = H?.enemies.enemyById(m.f, m.id);
       if (e) e.hp = m.hp;
+      else requestFloorHeal(m.f);
       break;
     }
     case 'estate': {
       const e = H?.enemies.enemyById(m.f, m.id);
       if (e) H.enemies.setEnemyState(e, m.s, true);
+      else requestFloorHeal(m.f);
       break;
     }
     case 'esnap': {
@@ -247,12 +306,14 @@ function handleAsGuest(m) {
       for (const s of m.list) {
         const e = fs.enemies.find(en => en.id === s[0]);
         if (e) { e.netX = s[1]; e.netZ = s[2]; e.netYaw = s[3]; e.hp = s[4]; e.netY = s[5] || 0; }
+        else requestFloorHeal(m.f);
       }
       break;
     }
     case 'edie': {
       const e = H?.enemies.enemyById(m.f, m.id);
       if (e) H.enemies.killEnemy(e, m.by === myId() ? 'local' : 'remote', true);
+      else requestFloorHeal(m.f);
       break;
     }
     case 'espawn': {
@@ -324,6 +385,8 @@ export function updateNet(dt) {
     }
     if (list.length) netSend({ t: 'esnap', f, list });
   }
+  const mlist = H?.minions.minionSnapshot();
+  if (mlist?.length) netSend({ t: 'msnap', list: mlist });
 }
 
 export function shutdownNet() {

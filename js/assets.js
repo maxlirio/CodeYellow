@@ -19,7 +19,7 @@ const DUNGEON_PIECES = [
   'chest', 'chest_gold', 'key', 'coin', 'coin_stack_small', 'coin_stack_medium', 'coin_stack_large',
   'barrel_large', 'barrel_small', 'box_small', 'box_large', 'crates_stacked', 'table_medium', 'chair',
   'banner_patternA_red', 'banner_patternA_blue', 'bottle_A_green', 'bottle_A_brown', 'bottle_B_brown',
-  'candle_lit', 'candle_triple', 'floor_tile_big_spikes', 'shelf_small', 'keyring',
+  'candle_lit', 'candle_triple', 'floor_tile_big_spikes', 'floor_tile_grate', 'shelf_small', 'keyring',
 ];
 
 export async function loadAll(onProgress) {

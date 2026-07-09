@@ -10,6 +10,12 @@ A 3D co-op dungeon crawler that runs entirely in the browser. No build step, no 
 
 A **first-person roguelike** crawl through 9 procedurally generated floors — destroy **the Bone King** on floor 9. Bosses guard floors 3, 6 and 9; the way down stays locked until they fall. After floor 9, keep going in endless mode. **Every floor rolls its own identity**, so no two runs feel alike.
 
+You start above ground in **Emberlight Village** — a walled town with enterable shop buildings (Blacksmith, Alchemist, Arcanum, and the Cracked Flagon tavern), NPC keepers, and the dungeon gate in the north wall. Every staircase offers a choice: press deeper, or **return to town** to spend your gold. The tavern's notice board lists **public games** you can join with one click — and hosts can list theirs (peer-to-peer, no backend: the first tavern visitor's tab serves the board).
+
+**Two game modes**: the ⚔ **Campaign** above, or 🏰 **Last Stand** — an arena horde mode where waves pour through four gates, you build destructible barricades (B), hire sellsword/marksman mercenaries (H) who fight beside you, and see how many waves you survive.
+
+You can *see* yourself fight now — your equipped weapon is in-hand Minecraft-style with slash/recoil/cast animations, walk bob, and mouse sway. Dungeons also grew **swinging ropes** (grab with E, pump with W, release with Space to fly), a **Bone Wall** spell every class can roll (raise a wall so monsters can't get you), and traps are now **pressure plates** — a click, a beat, then spikes: dodge off in time.
+
 - **7 floor themes** — the Crypts, Rotten Cellars, Drowned Deep, Silent Ossuary, Ember Forge, Frostbound Halls, Rat Warrens: each with its own fog, lighting, torch color, floor tiles, props, and monster mix
 - **4 layout generators** — classic rooms & corridors, cramped trap-riddled warrens, organic caverns grown by cellular automata, and vast pillared great halls
 - **Floor mutators** — INFESTED, CURSED, TREASURE VAULT, HAUNTED, SWIFT DEATH, PITCH DARK: random modifiers announced as you descend

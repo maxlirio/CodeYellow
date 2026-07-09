@@ -14,6 +14,8 @@ import { addMsg, showBossBar, updateBossBar, hideBossBar } from './ui.js';
 import { damageLocalPlayer, gainXp, notifyHit } from './player.js';
 import { rollAnyItem } from './items.js';
 import { dropItemLoot } from './loot.js';
+import { minionTargetsOnFloor, damageMinion } from './minions.js';
+import { wallAt, damageWall } from './walls.js';
 
 export function spawnEnemiesForFloor(fs) {
   if (fs.spawned) return;
@@ -61,11 +63,12 @@ export function spawnEnemy(fs, type, x, z, { y = 0, elite = false, id = null } =
   return e;
 }
 
-// players (me + remotes) standing on a given floor
+// players (me + remotes) standing on a given floor — plus their mercenaries
 export function playersOnFloor(n) {
   const list = [];
   if (G.player && !G.player.dead && G.floor === n) list.push({ pos: G.player.obj.position, id: 'me' });
   for (const [pid, r] of G.remotes) if (!r.dead && r.floor === n) list.push({ pos: r.obj.position, id: pid });
+  list.push(...minionTargetsOnFloor(n));
   return list;
 }
 
@@ -201,7 +204,30 @@ function simulateEnemy(e, fs, players, dt, mine) {
         const od = Math.hypot(ox, oz);
         if (od < 1.4 && od > 0.01) { mx += (ox / od) * dt * 2.5; mz += (oz / od) * dt * 2.5; }
       }
+      const beforeX = e.obj.position.x, beforeZ = e.obj.position.z;
       moveWithCollision(e.obj.position, mx, mz, 0.5 * e.scale, { y: e.obj.position.y, ghost: e.ghost, grid });
+      // blocked by a barricade? smash through it
+      if (!e.ghost) {
+        const moved = Math.hypot(e.obj.position.x - beforeX, e.obj.position.z - beforeZ);
+        if (moved < speed * dt * 0.25) {
+          e.blockT = (e.blockT || 0) + dt;
+          if (e.blockT > 0.7) {
+            const cx = Math.round((e.obj.position.x + (dx / d) * 3) / 4);
+            const cy = Math.round((e.obj.position.z + (dz / d) * 3) / 4);
+            const w = wallAt(e.floor, cx, cy) ||
+              wallAt(e.floor, Math.round(e.obj.position.x / 4) + Math.sign(Math.round(dx)), Math.round(e.obj.position.z / 4)) ||
+              wallAt(e.floor, Math.round(e.obj.position.x / 4), Math.round(e.obj.position.z / 4) + Math.sign(Math.round(dz)));
+            if (w) {
+              e.blockT = 0;
+              setEnemyState(e, 'attack');
+              e.attackFired = true; // the swing hits the wall, not a player
+              damageWall(w, Math.round(e.dmg * 0.8));
+            }
+          }
+        } else {
+          e.blockT = 0;
+        }
+      }
       break;
     }
     case 'attack': {
@@ -209,7 +235,9 @@ function simulateEnemy(e, fs, players, dt, mine) {
       const hitMoment = e.cfg.attackTime * 0.55;
       if (!e.attackFired && e.stateT > hitMoment) {
         e.attackFired = true;
-        if (e.cfg.ranged && t) {
+        if (e.cfg.ranged && t?.minion) {
+          damageMinion(t.minion, e.dmg); // arrows find mercenaries directly
+        } else if (e.cfg.ranged && t) {
           const from = e.obj.position.clone().setY(e.obj.position.y + 1.6 * e.scale);
           const to = new THREE.Vector3(t.pos.x, t.pos.y + 1.3, t.pos.z);
           const dir = to.sub(from).normalize();
@@ -224,7 +252,8 @@ function simulateEnemy(e, fs, players, dt, mine) {
           netSend({ t: 'ebolt', f: e.floor, b: bolt });
         } else if (t && t.dist < e.cfg.range + 0.6 && dy3 < 2) {
           const fx = e.cfg.plague ? { poison: { dps: e.cfg.plague.dps + Math.floor(e.floor / 2), dur: e.cfg.plague.dur } } : null;
-          if (t.id === 'me') damageLocalPlayer(e.dmg, fx);
+          if (t.minion) damageMinion(t.minion, e.dmg);
+          else if (t.id === 'me') damageLocalPlayer(e.dmg, fx);
           else netSend({ t: 'phit', target: t.id, dmg: e.dmg, fx });
         }
       }
