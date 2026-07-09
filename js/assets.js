@@ -7,6 +7,8 @@ import { WEAPON_MESHES, CAPE_COLORS } from './config.js';
 
 const CHAR_MODELS = ['Knight', 'Mage', 'Rogue', 'Rogue_Hooded', 'Barbarian'];
 const ENEMY_MODELS = ['Skeleton_Minion', 'Skeleton_Warrior', 'Skeleton_Rogue', 'Skeleton_Mage'];
+// Quaternius Ultimate Monsters (CC0) — same low-poly big-head style as KayKit
+const MONSTER_MODELS = ['Orc', 'Goblin', 'Ogre', 'Imp', 'MushroomKing', 'Slime', 'Glub', 'Drake', 'Dragon'];
 const WEAPON_MODELS = ['sword_1handed', 'sword_2handed', 'axe_1handed', 'axe_2handed', 'dagger', 'staff', 'wand', 'shield_round', 'shield_badge', 'shield_spikes', 'crossbow_1handed', 'crossbow_2handed', 'arrow'];
 // village assets (KayKit Medieval Hexagon / Halloween / Furniture packs, CC0)
 const TOWN_PIECES = {
@@ -46,6 +48,7 @@ export async function loadAll(onProgress) {
   const assets = { char: {}, enemy: {}, piece: {}, weapon: {} };
   for (const m of CHAR_MODELS) jobs.push(load(`assets/characters/${m}.glb`).then(g => assets.char[m] = g));
   for (const m of ENEMY_MODELS) jobs.push(load(`assets/enemies/${m}.glb`).then(g => assets.enemy[m] = g));
+  for (const m of MONSTER_MODELS) jobs.push(load(`assets/monsters/${m}.glb`).then(g => assets.enemy[m] = g));
   for (const p of DUNGEON_PIECES) jobs.push(load(`assets/dungeon/${p}.glb`).then(g => assets.piece[p] = g));
   for (const [key, file] of Object.entries(TOWN_PIECES)) jobs.push(load(`assets/town/${file}.gltf`).then(g => assets.piece[key] = g));
   for (const w of WEAPON_MODELS) jobs.push(load(`assets/weapons/${w}.gltf`).then(g => assets.weapon[w] = g));

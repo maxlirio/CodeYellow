@@ -321,7 +321,7 @@ function startRun(seed, mode = 'campaign') {
   } else {
     setLocalFloor(0);
     addMsg('Welcome to Emberlight Village. The dungeon gate is in the north wall.', 'gold');
-    addMsg('Visit the shops — then descend and destroy the Bone King on floor 9.');
+    addMsg('Visit the shops — then descend and slay the dragon Emberwing on floor 9.');
   }
   spawnRemoteAvatars();
   refreshRemoteVisibility();

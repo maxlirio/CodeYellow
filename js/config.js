@@ -151,6 +151,11 @@ export const TRINKET_STATS = [
 ];
 
 // ---------------- enemies ----------------
+// animation-name maps for the Quaternius monster rigs (KayKit rigs use defaults)
+const QA = 'CharacterArmature|';
+export const ANIM_GROUND = { idle: QA + 'Idle', walk: QA + 'Walk', run: QA + 'Run', attack: [QA + 'Punch', QA + 'Weapon'], hit: QA + 'HitReact', death: QA + 'Death' };
+export const ANIM_CRITTER = { idle: QA + 'Idle', walk: QA + 'Walk', run: QA + 'Walk', attack: [QA + 'Bite_Front'], hit: QA + 'HitRecieve', death: QA + 'Death' };
+export const ANIM_FLYER = { idle: QA + 'Flying_Idle', walk: QA + 'Fast_Flying', run: QA + 'Fast_Flying', attack: [QA + 'Headbutt', QA + 'Punch'], hit: QA + 'HitReact', death: QA + 'Death' };
 export const ENEMIES = {
   minion:   { model: 'Skeleton_Minion',  hp: 32, dmg: 9,  speed: 4.8, range: 2.2, xp: 12, gold: [2, 7],  attackTime: 0.9, aggro: 11, scale: 1 },
   rogue:    { model: 'Skeleton_Rogue',   hp: 26, dmg: 7,  speed: 6.6, range: 2.1, xp: 15, gold: [3, 8],  attackTime: 0.7, aggro: 13, scale: 1 },
@@ -166,21 +171,32 @@ export const ENEMIES = {
   plaguebearer:{ model: 'Skeleton_Minion', hp: 38, dmg: 8, speed: 4.4, range: 2.2, xp: 38, gold: [9, 17], attackTime: 0.95, aggro: 12, scale: 1.05, tint: 0x66aa44, plague: { dps: 4, dur: 4 }, deathCloud: 3.2 },
   sniper:   { model: 'Skeleton_Rogue',   hp: 26, dmg: 13, speed: 4.5, range: 18,  xp: 34, gold: [8, 15], attackTime: 1.7, aggro: 20, scale: 1, ranged: true, tint: 0xccbb88, boltSpeed: 24, heldModel: 'crossbow_1handed', boltVis: 'arrow' },
   brute:    { model: 'Skeleton_Minion',  hp: 55, dmg: 15, speed: 4.0, range: 2.4, xp: 30, gold: [7, 14], attackTime: 1.1, aggro: 11, scale: 1.3, tint: 0xcc9966, kbHit: 7 },
+  // ---- the greenskin & monster menagerie (Quaternius rigs) ----
+  goblin:   { model: 'Goblin', hp: 20, dmg: 6, speed: 6.8, range: 1.9, xp: 10, gold: [2, 5], attackTime: 0.7, aggro: 13, scale: 0.55, animMap: 'critter', trio: true },
+  orcwar:   { model: 'Orc', hp: 55, dmg: 13, speed: 5.2, range: 2.4, xp: 26, gold: [6, 12], attackTime: 0.95, aggro: 12, scale: 0.8, animMap: 'ground' },
+  ogre:     { model: 'Ogre', hp: 140, dmg: 24, speed: 3.4, range: 2.9, xp: 60, gold: [15, 28], attackTime: 1.5, aggro: 11, scale: 1.3, animMap: 'ground', stalwart: true, kbHit: 8 },
+  imp:      { model: 'Imp', hp: 30, dmg: 10, speed: 5.5, range: 9, xp: 28, gold: [7, 13], attackTime: 1.3, aggro: 15, scale: 0.55, animMap: 'flyer', fly: true, ranged: true, boltVis: 'wisp' },
+  slime:    { model: 'Slime', hp: 40, dmg: 8, speed: 3.4, range: 2.0, xp: 24, gold: [5, 10], attackTime: 1.0, aggro: 11, scale: 0.7, animMap: 'critter', splitInto: 'slimelet' },
+  slimelet: { model: 'Slime', hp: 14, dmg: 5, speed: 5.4, range: 1.7, xp: 8, gold: [1, 3], attackTime: 0.8, aggro: 14, scale: 0.4, animMap: 'critter' },
+  glub:     { model: 'Glub', hp: 34, dmg: 11, speed: 4.6, range: 2.2, xp: 30, gold: [8, 14], attackTime: 1.0, aggro: 15, scale: 0.62, animMap: 'flyer', fly: true },
+  drake:    { model: 'Drake', hp: 90, dmg: 18, speed: 6.0, range: 10, xp: 70, gold: [20, 35], attackTime: 1.4, aggro: 18, scale: 1.0, animMap: 'flyer', fly: true, ranged: true, boltVis: 'fireball', boltSpeed: 15 },
   // bosses (floor 3/6 rolls one archetype; floor 9 is always the Bone King)
   boss:     { model: 'Skeleton_Warrior', hp: 380, dmg: 22, speed: 4.6, range: 3.4, xp: 170, gold: [60, 90], attackTime: 1.1, aggro: 30, scale: 1.65, boss: true, bossName: 'GRAVEBOUND CHAMPION', stalwart: true },
   necrolord:{ model: 'Skeleton_Mage',    hp: 300, dmg: 18, speed: 3.8, range: 15, xp: 180, gold: [60, 95], attackTime: 1.3, aggro: 30, scale: 1.6, boss: true, ranged: true, tint: 0xbb66ff, summons: true, summonEvery: 8, summonType: 'minion', summonCount: 2, bossName: 'THE NECROLORD', bossMsg: 'raises the dead' },
   reaper:   { model: 'Skeleton_Rogue',   hp: 320, dmg: 20, speed: 6.8, range: 2.8, xp: 180, gold: [60, 95], attackTime: 0.6, aggro: 32, scale: 1.55, boss: true, ghost: true, tint: 0x223344, bossName: 'THE PALE REAPER' },
   boneking: { model: 'Skeleton_Mage',    hp: 620, dmg: 26, speed: 4.2, range: 16,  xp: 420, gold: [150, 220], attackTime: 1.3, aggro: 40, scale: 1.9, ranged: true, boss: true, summons: true, summonEvery: 9, summonType: 'minion', summonCount: 2, bossName: 'THE BONE KING' },
+  mushking: { model: 'MushroomKing', hp: 350, dmg: 20, speed: 4.4, range: 3.0, xp: 190, gold: [70, 100], attackTime: 1.2, aggro: 30, scale: 1.35, animMap: 'ground', boss: true, stalwart: true, summons: true, summonEvery: 10, summonType: 'slimelet', summonCount: 3, bossName: 'THE MYCELIC KING', bossMsg: 'spawns spores' },
+  dragon:   { model: 'Dragon', hp: 1500, dmg: 22, speed: 7, range: 30, xp: 800, gold: [300, 420], attackTime: 1.2, aggro: 60, scale: 2.8, animMap: 'flyer', boss: true, dragon: true, stalwart: true, bossName: 'EMBERWING THE UNDYING' },
 };
-export const MIDBOSS_TYPES = ['boss', 'necrolord', 'reaper'];
+export const MIDBOSS_TYPES = ['boss', 'necrolord', 'reaper', 'mushking', 'boneking'];
 
 // base pool per floor band; themes then bias it
 export function enemyPool(floor) {
-  if (floor === 1) return ['minion', 'minion', 'minion', 'rogue'];
-  if (floor === 2) return ['minion', 'minion', 'rogue', 'warrior', 'bomber'];
-  if (floor <= 4) return ['minion', 'minion', 'rogue', 'warrior', 'mage', 'bomber', 'ghost', 'brute'];
-  if (floor <= 6) return ['minion', 'rogue', 'rogue', 'warrior', 'warrior', 'mage', 'bomber', 'frostmage', 'ghost', 'brute', 'berserker', 'sniper', 'plaguebearer'];
-  return ['rogue', 'rogue', 'warrior', 'warrior', 'mage', 'mage', 'bomber', 'bomber', 'frostmage', 'ghost', 'ghost', 'berserker', 'juggernaut', 'plaguebearer', 'sniper', 'necromancer', 'shade', 'brute'];
+  if (floor === 1) return ['minion', 'minion', 'goblin', 'goblin', 'rogue'];
+  if (floor === 2) return ['minion', 'goblin', 'rogue', 'warrior', 'bomber', 'slime', 'orcwar'];
+  if (floor <= 4) return ['minion', 'goblin', 'rogue', 'warrior', 'mage', 'bomber', 'ghost', 'brute', 'orcwar', 'slime', 'imp'];
+  if (floor <= 6) return ['minion', 'goblin', 'rogue', 'warrior', 'warrior', 'mage', 'bomber', 'frostmage', 'ghost', 'brute', 'berserker', 'sniper', 'plaguebearer', 'orcwar', 'orcwar', 'imp', 'ogre'];
+  return ['rogue', 'warrior', 'warrior', 'mage', 'mage', 'bomber', 'frostmage', 'ghost', 'berserker', 'juggernaut', 'plaguebearer', 'sniper', 'necromancer', 'shade', 'brute', 'orcwar', 'ogre', 'imp', 'drake', 'glub'];
 }
 export const ARCHERS = ['mage', 'frostmage', 'sniper', 'sniper'];
 export const eliteChance = (floor) => Math.min(0.25, 0.04 + floor * 0.025);
@@ -204,7 +220,7 @@ export const THEMES = [
     tiles: ['floor_wood_large', 'floor_wood_large', 'floor_wood_small', 'floor_wood_large_dark', 'floor_wood_small_dark'],
     props: ['barrel_large', 'barrel_small', 'crates_stacked', 'box_large', 'box_small', 'table_medium'],
     banners: ['banner_patternA_red'],
-    bias: ['rogue', 'berserker', 'brute'],
+    bias: ['rogue', 'berserker', 'goblin', 'goblin', 'orcwar'],
   },
   {
     id: 'drowned', name: 'The Drowned Deep', fog: 0x061210, density: 0.038,
@@ -212,7 +228,7 @@ export const THEMES = [
     tiles: ['floor_tile_large', 'floor_tile_small_weeds_A', 'floor_tile_small_weeds_B', 'floor_tile_small_weeds_A', 'floor_tile_large_rocks'],
     props: ['barrel_large', 'box_small', 'shelf_small'],
     banners: ['banner_patternA_blue'],
-    bias: ['ghost', 'plaguebearer', 'shade'],
+    bias: ['ghost', 'plaguebearer', 'slime', 'slime', 'glub'],
   },
   {
     id: 'ossuary', name: 'The Silent Ossuary', fog: 0x14121a, density: 0.026,
@@ -228,7 +244,7 @@ export const THEMES = [
     tiles: ['floor_tile_large', 'floor_tile_large_rocks', 'floor_dirt_large_rocky', 'floor_tile_small_broken_A', 'floor_tile_small_broken_B'],
     props: ['crates_stacked', 'box_large', 'barrel_large'],
     banners: ['banner_patternA_red'],
-    bias: ['bomber', 'bomber', 'berserker', 'juggernaut'],
+    bias: ['bomber', 'berserker', 'imp', 'imp', 'ogre'],
   },
   {
     id: 'frozen', name: 'The Frostbound Halls', fog: 0x0a1018, density: 0.030,
@@ -243,7 +259,7 @@ export const THEMES = [
     hemi: 0xaa9977, amb: 0x443b2a, torch: 0xffb066,
     tiles: ['floor_dirt_large', 'floor_dirt_small_A', 'floor_dirt_small_B', 'floor_dirt_small_C', 'floor_dirt_small_D', 'floor_dirt_large_rocky'],
     props: ['barrel_small', 'box_small', 'crates_stacked'],
-    bias: ['minion', 'minion', 'rogue', 'bomber'],
+    bias: ['goblin', 'goblin', 'goblin', 'orcwar'],
     banners: [],
   },
 ];

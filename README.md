@@ -1,4 +1,4 @@
-# CodeOrange — Depths of the Bone King
+# CodeOrange — Wrath of Emberwing
 
 A 3D co-op dungeon crawler that runs entirely in the browser. No build step, no backend.
 
@@ -8,7 +8,7 @@ A 3D co-op dungeon crawler that runs entirely in the browser. No build step, no 
 
 ## The game
 
-A **first-person roguelike** crawl through 9 procedurally generated floors — destroy **the Bone King** on floor 9. Bosses guard floors 3, 6 and 9; the way down stays locked until they fall. After floor 9, keep going in endless mode. **Every floor rolls its own identity**, so no two runs feel alike.
+A **first-person roguelike** crawl through 9 procedurally generated floors — slay **Emberwing the Undying**, the dragon on floor 9. She is no chase-bot: she circles her lair on the wing, rakes telegraphed lines of dragonfire across the ground, volleys fireballs, dives to maul whoever she hates most (threat-based targeting — hurt her and she remembers), hurls clustered heroes away with wing gusts, and at low health calls down meteors and summons winged imps. Bosses guard floors 3, 6 and 9; the way down stays locked until they fall. After floor 9, keep going in endless mode. **Every floor rolls its own identity**, so no two runs feel alike.
 
 You start above ground in **Emberlight Village** — a real walled village — timber-and-plaster houses with roofs, a barrel-shaped tavern, a windmill, pine trees, market stalls, a well, lantern-lit dirt paths — with four shops you enter through their doors, each staffed by a uniquely-skinned keeper. Every staircase offers a choice: press deeper, or **return to town** to spend your gold. The tavern's notice board lists **public games** you can join with one click — and hosts can list theirs (peer-to-peer, no backend: the first tavern visitor's tab serves the board).
 
@@ -22,7 +22,7 @@ You can *see* yourself fight now — your equipped weapon is in-hand Minecraft-s
 - **4 classes × 6-spell schools, dealt 3 per run** — your loadout is random every run (24 spells total: fireballs, meteors called onto your crosshair, chain lightning, piercing arcane orbs, blizzards, whirlwinds, savage leaps, smoke bombs, death marks, consecrated ground, bulwarks, bloodlust…). The merchant's Spell Tome rerolls a slot mid-run.
 - **First-person combat** — crosshair that flares on targets, **Shift to aim** (FOV zoom, steadier shots), dodge dash with i-frames, hit markers, crits, knockback, slows, poison, burns
 - **Verticality** — climbable staircases lead to railed platforms, central islands with twin stairs, and wall balconies where skeleton archers guard treasure
-- **17 monster types** — minions, rogues, warriors, mages, exploding bombers, frost mages, ghosts, dark shades, necromancers that raise the dead mid-fight, berserkers that frenzy at low HP, unstoppable juggernauts, plaguebearers that burst into poison clouds, snipers, brutes, elite champions — and boss floors roll the Gravebound Champion, the Necrolord, or the Pale Reaper
+- **26 monster types** — the skeleton legion (minions, rogues, warriors, mages, exploding bombers, frost mages, ghosts, dark shades, necromancers that raise the dead mid-fight, berserkers, juggernauts, plaguebearers, snipers, brutes) plus a living bestiary: **goblins** that hunt in packs of three, **orc warriors**, **ogres** whose club sends you flying, fire-spitting **imps** and **drakes** on the wing, gliding **glubs**, and **slimes** that split when killed — mid-boss floors roll the Gravebound Champion, the Necrolord, the Pale Reaper, the Mycelic King (a spore-spawning mushroom tyrant), or the Bone King
 - **Equipment & inventory (Tab)** — weapon / offhand / two trinket slots plus a 12-slot bag. Drops in 5 rarity tiers with **affixes** (Flaming, Frostbound, Vampiric, Swift, Brutal). Rogues can find **crossbows** that turn their basic attack ranged; mages can find fast-casting wands. Right-click to salvage for gold.
 - **Appearance customization** — helmet/hood and cape toggles plus six cape colors, with a live 3D preview in the menu; your look syncs to co-op teammates
 - **Loot & economy** — coins, chests, potions, a locked golden chest per floor (find the key), equipment drops from elites/bosses, and the Bone Merchant between floors
@@ -67,5 +67,6 @@ Debug hooks: `?auto=1&seed=myseed` auto-starts a solo run with a fixed dungeon s
 ## Credits
 
 - **Models & animations:** [KayKit](https://kaylousberg.com) — Dungeon Remastered, Adventurers, and Skeletons packs (CC0)
+- **Monsters & dragon:** [Quaternius](https://quaternius.com) — Ultimate Monsters pack (CC0)
 - **Engine:** [three.js](https://threejs.org) · **Networking:** [PeerJS](https://peerjs.com)
 - Built with Claude Code

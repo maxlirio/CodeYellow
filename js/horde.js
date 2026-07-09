@@ -22,10 +22,10 @@ export function startHorde() {
 export function stopHorde() { horde.active = false; }
 
 function wavePool(w) {
-  if (w <= 2) return ['minion', 'minion', 'rogue'];
-  if (w <= 5) return ['minion', 'rogue', 'warrior', 'bomber'];
-  if (w <= 8) return ['minion', 'rogue', 'warrior', 'bomber', 'mage', 'ghost', 'brute'];
-  return ['rogue', 'warrior', 'bomber', 'mage', 'ghost', 'berserker', 'plaguebearer', 'sniper', 'juggernaut', 'shade'];
+  if (w <= 2) return ['minion', 'minion', 'goblin', 'rogue'];
+  if (w <= 5) return ['minion', 'goblin', 'rogue', 'warrior', 'bomber', 'slime'];
+  if (w <= 8) return ['minion', 'rogue', 'warrior', 'orcwar', 'bomber', 'mage', 'ghost', 'brute', 'imp'];
+  return ['rogue', 'warrior', 'orcwar', 'bomber', 'mage', 'ghost', 'berserker', 'plaguebearer', 'sniper', 'juggernaut', 'shade', 'ogre', 'imp', 'drake'];
 }
 
 function spawnWave() {

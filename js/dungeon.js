@@ -10,6 +10,8 @@ import {
   THEMES, MUTATORS, MUTATOR_CHANCE, MIDBOSS_TYPES,
 } from './config.js';
 import { buildMergedStatic } from './assets.js';
+import { ENEMIES } from './config.js';
+const ENEMIES_TRIO = new Set(Object.keys(ENEMIES).filter(k => ENEMIES[k].trio));
 
 export const SOLID = 0, FLOOR = 1, STAIRS = 3, TRAP = 4, OBSTACLE = 5, RAMP = 6;
 
@@ -184,11 +186,12 @@ export function generateFloorData(seedStr, floor) {
 
   const theme = themeFor(seedStr, floor);
   const isBossFloor = !!BOSS_FLOORS[floor] || (floor > 9 && floor % 3 === 0);
-  const bossType = !isBossFloor ? null : floor >= 9 && floor % 9 === 0 ? 'boneking' : floor === 9 ? 'boneking' : rng.pick(MIDBOSS_TYPES);
+  const bossType = !isBossFloor ? null : floor >= 9 && floor % 9 === 0 ? 'dragon' : rng.pick(MIDBOSS_TYPES);
   const mutator = rng.chance(MUTATOR_CHANCE) && floor > 1 ? rng.pick(MUTATORS) : null;
 
   // layout
   let layoutId = floor === 1 ? 'rooms'
+    : floor % 9 === 0 ? 'hall' // the dragon needs a lair with wingspan
     : isBossFloor && rng.chance(0.5) ? 'hall'
     : rng.pick(['rooms', 'rooms', 'warrens', 'cavern', 'hall']);
   let carved = null;
@@ -476,8 +479,16 @@ export function generateFloorData(seedStr, floor) {
     }
   }
   if (isBossFloor) {
-    enemySpawns.push({ type: bossType, x: exitRoom.cx * CELL, z: exitRoom.cy * CELL, y: 0 });
+    enemySpawns.push({ type: bossType, x: exitRoom.cx * CELL, z: exitRoom.cy * CELL, y: bossType === 'dragon' ? 6 : 0 });
   }
+  // goblins hunt in packs of three
+  const packSpawns = [];
+  for (const s of enemySpawns) {
+    if (ENEMIES_TRIO.has(s.type)) {
+      for (let i = 0; i < 2; i++) packSpawns.push({ ...s, x: s.x + rng.next() * 3 - 1.5, z: s.z + rng.next() * 3 - 1.5, elite: false });
+    }
+  }
+  enemySpawns.push(...packSpawns);
 
   // ---- loot spawns ----
   const lootSpawns = [];
