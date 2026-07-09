@@ -213,13 +213,18 @@ export function generateFloorData(seedStr, floor) {
     if (d > bestD) { bestD = d; exitRoom = r; }
   }
 
-  // ---- hall colonnades ----
+  // ---- hall colonnades (precise pillar colliders, not whole cells) ----
+  const colliders = [];
+  const hallPillars = [];
   if (carved.halls) {
     for (const r of rooms) {
       if (r.w < 9 || r.h < 9) continue;
       for (let y = r.y + 2; y < r.y + r.h - 2; y += 3) {
         for (let x = r.x + 2; x < r.x + r.w - 2; x += 3) {
-          if (at(x, y) === FLOOR && rng.chance(0.8)) set(x, y, OBSTACLE); // pillar placed later
+          if (at(x, y) === FLOOR && rng.chance(0.8)) {
+            hallPillars.push({ x, y });
+            colliders.push({ x: x * CELL, z: y * CELL, r: 0.85 });
+          }
         }
       }
     }
@@ -327,9 +332,6 @@ export function generateFloorData(seedStr, floor) {
       place('floor_tile_grate', wx, 0.03, wz, 0, 1.6);
     } else if (c === RAMP) {
       place('floor_tile_large', wx, 0, wz);
-    } else if (c === OBSTACLE && carved.halls) {
-      placeFloorTile(wx, wz);
-      place(rng.chance(0.4) ? 'pillar_decorated' : 'pillar', wx, 0, wz);
     } else {
       placeFloorTile(wx, wz);
     }
@@ -360,6 +362,11 @@ export function generateFloorData(seedStr, floor) {
     }
   }
 
+  // hall colonnade pillar visuals
+  for (const hp of hallPillars) {
+    place(rng.chance(0.4) ? 'pillar_decorated' : 'pillar', hp.x * CELL, 0, hp.y * CELL);
+  }
+
   // ---- platform decks, rails, stairs, supports ----
   for (const p of platforms) {
     const isPlat = (x, y) => x >= 0 && y >= 0 && x < w && y < h && elev[idxOf(x, y)] === 1;
@@ -376,7 +383,7 @@ export function generateFloorData(seedStr, floor) {
         const exposed = wallDirs.some(d => { const nx = c.x + d.dx, ny = c.y + d.dy; return !isPlat(nx, ny) && (nx < 0 || ny < 0 || nx >= w || ny >= h ? false : at(nx, ny) !== SOLID); });
         if (exposed && at(c.x, c.y) === FLOOR) {
           place('pillar', c.x * CELL, 0, c.y * CELL);
-          set(c.x, c.y, OBSTACLE);
+          colliders.push({ x: c.x * CELL, z: c.y * CELL, r: 0.85 });
         }
       }
     });
@@ -386,7 +393,11 @@ export function generateFloorData(seedStr, floor) {
     }
   }
 
-  // ---- props ----
+  // ---- props (precise colliders sized to each model, not whole cells) ----
+  const PROP_RADIUS = {
+    barrel_large: 0.85, barrel_small: 0.5, box_small: 0.65, box_large: 1.05,
+    crates_stacked: 1.2, table_medium: 1.3, chair: 0.45, shelf_small: 0.85,
+  };
   const props = [];
   const propAt = (x, y) => props.find(p => p.cx === x && p.cy === y);
   for (const r of rooms) {
@@ -402,14 +413,14 @@ export function generateFloorData(seedStr, floor) {
       const yaw = rng.int(0, 3) * Math.PI / 2;
       place(kind, x * CELL, 0, y * CELL, yaw);
       if (kind === 'table_medium' && rng.chance(0.8)) place(rng.pick(['candle_lit', 'candle_triple', 'bottle_A_brown', 'bottle_B_brown']), x * CELL, 1.05, y * CELL, rng.next() * Math.PI * 2);
-      set(x, y, OBSTACLE);
+      colliders.push({ x: x * CELL, z: y * CELL, r: PROP_RADIUS[kind] ?? 0.8 });
       props.push({ cx: x, cy: y });
     }
     if (!isCavern && !carved.halls && r.w >= 6 && r.h >= 6) {
       for (const [px, py] of [[r.x + 1, r.y + 1], [r.x + r.w - 2, r.y + 1], [r.x + 1, r.y + r.h - 2], [r.x + r.w - 2, r.y + r.h - 2]]) {
         if (rng.chance(0.55) && at(px, py) === FLOOR && !propAt(px, py) && !elev[idxOf(px, py)]) {
           place(rng.chance(0.3) ? 'pillar_decorated' : 'pillar', px * CELL, 0, py * CELL);
-          set(px, py, OBSTACLE);
+          colliders.push({ x: px * CELL, z: py * CELL, r: 0.85 });
           props.push({ cx: px, cy: py });
         }
       }
@@ -513,7 +524,7 @@ export function generateFloorData(seedStr, floor) {
   }
 
   const grid = {
-    w, h, cells, elev, ramps, rooms,
+    w, h, cells, elev, ramps, rooms, colliders,
     spawn: { x: spawnRoom.cx * CELL, z: spawnRoom.cy * CELL },
     stairs: { x: portal.x * CELL, z: portal.y * CELL, cx: portal.x, cy: portal.y },
     stairsLocked: isBossFloor,
@@ -530,6 +541,16 @@ export function generateFloorData(seedStr, floor) {
 export function buildFloorMeshes(fs) {
   if (fs.built) return;
   const group = buildMergedStatic(fs.placements);
+  if (fs.grid.town) {
+    // grass under the whole village
+    const lawn = new THREE.Mesh(
+      new THREE.PlaneGeometry(fs.grid.w * CELL + 8, fs.grid.h * CELL + 8),
+      new THREE.MeshStandardMaterial({ color: 0x55803e, roughness: 1 })
+    );
+    lawn.rotation.x = -Math.PI / 2;
+    lawn.position.set((fs.grid.w * CELL) / 2 - 2, -0.03, (fs.grid.h * CELL) / 2 - 2);
+    group.add(lawn);
+  }
   const { stairs, portal } = fs.grid;
   const glow = new THREE.Mesh(
     new THREE.PlaneGeometry(2.6, 3.4),
@@ -600,7 +621,16 @@ export function moveWithCollision(pos, dx, dz, radius = 0.55, opts = {}) {
       [nx + radius * 0.7, nz + radius * 0.7], [nx - radius * 0.7, nz + radius * 0.7],
       [nx + radius * 0.7, nz - radius * 0.7], [nx - radius * 0.7, nz - radius * 0.7],
     ];
-    return checks.every(([cx, cz]) => !cellBlocked(g, cx, cz, y, ghost, ref));
+    if (!checks.every(([cx, cz]) => !cellBlocked(g, cx, cz, y, ghost, ref))) return false;
+    // precise cylinder colliders for props/trees/furniture (sized to the model)
+    if (g.colliders && !ghost && y < 3) {
+      for (const c of g.colliders) {
+        const ddx = nx - c.x, ddz = nz - c.z;
+        const rr = radius + c.r;
+        if (ddx * ddx + ddz * ddz < rr * rr) return false;
+      }
+    }
+    return true;
   };
   let x = pos.x, z = pos.z;
   if (dx !== 0 && tryAxis(x + dx, z)) x += dx;

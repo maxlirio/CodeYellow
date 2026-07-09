@@ -7,7 +7,21 @@ import { WEAPON_MESHES, CAPE_COLORS } from './config.js';
 
 const CHAR_MODELS = ['Knight', 'Mage', 'Rogue', 'Rogue_Hooded', 'Barbarian'];
 const ENEMY_MODELS = ['Skeleton_Minion', 'Skeleton_Warrior', 'Skeleton_Rogue', 'Skeleton_Mage'];
-const WEAPON_MODELS = ['sword_1handed', 'sword_2handed', 'axe_1handed', 'axe_2handed', 'dagger', 'staff', 'wand', 'shield_round', 'shield_badge', 'shield_spikes', 'crossbow_1handed', 'crossbow_2handed'];
+const WEAPON_MODELS = ['sword_1handed', 'sword_2handed', 'axe_1handed', 'axe_2handed', 'dagger', 'staff', 'wand', 'shield_round', 'shield_badge', 'shield_spikes', 'crossbow_1handed', 'crossbow_2handed', 'arrow'];
+// village assets (KayKit Medieval Hexagon / Halloween / Furniture packs, CC0)
+const TOWN_PIECES = {
+  town_home_red: 'building_home_A_red', town_home_blue: 'building_home_A_blue',
+  town_home_green: 'building_home_B_green', town_home_yellow: 'building_home_B_yellow',
+  town_home_green2: 'building_home_A_green',
+  town_blacksmith: 'building_blacksmith_red', town_tavern: 'building_tavern_yellow',
+  town_church: 'building_church_blue', town_well: 'building_well_red',
+  town_windmill: 'building_windmill_blue', town_market: 'building_market_green',
+  town_grain: 'building_grain',
+  town_tree: 'tree_single_A', town_trees: 'trees_B_medium',
+  town_fence: 'fence_wood_straight', town_fence_gate: 'fence_wood_straight_gate',
+  town_lantern: 'lantern_standing',
+  town_rug: 'rug_rectangle_A', town_cabinet: 'cabinet_medium_decorated', town_stool: 'chair_stool_wood',
+};
 const DUNGEON_PIECES = [
   'wall', 'wall_corner', 'wall_doorway', 'wall_endcap', 'wall_Tsplit', 'wall_crossing', 'wall_broken', 'wall_cracked', 'wall_gated',
   'floor_tile_large', 'floor_tile_small', 'floor_tile_small_broken_A', 'floor_tile_small_broken_B',
@@ -33,12 +47,13 @@ export async function loadAll(onProgress) {
   for (const m of CHAR_MODELS) jobs.push(load(`assets/characters/${m}.glb`).then(g => assets.char[m] = g));
   for (const m of ENEMY_MODELS) jobs.push(load(`assets/enemies/${m}.glb`).then(g => assets.enemy[m] = g));
   for (const p of DUNGEON_PIECES) jobs.push(load(`assets/dungeon/${p}.glb`).then(g => assets.piece[p] = g));
+  for (const [key, file] of Object.entries(TOWN_PIECES)) jobs.push(load(`assets/town/${file}.gltf`).then(g => assets.piece[key] = g));
   for (const w of WEAPON_MODELS) jobs.push(load(`assets/weapons/${w}.gltf`).then(g => assets.weapon[w] = g));
   await Promise.all(jobs);
 
   // Pre-bake static piece geometry (world-transform applied, attributes normalized)
   // so dungeon.js can merge thousands of placements into a handful of draw calls.
-  for (const name of DUNGEON_PIECES) {
+  for (const name of [...DUNGEON_PIECES, ...Object.keys(TOWN_PIECES)]) {
     const gltf = assets.piece[name];
     gltf.scene.updateMatrixWorld(true);
     const parts = [];

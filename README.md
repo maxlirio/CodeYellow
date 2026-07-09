@@ -10,7 +10,7 @@ A 3D co-op dungeon crawler that runs entirely in the browser. No build step, no 
 
 A **first-person roguelike** crawl through 9 procedurally generated floors — destroy **the Bone King** on floor 9. Bosses guard floors 3, 6 and 9; the way down stays locked until they fall. After floor 9, keep going in endless mode. **Every floor rolls its own identity**, so no two runs feel alike.
 
-You start above ground in **Emberlight Village** — a walled town with enterable shop buildings (Blacksmith, Alchemist, Arcanum, and the Cracked Flagon tavern), NPC keepers, and the dungeon gate in the north wall. Every staircase offers a choice: press deeper, or **return to town** to spend your gold. The tavern's notice board lists **public games** you can join with one click — and hosts can list theirs (peer-to-peer, no backend: the first tavern visitor's tab serves the board).
+You start above ground in **Emberlight Village** — a real walled village — timber-and-plaster houses with roofs, a barrel-shaped tavern, a windmill, pine trees, market stalls, a well, lantern-lit dirt paths — with four shops you enter through their doors, each staffed by a uniquely-skinned keeper. Every staircase offers a choice: press deeper, or **return to town** to spend your gold. The tavern's notice board lists **public games** you can join with one click — and hosts can list theirs (peer-to-peer, no backend: the first tavern visitor's tab serves the board).
 
 **Two game modes**: the ⚔ **Campaign** above, or 🏰 **Last Stand** — an arena horde mode where waves pour through four gates, you build destructible barricades (B), hire sellsword/marksman mercenaries (H) who fight beside you, and see how many waves you survive.
 

@@ -17,7 +17,7 @@ import { nearestChest, takeLoot, nearestItemDrop } from './loot.js';
 import { triggerSwing, setViewmodelWeapon } from './viewmodel.js';
 import { WEAPON_TYPES } from './config.js';
 import { nearestRope, grabRope, releaseRope, updateRopePhysics } from './ropes.js';
-import { nearestShopkeeper } from './town.js';
+import { nearestShopkeeper, nearestDoor, useDoor } from './town.js';
 
 const EYE = 1.62;
 const BASE_FOV = 66, AIM_FOV = 44;
@@ -58,7 +58,8 @@ export function refreshEquipVisuals() {
   if (!p) return;
   const meshes = equippedMeshes(p.classId);
   setEquipMeshes(p.obj, meshes);
-  setViewmodelWeapon(G.inv.weapon?.model || WEAPON_TYPES[p.classId][0].model);
+  const w = G.inv.weapon;
+  setViewmodelWeapon(w?.model || WEAPON_TYPES[p.classId][0].model, w?.wtype || WEAPON_TYPES[p.classId][0].id);
   p.maxHp = effectiveMaxHp();
   p.hp = Math.min(p.hp, p.maxHp);
   netSend({ t: 'equip', meshes });
@@ -68,6 +69,7 @@ export function refreshEquipVisuals() {
 export function resetPlayerForFloor() {
   const p = G.player;
   p.obj.position.set(G.grid.spawn.x, 0, G.grid.spawn.z);
+  if (G.grid.spawnYaw !== undefined) p.camYaw = G.grid.spawnYaw;
   p.vy = 0;
   p.obj.visible = false;
   if (p.dead) { p.dead = false; p.hp = Math.round(p.maxHp * 0.6); }
@@ -376,7 +378,7 @@ export function tryAttack() {
   p.attackIdx++;
   const act = p.anim.play(animName, { once: true });
   if (act) act.timeScale = act.getClip().duration / atkTime;
-  triggerSwing(G.inv.weapon?.ranged || p.cls.ranged ? 'ranged' : 'melee', atkTime * 0.9);
+  triggerSwing('attack', atkTime * 0.9);
   p.moving = false;
 }
 
@@ -413,6 +415,13 @@ function updateInteractPrompt() {
   if (rope) {
     showPrompt('<b>E</b> — Grab the rope');
     interactTarget = { kind: 'rope', rope };
+    return;
+  }
+  // town doors (street <-> shop interiors)
+  const door = nearestDoor(p.obj.position);
+  if (door) {
+    showPrompt(`<b>E</b> — ${door.label}`);
+    interactTarget = { kind: 'door', door };
     return;
   }
   // town shopkeepers & the notice board
@@ -455,6 +464,8 @@ export function tryInteract(onStairs, onShop) {
   if (!interactTarget) return;
   if (interactTarget.kind === 'rope') {
     grabRope(interactTarget.rope);
+  } else if (interactTarget.kind === 'door') {
+    useDoor(interactTarget.door);
   } else if (interactTarget.kind === 'shop') {
     onShop?.(interactTarget.shop);
   } else if (interactTarget.kind === 'stairs') {
