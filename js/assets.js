@@ -188,6 +188,44 @@ export function makePiece(name) {
 
 // A weapon/shield model instance (for ground drops & previews).
 export function makeWeaponModel(name) {
+  if (name === 'bow') return buildBowModel();
   const gltf = G.assets.weapon[name];
   return gltf ? gltf.scene.clone(true) : makePiece('key');
+}
+
+// Procedural recurve bow — no pack has one, so we build it: curved wooden limb,
+// leather grip, and a REAL string whose nock point animates when you draw.
+export function buildBowModel() {
+  const g = new THREE.Group();
+  const wood = new THREE.MeshStandardMaterial({ color: 0x7a5230, roughness: 0.85 });
+  const curve = new THREE.QuadraticBezierCurve3(
+    new THREE.Vector3(0, 0.55, 0.08),
+    new THREE.Vector3(0, 0, -0.18),
+    new THREE.Vector3(0, -0.55, 0.08)
+  );
+  g.add(new THREE.Mesh(new THREE.TubeGeometry(curve, 18, 0.026, 6), wood));
+  // limb tips
+  for (const ty of [0.55, -0.55]) {
+    const tip = new THREE.Mesh(new THREE.SphereGeometry(0.03, 6, 5), wood);
+    tip.position.set(0, ty, 0.08);
+    g.add(tip);
+  }
+  // leather grip
+  const grip = new THREE.Mesh(
+    new THREE.CylinderGeometry(0.042, 0.042, 0.18, 8),
+    new THREE.MeshStandardMaterial({ color: 0x45311e, roughness: 1 })
+  );
+  grip.position.set(0, 0, -0.155);
+  g.add(grip);
+  // the string: three vertices — top tip, NOCK (animated), bottom tip
+  const stringGeo = new THREE.BufferGeometry();
+  stringGeo.setAttribute('position', new THREE.BufferAttribute(new Float32Array([
+    0, 0.55, 0.08, 0, 0, 0.08, 0, -0.55, 0.08,
+  ]), 3));
+  const string = new THREE.Line(stringGeo, new THREE.LineBasicMaterial({ color: 0xe8e2d0 }));
+  string.frustumCulled = false;
+  g.add(string);
+  g.userData.stringGeo = stringGeo;
+  g.userData.nockRest = 0.08;
+  return g;
 }

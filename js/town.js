@@ -40,7 +40,6 @@ const HOMES = [
 ];
 
 const TREES = [[4, 4], [26, 8], [3, 9], [10, 8], [20, 8], [4, 20], [26, 22], [10, 19], [20, 19], [25, 25], [3, 25]];
-const LANTERNS = [[14, 6], [16, 11], [13, 17], [17, 20], [14, 22], [10, 12], [20, 12]];
 
 export function generateTownData() {
   const w = 30, h = 38; // rows 31+ hold the shop interiors (behind the south wall)
@@ -130,7 +129,9 @@ export function generateTownData() {
         place('wall', ex, PLATFORM_H, ez, d.yaw);
         continue;
       }
-      place('wall', ex, 0, ez, d.yaw);
+      const isExitDoor = interior && d.dy === 1 && interiors.some(r => x === r.x0 + 2 && y === 36);
+      place(isExitDoor ? 'wall_doorway' : 'wall', ex, 0, ez, d.yaw);
+      if (isExitDoor) place('town_fence_gate', ex, 0, ez - 0.3, d.yaw, 2.6); // the wooden door leaf
       if (!interior) place('wall', ex, PLATFORM_H, ez, d.yaw); // rampart is two storeys
       if (interior && (x + y) % 2 === 0) {
         const inx = -d.dx, inz = -d.dy;
@@ -163,11 +164,6 @@ export function generateTownData() {
     const big = rand() < 0.35;
     place(big ? 'town_trees' : 'town_tree', tx * CELL + rand() * 1.6 - 0.8, 0, ty * CELL + rand() * 1.6 - 0.8, rand() * Math.PI * 2, big ? 4.5 : 5.5);
     colliders.push({ x: tx * CELL, z: ty * CELL, r: big ? 1.4 : 0.7 });
-  }
-  for (const [lx, ly] of LANTERNS) {
-    place('town_lantern', lx * CELL + 1.4, 0, ly * CELL + 1.4, 0, 2.4);
-    colliders.push({ x: lx * CELL + 1.4, z: ly * CELL + 1.4, r: 0.3 });
-    torches.push({ x: lx * CELL + 1.4, y: 3.1, z: ly * CELL + 1.4 });
   }
 
   // ---- furnish the interiors ----
@@ -256,8 +252,9 @@ export function generateArenaData() {
 
   const kc = 12;
   for (let y = kc; y < kc + 3; y++) for (let x = kc; x < kc + 3; x++) elev[idxOf(x, y)] = 1;
-  set(kc + 1, kc + 4, RAMP);
-  ramps.set(idxOf(kc + 1, kc + 4), { dx: 0, dy: -1 });
+  // staircase directly against the keep's south face
+  set(kc + 1, kc + 3, RAMP);
+  ramps.set(idxOf(kc + 1, kc + 3), { dx: 0, dy: -1 });
 
   const gates = [
     { x: 13, y: 1 }, { x: 13, y: h - 2 }, { x: 1, y: 13 }, { x: w - 2, y: 13 },
@@ -281,7 +278,8 @@ export function generateArenaData() {
   for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) {
     if (cells[idxOf(x, y)] === SOLID) continue;
     const wx = x * CELL, wz = y * CELL;
-    place(rand() < 0.8 ? 'floor_tile_large' : 'floor_tile_large_rocks', wx, 0, wz, Math.floor(rand() * 4) * Math.PI / 2);
+    // open grassy field with dirt patches
+    if (rand() < 0.3) place(rand() < 0.5 ? 'floor_dirt_small_A' : 'floor_tile_small_weeds_A', wx + (rand() * 2 - 1), 0.01, wz + (rand() * 2 - 1), Math.floor(rand() * 4) * Math.PI / 2);
     for (const d of wallDirs) {
       const nx = x + d.dx, ny = y + d.dy;
       const neighbor = (nx < 0 || ny < 0 || nx >= w || ny >= h) ? SOLID : cells[idxOf(nx, ny)];
@@ -302,13 +300,14 @@ export function generateArenaData() {
     for (const d of wallDirs) {
       const nx = x + d.dx, ny = y + d.dy;
       const plat = nx >= kc && nx < kc + 3 && ny >= kc && ny < kc + 3;
-      const isRamp = nx === kc + 1 && ny === kc + 4;
+      const isRamp = nx === kc + 1 && ny === kc + 3;
       if (plat || isRamp) continue;
       place('barrier', x * CELL + d.dx * CELL / 2, PLATFORM_H, y * CELL + d.dy * CELL / 2, d.yaw);
     }
     if ((x + y) % 2 === 0) place('pillar', x * CELL, 0, y * CELL);
   }
-  place('stairs', (kc + 1) * CELL, 0, (kc + 4) * CELL - CELL / 2 - 2, Math.atan2(0, 1), [0.8, PLATFORM_H / 5.1, 1]);
+  // stairs top edge sits flush with the keep's south face
+  place('stairs', (kc + 1) * CELL, 0, (kc + 3) * CELL - CELL / 2, Math.atan2(0, 1), [0.8, PLATFORM_H / 5.1, 1]);
 
   const grid = {
     w, h, cells, elev, ramps, colliders: [],
@@ -317,13 +316,13 @@ export function generateArenaData() {
     stairs: { x: -999, z: -999, cx: -99, cy: -99 },
     stairsLocked: false,
     portal: { dx: 0, dy: -1, yaw: 0 },
-    arena: true, gates,
+    arena: true, gates, town: false, lawn: true,
   };
   return {
     grid, torches, traps: [], ropes: [{ x: 13 * CELL + 2, z: 13 * CELL - 6, ay: 7.4, len: 5.0 }],
     placements, enemySpawns: [], lootSpawns: [],
     explored: new Uint8Array(w * h), hadBoss: false,
-    theme: { id: 'arena', name: 'THE LAST STAND', fog: 0x0c0a10, density: 0.024, hemi: 0x9988bb, amb: 0x4a4260, torch: 0xffb066, tiles: [], props: [], banners: [], bias: [] },
+    theme: { id: 'arena', name: 'THE LAST STAND', fog: 0x8fb3d9, density: 0.006, hemi: 0xf2f7ff, amb: 0x9aa4bb, torch: 0xffcf99, sun: true, tiles: [], props: [], banners: [], bias: [] },
     mutator: null, layoutId: 'arena',
   };
 }

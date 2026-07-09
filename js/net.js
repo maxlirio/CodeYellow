@@ -169,7 +169,7 @@ function handleAsHost(conn, m) {
       H?.loot.takeLoot(m.f, m.id, pid, true);
       break;
     case 'wall':
-      H?.walls.placeWall(m.f, m.cx, m.cy, { dur: m.dur, yaw: m.yaw, barricade: m.barricade, hp: m.hp, broadcast: false });
+      H?.walls.placeWall(m.f, m.cx, m.cy, { dur: m.dur, yaw: m.yaw, barricade: m.barricade, hp: m.hp, piece: m.piece, broadcast: false });
       relay(conn, { ...m, pid });
       break;
     case 'hire':
@@ -234,7 +234,7 @@ function handleAsGuest(m) {
       callbacks.onStart?.(m.seed, m.mode || 'campaign');
       break;
     case 'wall':
-      H?.walls.placeWall(m.f, m.cx, m.cy, { dur: m.dur, yaw: m.yaw, barricade: m.barricade, hp: m.hp, broadcast: false });
+      H?.walls.placeWall(m.f, m.cx, m.cy, { dur: m.dur, yaw: m.yaw, barricade: m.barricade, hp: m.hp, piece: m.piece, broadcast: false });
       break;
     case 'wallhp': {
       const w = H?.walls.wallAt(m.f, m.cx, m.cy);

@@ -44,7 +44,7 @@ input:focus { border-color: var(--orange-dim); }
 #joinCode { width: 100px; text-transform: uppercase; letter-spacing: 4px; font-weight: bold; }
 
 /* class cards */
-.classes { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; margin-bottom: 18px; }
+.classes { display: grid; grid-template-columns: repeat(5, 1fr); gap: 8px; margin-bottom: 18px; }
 .ccard {
   border: 2px solid var(--border); border-radius: 10px; padding: 12px 6px; cursor: pointer;
   background: #16121e; transition: all 0.15s;

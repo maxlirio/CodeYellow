@@ -339,8 +339,9 @@ function doAttackHit() {
     const b = {
       x: p.obj.position.x + dir.x * 0.7, z: p.obj.position.z + dir.z * 0.7, y: p.obj.position.y + 1.45,
       dirX: dir.x + sx, dirY: dir.y + sy, dirZ: dir.z + sz,
-      speed: G.inv.weapon?.ranged ? 26 : 20, dmg, owner: 'player',
+      speed: G.inv.weapon?.ranged ? 28 : 20, dmg, owner: 'player',
       color: G.inv.weapon?.ranged ? 0xddcc99 : 0xff8833,
+      vis: G.inv.weapon?.ranged ? 'arrow' : (p.cls.boltVis || 'fire'),
       slow: wfx?.slow || null, poison: wfx?.poison || null, lifesteal: wfx?.lifesteal || 0,
     };
     spawnBolt(b);

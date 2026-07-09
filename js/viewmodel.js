@@ -26,6 +26,7 @@ const STYLES = {
   crossbow: { rot: [-0.12, Math.PI, 0], scale: 0.42, attack: 'shoot', bolt: true, pos: [0.3, -0.3, -0.58] },
   staff: { rot: [-0.35, Math.PI + 0.25, 0.3], scale: 0.4, attack: 'cast' },
   wand: { rot: [-0.55, Math.PI + 0.35, 0.15], scale: 0.45, attack: 'cast' },
+  bow: { rot: [0, Math.PI / 2, 0.12], scale: 0.85, attack: 'bowshoot', bow: true, pos: [0.3, -0.28, -0.6] },
 };
 
 export function initViewmodel() {
@@ -66,6 +67,15 @@ export function setViewmodelWeapon(modelName, wtype = 'sword1h') {
     offhandObj.rotation.set(style.rot[0], Math.PI - 0.3, -style.rot[2]);
     offhandObj.scale.setScalar(style.scale);
     offholder.add(offhandObj);
+  }
+  // bows nock a visible arrow against the string
+  if (style.bow) {
+    boltObj = makeWeaponModel('arrow');
+    boltObj.traverse((n) => { if (n.isMesh) n.frustumCulled = false; });
+    boltObj.rotation.set(Math.PI / 2, 0, 0); // along -z, nock at string
+    boltObj.scale.setScalar(0.55);
+    boltObj.position.set(0, 0, 0.08);
+    weaponObj.add(boltObj);
   }
   // crossbows carry a visible bolt that fires and reloads
   if (style.bolt) {
@@ -163,6 +173,32 @@ export function updateViewmodel(dt) {
               boltObj.position.z = -0.35 + slide * 0.25; // bolt slides into the rail
             } else boltObj.position.z = -0.1;
           }
+        }
+        break;
+      }
+      case 'bowshoot': {
+        // draw: the string and arrow pull back together; release snaps them home
+        const geo = weaponObj?.userData.stringGeo;
+        const rest = weaponObj?.userData.nockRest ?? 0.08;
+        let nock = rest;
+        if (k < 0.5) {
+          const draw = k / 0.5;
+          nock = rest + draw * 0.34;
+          rx = draw * 0.06;
+          pz += draw * 0.05; // lean into the draw
+          if (boltObj) { boltObj.visible = true; boltObj.position.z = nock; }
+        } else if (k < 0.6) {
+          const snap = (k - 0.5) / 0.1;
+          nock = rest + (1 - snap) * 0.34;
+          if (boltObj) boltObj.visible = false; // arrow is away
+          pz -= (1 - snap) * 0.02;
+        } else {
+          nock = rest;
+          if (boltObj && k > 0.85) { boltObj.visible = true; boltObj.position.z = rest; } // re-nock
+        }
+        if (geo) {
+          geo.attributes.position.array[5] = nock; // nock vertex z
+          geo.attributes.position.needsUpdate = true;
         }
         break;
       }

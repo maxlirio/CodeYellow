@@ -33,41 +33,53 @@ export const CLASSES = {
     desc: 'Arcane staff. Hurls fire bolts from afar.',
     hp: 84, dmg: 20, speed: 8.4, crit: 0.08, attackAnims: ['Spellcast_Shoot'],
     attackTime: 0.55, attackRange: 26, attackArc: 0, mana: 110, manaRegen: 9,
-    show: ['2H_Staff'], ranged: true,
+    show: ['2H_Staff'], ranged: true, boltVis: 'fire',
     spellPool: ['fireball', 'frostshard', 'chainlightning', 'meteor', 'blizzard', 'arcaneorb', 'bonewall'],
+  },
+  ranger: {
+    name: 'Ranger', icon: '🏹', model: 'Rogue_Hooded',
+    desc: 'Hooded archer. Draws a true bow — arrows fly where you aim.',
+    hp: 95, dmg: 14, speed: 9.0, crit: 0.15, attackAnims: ['2H_Ranged_Shoot'],
+    attackTime: 0.95, attackRange: 28, attackArc: 0, mana: 80, manaRegen: 7,
+    show: [], ranged: true, boltVis: 'arrow',
+    spellPool: ['powershot', 'multishot', 'rainarrows', 'shadowstep', 'smokebomb', 'bonewall'],
   },
 };
 
 // ---------------- spells (each run deals you a random 3 from your class pool) ----------------
 export const SPELLS = {
   // knight
-  holybolt:   { name: 'Holy Bolt', icon: '✨', mana: 12, cd: 3,  type: 'proj', dmgMult: 1.35, speed: 24, color: 0xffe08a, size: 1.1 },
+  holybolt:   { name: 'Holy Bolt', icon: '✨', mana: 12, cd: 3,  type: 'proj', dmgMult: 1.35, speed: 24, color: 0xffe08a, size: 1.1, vis: 'holy' },
   shieldbash: { name: 'Shield Bash', icon: '🛡', mana: 15, cd: 6, type: 'cone', dmgMult: 1.0, range: 4.5, arc: 1.2, knockback: 9, stun: 1.2 },
   warcry:     { name: 'Warcry', icon: '❤️‍🔥', mana: 25, cd: 18, type: 'heal', frac: 0.35, radius: 9 },
   judgement:  { name: 'Judgement', icon: '⚖️', mana: 20, cd: 8, type: 'targetaoe', dmgMult: 1.6, radius: 3.2, range: 20, delay: 0.5, color: 0xffe08a },
   consecrate: { name: 'Consecrate', icon: '🕯️', mana: 18, cd: 10, type: 'aoe', dmgMult: 0.7, radius: 5, burn: { mult: 0.35, dur: 4 }, color: 0xffcc66 },
   bulwark:    { name: 'Bulwark', icon: '🧱', mana: 16, cd: 14, type: 'buff', armorAdd: 0.5, dmgMult: 1, speedMult: 1, dur: 5 },
   // barbarian
-  axethrow:   { name: 'Axe Throw', icon: '🪓', mana: 12, cd: 4,  type: 'proj', dmgMult: 1.8, speed: 18, color: 0xff8844, size: 1.5 },
+  axethrow:   { name: 'Axe Throw', icon: '🪓', mana: 12, cd: 4,  type: 'proj', dmgMult: 1.8, speed: 18, color: 0xff8844, size: 1.5, vis: 'axe' },
   groundslam: { name: 'Ground Slam', icon: '💥', mana: 18, cd: 8, type: 'aoe', dmgMult: 1.3, radius: 5.5, stun: 1.0 },
   rage:       { name: 'Battle Rage', icon: '😤', mana: 20, cd: 16, type: 'buff', dmgMult: 1.45, speedMult: 1.25, dur: 6 },
   whirlwind:  { name: 'Whirlwind', icon: '🌪️', mana: 20, cd: 7, type: 'aoe', dmgMult: 1.7, radius: 4.2, color: 0xffbb66 },
   leap:       { name: 'Savage Leap', icon: '🦵', mana: 16, cd: 9, type: 'blink', dist: 10, landAoe: { dmgMult: 1.1, radius: 4, stun: 0.6 } },
   bloodlust:  { name: 'Bloodlust', icon: '🩸', mana: 22, cd: 18, type: 'buff', dmgMult: 1.15, speedMult: 1.1, lifesteal: 0.25, dur: 7 },
   // rogue
-  knifefan:   { name: 'Fan of Knives', icon: '🔪', mana: 14, cd: 5, type: 'proj', dmgMult: 0.65, speed: 21, color: 0xcccccc, count: 5, spread: 0.55 },
+  knifefan:   { name: 'Fan of Knives', icon: '🔪', mana: 14, cd: 5, type: 'proj', dmgMult: 0.65, speed: 21, color: 0xcccccc, count: 5, spread: 0.55, vis: 'knife' },
   shadowstep: { name: 'Shadow Step', icon: '🌀', mana: 12, cd: 7, type: 'blink', dist: 9 },
-  venomvial:  { name: 'Venom Vial', icon: '☠️', mana: 16, cd: 8, type: 'proj', dmgMult: 0.5, speed: 15, color: 0x66ff44, aoe: 2.8, poison: { mult: 0.45, dur: 5 } },
+  venomvial:  { name: 'Venom Vial', icon: '☠️', mana: 16, cd: 8, type: 'proj', dmgMult: 0.5, speed: 15, color: 0x66ff44, aoe: 2.8, poison: { mult: 0.45, dur: 5 }, vis: 'vial' },
   smokebomb:  { name: 'Smoke Bomb', icon: '💨', mana: 15, cd: 12, type: 'aoe', dmgMult: 0, radius: 6, stun: 2.2, selfIframes: 1.2, color: 0x99aabb },
   deathmark:  { name: 'Death Mark', icon: '🎯', mana: 14, cd: 10, type: 'mark', range: 22, vuln: 1.5, dur: 6 },
-  shurikenstorm: { name: 'Shuriken Storm', icon: '✴️', mana: 20, cd: 9, type: 'proj', dmgMult: 0.45, speed: 19, color: 0xbbccdd, count: 9, spread: 1.6 },
+  shurikenstorm: { name: 'Shuriken Storm', icon: '✴️', mana: 20, cd: 9, type: 'proj', dmgMult: 0.45, speed: 19, color: 0xbbccdd, count: 9, spread: 1.6, vis: 'knife' },
   // mage
-  fireball:   { name: 'Fireball', icon: '🔥', mana: 18, cd: 5, type: 'proj', dmgMult: 1.5, speed: 19, color: 0xff5522, size: 1.4, aoe: 3.5 },
-  frostshard: { name: 'Frost Shard', icon: '❄️', mana: 12, cd: 3.5, type: 'proj', dmgMult: 0.9, speed: 22, color: 0x88d4ff, slow: { mult: 0.45, dur: 3 } },
+  fireball:   { name: 'Fireball', icon: '🔥', mana: 18, cd: 5, type: 'proj', dmgMult: 1.5, speed: 19, color: 0xff5522, size: 1.4, aoe: 3.5, vis: 'fireball' },
+  frostshard: { name: 'Frost Shard', icon: '❄️', mana: 12, cd: 3.5, type: 'proj', dmgMult: 0.9, speed: 22, color: 0x88d4ff, slow: { mult: 0.45, dur: 3 }, vis: 'shard' },
   chainlightning: { name: 'Chain Lightning', icon: '⚡', mana: 24, cd: 9, type: 'chain', dmgMult: 0.95, range: 20, jumps: 4, falloff: 0.78 },
-  meteor:     { name: 'Meteor', icon: '☄️', mana: 26, cd: 11, type: 'targetaoe', dmgMult: 2.2, radius: 4.5, range: 24, delay: 0.9, color: 0xff6622, burn: { mult: 0.3, dur: 3 } },
+  meteor:     { name: 'Meteor', icon: '☄️', mana: 26, cd: 11, type: 'targetaoe', dmgMult: 2.2, radius: 4.5, range: 24, delay: 0.9, color: 0xff6622, burn: { mult: 0.3, dur: 3 }, fall: 'fireball' },
   blizzard:   { name: 'Blizzard', icon: '🌨️', mana: 22, cd: 10, type: 'aoe', dmgMult: 0.6, radius: 7, slowAll: { mult: 0.4, dur: 4 }, color: 0xaaddff },
-  arcaneorb:  { name: 'Arcane Orb', icon: '🔮', mana: 20, cd: 8, type: 'proj', dmgMult: 1.1, speed: 10, color: 0xcc66ff, size: 2.2, pierce: true },
+  arcaneorb:  { name: 'Arcane Orb', icon: '🔮', mana: 20, cd: 8, type: 'proj', dmgMult: 1.1, speed: 10, color: 0xcc66ff, size: 2.2, pierce: true, vis: 'orb' },
+  // ranger
+  powershot:  { name: 'Power Shot', icon: '🎯', mana: 14, cd: 5, type: 'proj', dmgMult: 2.0, speed: 34, color: 0xd8e6b0, pierce: true, vis: 'arrow' },
+  multishot:  { name: 'Multishot', icon: '🏹', mana: 16, cd: 6, type: 'proj', dmgMult: 0.8, speed: 28, color: 0xd8e6b0, count: 3, spread: 0.35, vis: 'arrow' },
+  rainarrows: { name: 'Rain of Arrows', icon: '🌧️', mana: 24, cd: 10, type: 'targetaoe', dmgMult: 1.4, radius: 4.5, range: 26, delay: 0.7, color: 0xd8e6b0, fall: 'arrowrain' },
   // universal
   bonewall:   { name: 'Bone Wall', icon: '🦴', mana: 16, cd: 12, type: 'wall', dur: 10, range: 12 },
 };
@@ -108,12 +120,17 @@ export const WEAPON_TYPES = {
     { id: 'staff', noun: 'Staff', mesh: ['2H_Staff'], model: 'staff' },
     { id: 'wand', noun: 'Wand', mesh: ['1H_Wand'], model: 'wand', dmgBonus: 0.82, atkTime: 0.38, speedAdd: 0.4 },
   ],
+  ranger: [
+    { id: 'bow', noun: 'Bow', mesh: [], model: 'bow', ranged: true },
+    { id: 'crossbow', noun: 'Crossbow', mesh: ['2H_Crossbow'], model: 'crossbow_2handed', dmgBonus: 1.15, ranged: true, atkTime: 1.1 },
+  ],
 };
 export const OFFHAND_TYPES = {
   knight: { noun: 'Shield', meshes: ['Round_Shield', 'Badge_Shield', 'Spike_Shield'], models: ['shield_round', 'shield_badge', 'shield_spikes'], stat: 'armor' },
   barbarian: { noun: 'Shield', meshes: ['Barbarian_Round_Shield'], models: ['shield_round'], stat: 'armor' },
   rogue: { noun: 'Offhand Blade', meshes: ['Knife_Offhand'], models: ['dagger'], stat: 'crit' },
   mage: { noun: 'Spellbook', meshes: ['Spellbook'], models: ['wand'], stat: 'mregen' },
+  ranger: { noun: 'Hunting Knife', meshes: ['Knife_Offhand'], models: ['dagger'], stat: 'crit' },
 };
 
 export const NAME_PREFIX = {
@@ -147,7 +164,7 @@ export const ENEMIES = {
   berserker:{ model: 'Skeleton_Rogue',   hp: 44, dmg: 11, speed: 5.6, range: 2.2, xp: 36, gold: [8, 16], attackTime: 0.55, aggro: 14, scale: 1.05, tint: 0xff5544, enrage: true },
   juggernaut:{ model: 'Skeleton_Warrior', hp: 120, dmg: 18, speed: 2.7, range: 2.6, xp: 55, gold: [14, 26], attackTime: 1.3, aggro: 10, scale: 1.28, tint: 0x666677, stalwart: true },
   plaguebearer:{ model: 'Skeleton_Minion', hp: 38, dmg: 8, speed: 4.4, range: 2.2, xp: 38, gold: [9, 17], attackTime: 0.95, aggro: 12, scale: 1.05, tint: 0x66aa44, plague: { dps: 4, dur: 4 }, deathCloud: 3.2 },
-  sniper:   { model: 'Skeleton_Rogue',   hp: 26, dmg: 13, speed: 4.5, range: 18,  xp: 34, gold: [8, 15], attackTime: 1.7, aggro: 20, scale: 1, ranged: true, tint: 0xccbb88, boltSpeed: 24 },
+  sniper:   { model: 'Skeleton_Rogue',   hp: 26, dmg: 13, speed: 4.5, range: 18,  xp: 34, gold: [8, 15], attackTime: 1.7, aggro: 20, scale: 1, ranged: true, tint: 0xccbb88, boltSpeed: 24, heldModel: 'crossbow_1handed', boltVis: 'arrow' },
   brute:    { model: 'Skeleton_Minion',  hp: 55, dmg: 15, speed: 4.0, range: 2.4, xp: 30, gold: [7, 14], attackTime: 1.1, aggro: 11, scale: 1.3, tint: 0xcc9966, kbHit: 7 },
   // bosses (floor 3/6 rolls one archetype; floor 9 is always the Bone King)
   boss:     { model: 'Skeleton_Warrior', hp: 380, dmg: 22, speed: 4.6, range: 3.4, xp: 170, gold: [60, 90], attackTime: 1.1, aggro: 30, scale: 1.65, boss: true, bossName: 'GRAVEBOUND CHAMPION', stalwart: true },
@@ -165,7 +182,7 @@ export function enemyPool(floor) {
   if (floor <= 6) return ['minion', 'rogue', 'rogue', 'warrior', 'warrior', 'mage', 'bomber', 'frostmage', 'ghost', 'brute', 'berserker', 'sniper', 'plaguebearer'];
   return ['rogue', 'rogue', 'warrior', 'warrior', 'mage', 'mage', 'bomber', 'bomber', 'frostmage', 'ghost', 'ghost', 'berserker', 'juggernaut', 'plaguebearer', 'sniper', 'necromancer', 'shade', 'brute'];
 }
-export const ARCHERS = ['mage', 'frostmage', 'rogue', 'sniper'];
+export const ARCHERS = ['mage', 'frostmage', 'sniper', 'sniper'];
 export const eliteChance = (floor) => Math.min(0.25, 0.04 + floor * 0.025);
 
 export const BOSS_FLOORS = { 3: true, 6: true, 9: true };

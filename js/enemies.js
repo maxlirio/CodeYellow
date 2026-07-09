@@ -4,7 +4,7 @@
 import * as THREE from 'three';
 import { G, floorState } from './state.js';
 import { ENEMIES, scaleHp, scaleDmg } from './config.js';
-import { makeCharacter, tintCharacter } from './assets.js';
+import { makeCharacter, tintCharacter, makeWeaponModel } from './assets.js';
 import { makeBlobShadow, spawnDamageNumber, spawnBurst } from './fx.js';
 import { sfx } from './audio.js';
 import { moveWithCollision, hasLineOfSight, groundHeightAt } from './dungeon.js';
@@ -36,6 +36,16 @@ export function spawnEnemy(fs, type, x, z, { y = 0, elite = false, id = null } =
   if (cfg.tint) tintCharacter(obj, cfg.tint);
   if (cfg.ghost) tintCharacter(obj, 0xcfe8ff, { ghost: true });
   if (elite) tintCharacter(obj, 0xffcc66, { emissive: 0x662200 });
+  // snipers visibly carry their crossbow
+  if (cfg.heldModel) {
+    let hand = null;
+    obj.traverse((nd) => { if (!hand && nd.name === 'handslot.r') hand = nd; });
+    if (hand) {
+      const held = makeWeaponModel(cfg.heldModel);
+      held.rotation.set(0, Math.PI / 2, 0);
+      hand.add(held);
+    }
+  }
   obj.add(makeBlobShadow(0.9 * scale));
   fs.enemyGroup.add(obj);
   const floorN = fs.n;
@@ -245,7 +255,8 @@ function simulateEnemy(e, fs, players, dt, mine) {
             x: from.x + dir.x * 0.8, y: from.y, z: from.z + dir.z * 0.8,
             dirX: dir.x, dirY: dir.y, dirZ: dir.z,
             speed: e.cfg.boltSpeed || 13, dmg: e.dmg, owner: 'enemy',
-            color: e.cfg.slowBolt ? 0x66ccff : e.cfg.boltSpeed ? 0xddcc88 : 0x9944ff,
+            color: e.cfg.slowBolt ? 0x66ccff : e.cfg.boltVis === 'arrow' ? 0xddcc88 : 0x9944ff,
+            vis: e.cfg.boltVis || (e.cfg.slowBolt ? 'shard' : 'wisp'),
             slow: e.cfg.slowBolt ? { mult: 0.5, dur: 2.5 } : null,
           };
           if (mine) { spawnBolt(bolt); sfx.bolt(); }

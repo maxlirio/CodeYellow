@@ -20,7 +20,7 @@ export function wallAt(f, cx, cy) {
 }
 
 // Place a wall on a floor cell. Returns false if the cell can't hold one.
-export function placeWall(f, cx, cy, { dur = 10, yaw = 0, barricade = false, hp = 60, broadcast = true } = {}) {
+export function placeWall(f, cx, cy, { dur = 10, yaw = 0, barricade = false, hp = 60, piece = null, broadcast = true } = {}) {
   const fs = G.floors.get(f);
   if (!fs || !fs.grid) return false;
   const idx = cy * fs.grid.w + cx;
@@ -31,8 +31,10 @@ export function placeWall(f, cx, cy, { dur = 10, yaw = 0, barricade = false, hp 
   if (wallAt(f, cx, cy)) return false;
 
   fs.grid.cells[idx] = OBSTACLE;
-  const obj = makePiece(barricade ? 'crates_stacked' : 'wall');
-  if (!barricade) obj.scale.set(0.92, 0.55, 1.4);
+  const pieceName = piece || (barricade ? 'crates_stacked' : 'wall');
+  const obj = makePiece(pieceName);
+  if (pieceName === 'wall' && !barricade) obj.scale.set(0.92, 0.55, 1.4); // bone wall: low & wide
+  else if (pieceName === 'wall') obj.scale.set(0.96, 0.98, 1.5);          // stone wall: full height
   else obj.scale.set(1.25, 1.15, 1.25);
   obj.position.set(cx * 4, -2.2, cy * 4);
   obj.rotation.y = yaw;
@@ -40,7 +42,7 @@ export function placeWall(f, cx, cy, { dur = 10, yaw = 0, barricade = false, hp 
   const w = { f, cx, cy, prevCell: prev, obj, t: barricade ? Infinity : dur, rise: 0, hp, maxHp: hp, barricade };
   activeWalls.push(w);
   if (f === G.floor) sfx.bones();
-  if (broadcast) netSend({ t: 'wall', f, cx, cy, dur, yaw, barricade, hp });
+  if (broadcast) netSend({ t: 'wall', f, cx, cy, dur, yaw, barricade, hp, piece });
   return true;
 }
 

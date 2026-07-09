@@ -541,8 +541,8 @@ export function generateFloorData(seedStr, floor) {
 export function buildFloorMeshes(fs) {
   if (fs.built) return;
   const group = buildMergedStatic(fs.placements);
-  if (fs.grid.town) {
-    // grass under the whole village
+  if (fs.grid.town || fs.grid.lawn) {
+    // grass under the whole village / arena field
     const lawn = new THREE.Mesh(
       new THREE.PlaneGeometry(fs.grid.w * CELL + 8, fs.grid.h * CELL + 8),
       new THREE.MeshStandardMaterial({ color: 0x55803e, roughness: 1 })

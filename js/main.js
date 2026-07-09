@@ -19,7 +19,7 @@ import { updateWalls, clearWalls } from './walls.js';
 import { initFloorTraps, updateTraps } from './traps.js';
 import { buildRopesForFloor, updateRopes } from './ropes.js';
 import { updateMinions, clearMinions, moveMinionsToFloor, refreshMinionVisibility } from './minions.js';
-import { horde, startHorde, stopHorde, updateHorde, tryBuildBarricade, tryHireMerc } from './horde.js';
+import { horde, startHorde, stopHorde, updateHorde, tryHireMerc, toggleBuildMode, cycleBuildPiece, updateBuildGhost, placeCurrentBuild, buildState } from './horde.js';
 import { fetchPublicGames, publishGame, unpublishGame } from './board.js';
 import {
   createPlayer, resetPlayerForFloor, updatePlayer, updateRemotes, tryAttack, tryDodge, tryInteract,
@@ -584,10 +584,14 @@ function setupInput() {
   canvas.addEventListener('click', () => {
     if (G.mode === 'playing' && !invOpen) {
       resumeAudio();
-      if (!document.pointerLockElement) lockPointer();
-      else tryAttack();
+      if (!document.pointerLockElement) { lockPointer(); return; }
+      if (buildState.on) { placeCurrentBuild(); return; } // build mode: click places
+      tryAttack();
     }
   });
+  addEventListener('wheel', (e) => {
+    if (buildState.on && G.mode === 'playing') cycleBuildPiece(e.deltaY > 0 ? 1 : -1);
+  }, { passive: true });
   document.addEventListener('pointerlockchange', () => {
     G.mouse.locked = document.pointerLockElement === canvas;
   });
@@ -602,7 +606,7 @@ function setupInput() {
     if (e.code === 'KeyF') tryAttack();
     if (e.code === 'KeyE') tryInteract(onStairsUsed, onShopOpened);
     if (e.code === 'KeyQ') drinkPotion();
-    if (e.code === 'KeyB' && horde.active) tryBuildBarricade();
+    if (e.code === 'KeyB' && horde.active) toggleBuildMode();
     if (e.code === 'KeyH' && horde.active) tryHireMerc();
     if (e.code === 'Digit1') castSpell(0, effectiveDamage);
     if (e.code === 'Digit2') castSpell(1, effectiveDamage);
@@ -680,6 +684,7 @@ function loop(t) {
     updateTownNpcs(dt);
     updateMinions(dt);
     updateHorde(dt);
+    updateBuildGhost();
     updateNet(dt);
 
     if (G.pendingVictory) {

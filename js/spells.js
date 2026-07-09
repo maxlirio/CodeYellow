@@ -113,7 +113,7 @@ export function castSpell(slot, effectiveDamage) {
         const b = {
           x: origin.x + dx * 0.7, z: origin.z + dz * 0.7, y: origin.y + 1.45,
           dirX: dx, dirY: dir.y, dirZ: dz,
-          speed: sp.speed, dmg, owner: 'player', color: sp.color, size: sp.size || 1,
+          speed: sp.speed, dmg, owner: 'player', color: sp.color, size: sp.size || 1, vis: sp.vis,
           aoe: sp.aoe || 0, slow: sp.slow, pierce: !!sp.pierce,
           poison: sp.poison ? { dps: Math.round(dmg * sp.poison.mult), dur: sp.poison.dur } : null,
         };
@@ -181,6 +181,16 @@ export function castSpell(slot, effectiveDamage) {
       const effects = sp.burn ? { poison: { dps: Math.max(2, Math.round(dmg * sp.burn.mult)), dur: sp.burn.dur } } : null;
       pendingAoes.push({ ...hit, t: sp.delay, radius: sp.radius, dmg, color: sp.color, effects });
       spawnBurst(new THREE.Vector3(hit.x, hit.y + 0.4, hit.z), sp.color, 10, 2, 0.12, sp.delay);
+      // dramatic incoming visuals: a meteor streaks down / arrows rain from the sky
+      if (sp.fall === 'fireball') {
+        const fallH = 13;
+        spawnBolt({ x: hit.x + 2, z: hit.z + 1, y: hit.y + fallH, dirX: -2 / sp.delay / (fallH / sp.delay), dirY: -1, dirZ: -1 / sp.delay / (fallH / sp.delay), speed: fallH / sp.delay, owner: 'fx', vis: 'fireball', size: 2.2, color: 0xff6622 });
+      } else if (sp.fall === 'arrowrain') {
+        for (let ai = 0; ai < 7; ai++) {
+          const ox = (Math.random() - 0.5) * sp.radius * 1.6, oz = (Math.random() - 0.5) * sp.radius * 1.6;
+          spawnBolt({ x: hit.x + ox, z: hit.z + oz, y: hit.y + 11 + Math.random() * 2, dirX: 0, dirY: -1, dirZ: 0, speed: 11 / sp.delay, owner: 'fx', vis: 'arrow', color: 0xd8e6b0 });
+        }
+      }
       break;
     }
     case 'wall': {
