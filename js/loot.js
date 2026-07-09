@@ -218,6 +218,16 @@ function hideLoot(l) {
 
 function openChestVisual(l) {
   l.opened = true;
-  const lid = l.obj.getObjectByName(l.kind === 'goldchest' ? 'chest_gold_lid' : 'chest_lid');
+  if (l.kind === 'goldchest') {
+    // the chest_gold mesh has the treasure pile baked in — swap for an emptied chest
+    const old = l.obj;
+    const empty = makePiece('chest');
+    empty.position.copy(old.position);
+    empty.rotation.copy(old.rotation);
+    old.parent.add(empty);
+    old.parent.remove(old);
+    l.obj = empty;
+  }
+  const lid = l.obj.getObjectByName('chest_lid');
   if (lid) lid.rotation.x = -Math.PI * 0.55;
 }
