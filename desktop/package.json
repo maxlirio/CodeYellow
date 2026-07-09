@@ -1,0 +1,15 @@
+{
+  "name": "codeorange",
+  "productName": "CodeOrange",
+  "version": "1.0.0",
+  "description": "CodeOrange — Wrath of Emberwing: a 3D co-op dungeon crawler",
+  "main": "main.js",
+  "scripts": {
+    "start": "electron .",
+    "build": "./build.sh"
+  },
+  "devDependencies": {
+    "electron": "^31.0.0",
+    "@electron/packager": "^18.3.3"
+  }
+}
