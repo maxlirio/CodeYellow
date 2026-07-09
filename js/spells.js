@@ -3,21 +3,35 @@ import * as THREE from 'three';
 import { G } from './state.js';
 import { SPELLS } from './config.js';
 import { spawnBolt } from './projectiles.js';
-import { spawnBurst, spawnDamageNumber } from './fx.js';
+import { spawnBurst, spawnDamageNumber, makeGlowSprite } from './fx.js';
 import { sfx } from './audio.js';
 import { damageEnemy } from './enemies.js';
+import { spawnMinion } from './minions.js';
+import { healLocalPlayer } from './player.js';
 import { moveWithCollision, groundHeightAt, hasLineOfSight } from './dungeon.js';
 import { addMsg, refreshHud } from './ui.js';
-import { netSend } from './net.js';
+import { netSend, isAuthority, myId } from './net.js';
 import { triggerSwing } from './viewmodel.js';
 import { placeWall } from './walls.js';
 
 export const cooldowns = {}; // spellId -> remaining seconds
 const pendingAoes = [];      // delayed strikes (Judgement, Meteor)
+const vortices = [];         // gravity wells dragging enemies together
+const wards = [];            // life wards pulsing heals
 
 export function resetCooldowns() {
   for (const k of Object.keys(cooldowns)) delete cooldowns[k];
   pendingAoes.length = 0;
+  for (const v of vortices) disposeVfx(v);
+  vortices.length = 0;
+  for (const w of wards) disposeVfx(w);
+  wards.length = 0;
+}
+
+function disposeVfx(v) {
+  if (!v.obj) return;
+  G.scene.remove(v.obj);
+  v.obj.traverse((n) => { if (n.isMesh) { n.geometry?.dispose(); n.material?.dispose?.(); } if (n.isSprite) n.material?.dispose?.(); });
 }
 
 // deal a random 3 spells from the class pool — a fresh kit every run
@@ -54,6 +68,62 @@ export function updateSpells(dt) {
     p.buff.t -= dt;
     if (p.buff.t <= 0) { p.buff = null; addMsg('The surge fades.'); }
   }
+  // gravity wells: drag everything toward the eye, then burst
+  for (let i = vortices.length - 1; i >= 0; i--) {
+    const v = vortices[i];
+    v.t -= dt;
+    v.tick -= dt;
+    if (v.obj) {
+      v.obj.rotation.y += dt * 5;
+      const s = 1 + Math.sin(v.t * 14) * 0.12;
+      v.obj.scale.setScalar(s);
+    }
+    if (v.f === G.floor && v.tick <= 0) {
+      v.tick = 0.3;
+      spawnBurst(new THREE.Vector3(v.x + (Math.random() - 0.5) * v.radius * 1.4, v.y + 0.8, v.z + (Math.random() - 0.5) * v.radius * 1.4), 0xbb66ff, 4, -3, 0.1, 0.35);
+      for (const e of G.enemies) {
+        if (e.state === 'dead' || e.state === 'inactive') continue;
+        const dx = v.x - e.obj.position.x, dz = v.z - e.obj.position.z;
+        const d = Math.hypot(dx, dz);
+        if (d > v.radius || d < 0.3 || Math.abs(e.obj.position.y - v.y) > 3) continue;
+        damageEnemy(e, 1, false, false, 'local', { kb: { x: dx / d * 10, z: dz / d * 10 }, slow: { mult: 0.35, dur: 0.5 } });
+      }
+    }
+    if (v.t <= 0) {
+      vortices.splice(i, 1);
+      disposeVfx(v);
+      if (v.f !== G.floor) continue;
+      sfx.trap(); sfx.hit();
+      spawnBurst(new THREE.Vector3(v.x, v.y + 0.8, v.z), 0xbb66ff, 30, 8, 0.18, 0.55);
+      netSend({ t: 'fx', f: v.f, x: v.x, y: v.y + 0.8, z: v.z, color: 0xbb66ff, big: 1 });
+      for (const e of G.enemies) {
+        if (e.state === 'dead') continue;
+        const d = Math.hypot(e.obj.position.x - v.x, e.obj.position.z - v.z);
+        if (d > v.radius || Math.abs(e.obj.position.y - v.y) > 3) continue;
+        damageEnemy(e, v.dmg, false, false, 'local', { stun: 0.4 });
+      }
+    }
+  }
+  // life wards: pulse healing for everyone standing close
+  for (let i = wards.length - 1; i >= 0; i--) {
+    const w = wards[i];
+    w.t -= dt;
+    w.tick -= dt;
+    if (w.obj) w.obj.position.y = w.y + 0.7 + Math.sin(w.t * 3) * 0.15;
+    if (w.f === G.floor && w.tick <= 0) {
+      w.tick = w.rate;
+      spawnBurst(new THREE.Vector3(w.x, w.y + 0.6, w.z), 0x66ffbb, 10, 2.5, 0.11, 0.7);
+      netSend({ t: 'fx', f: w.f, x: w.x, y: w.y + 0.6, z: w.z, color: 0x66ffbb });
+      const p = G.player;
+      if (p && !p.dead && Math.hypot(p.obj.position.x - w.x, p.obj.position.z - w.z) <= w.radius) healLocalPlayer(w.amt);
+      netSend({ t: 'pheal', f: w.f, x: w.x, z: w.z, r: w.radius, amt: w.amt });
+    }
+    if (w.t <= 0) {
+      wards.splice(i, 1);
+      disposeVfx(w);
+      if (w.f === G.floor) spawnBurst(new THREE.Vector3(w.x, w.y + 0.8, w.z), 0x66ffbb, 16, 4, 0.13, 0.5);
+    }
+  }
   // delayed target-point strikes
   for (let i = pendingAoes.length - 1; i >= 0; i--) {
     const a = pendingAoes[i];
@@ -73,6 +143,21 @@ export function updateSpells(dt) {
       damageEnemy(e, a.dmg, false, false, 'local', a.effects);
     }
   }
+}
+
+// march the crosshair ray to a ground point (or first wall) within range
+function aimGroundPoint(origin, dir, range) {
+  const from = origin.clone().setY(origin.y + 1.5);
+  let hit = null;
+  for (let d = 1; d < range; d += 0.5) {
+    const px = from.x + dir.x * d, py = from.y + dir.y * d, pz = from.z + dir.z * d;
+    const g = groundHeightAt(px, pz, py);
+    if (py <= g + 0.2) { hit = { x: px, y: g, z: pz }; break; }
+    if (!hasLineOfSight(from.x, from.z, px, pz)) break;
+    hit = { x: px, y: Math.max(0, py - 1.5), z: pz };
+  }
+  if (hit) hit.y = groundHeightAt(hit.x, hit.z, hit.y + 1);
+  return hit;
 }
 
 function aimDir() {
@@ -116,7 +201,7 @@ export function castSpell(slot, effectiveDamage) {
           x: origin.x + dx * 0.7, z: origin.z + dz * 0.7, y: origin.y + 1.45,
           dirX: dx, dirY: dir.y, dirZ: dz,
           speed: sp.speed, dmg, owner: 'player', color: sp.color, size: sp.size || 1, vis: sp.vis,
-          aoe: sp.aoe || 0, slow: sp.slow, pierce: !!sp.pierce,
+          aoe: sp.aoe || 0, slow: sp.slow, pierce: !!sp.pierce, bounce: sp.bounce || 0,
           poison: sp.poison ? { dps: Math.round(dmg * sp.poison.mult), dur: sp.poison.dur } : null,
         };
         spawnBolt(b);
@@ -274,6 +359,109 @@ export function castSpell(slot, effectiveDamage) {
       }
       break;
     }
+    case 'phantoms': {
+      // Mirror Legion: spectral copies of yourself join the fight
+      sfx.levelup(); sfx.dodge();
+      const count = sp.count || 2;
+      const o = {
+        model: p.cls.model, show: p.cls.show,
+        dmg: Math.max(3, Math.round(effectiveDamage() * sp.dmgMult)), life: sp.dur,
+      };
+      for (let i = 0; i < count; i++) {
+        const a = (i / count) * Math.PI * 2 + p.yaw + Math.PI / 2;
+        const px = origin.x + Math.sin(a) * 1.7, pz = origin.z + Math.cos(a) * 1.7;
+        if (isAuthority()) spawnMinion('phantom', myId(), G.floor, px, pz, null, true, o);
+        else netSend({ t: 'hire', kind: 'phantom', f: G.floor, x: px, z: pz, o });
+        spawnBurst(new THREE.Vector3(px, 1.2, pz), 0xbfe0ff, 16, 4, 0.13, 0.5);
+        netSend({ t: 'fx', f: G.floor, x: px, y: 1.2, z: pz, color: 0xbfe0ff });
+      }
+      addMsg('Your reflections step out of the glass!', 'gold');
+      break;
+    }
+    case 'lightning': {
+      // Storm Lance: a forked bolt rips from your staff into the pack
+      let target = null, bestScore = 0.3;
+      const from = origin.clone().setY(origin.y + 1.5);
+      for (const e of G.enemies) {
+        if (e.state === 'dead' || e.state === 'inactive') continue;
+        const to = e.obj.position.clone().setY(e.obj.position.y + 1.2).sub(from);
+        const d = to.length();
+        if (d > sp.range) continue;
+        const ang = to.normalize().angleTo(dir);
+        if (ang < bestScore && hasLineOfSight(origin.x, origin.z, e.obj.position.x, e.obj.position.z)) { bestScore = ang; target = e; }
+      }
+      if (!target) { addMsg('No target in sight.', 'bad'); p.mana += sp.mana; cooldowns[spellId] = 0.4; break; }
+      sfx.bolt(); sfx.crit();
+      // the bolt leaves the staff tip, not your chest
+      const right = new THREE.Vector3(dir.z, 0, -dir.x).normalize();
+      const staffTip = from.clone().add(right.multiplyScalar(0.35)).add(dir.clone().multiplyScalar(0.6)).setY(from.y - 0.15);
+      spawnBurst(staffTip, 0x99ddff, 10, 3, 0.1, 0.3);
+      const primaryPos = target.obj.position.clone().setY(target.obj.position.y + 1.2);
+      drawLightning(staffTip, primaryPos);
+      damageEnemy(target, dmg, false, false, 'local', { stun: sp.stun });
+      spawnBurst(primaryPos, 0x99ddff, 14, 5, 0.13, 0.4);
+      // simultaneous forks into everything near the first victim
+      const forks = [];
+      for (const e of G.enemies) {
+        if (e === target || e.state === 'dead' || e.state === 'inactive') continue;
+        const d = e.obj.position.distanceTo(target.obj.position);
+        if (d < sp.forkRange) forks.push([d, e]);
+      }
+      forks.sort((a, b) => a[0] - b[0]);
+      const forkDmg = Math.round(dmg * sp.forkMult);
+      for (const [, e] of forks.slice(0, sp.forks)) {
+        const ep = e.obj.position.clone().setY(e.obj.position.y + 1.2);
+        drawLightning(primaryPos, ep);
+        damageEnemy(e, forkDmg, false, false, 'local', { stun: sp.stun });
+        spawnBurst(ep, 0x99ddff, 8, 4, 0.11, 0.35);
+      }
+      break;
+    }
+    case 'vortex': {
+      // Gravity Well: tear open a vortex that drags enemies into a heap
+      const hit = aimGroundPoint(origin, dir, sp.range);
+      if (!hit) { p.mana += sp.mana; cooldowns[spellId] = 0.4; break; }
+      sfx.bolt(); sfx.bones();
+      const obj = new THREE.Group();
+      const core = new THREE.Mesh(
+        new THREE.SphereGeometry(0.55, 12, 10),
+        new THREE.MeshStandardMaterial({ color: 0x220033, emissive: 0xbb66ff, emissiveIntensity: 1.4, transparent: true, opacity: 0.85 })
+      );
+      obj.add(core);
+      obj.add(makeGlowSprite(0xbb66ff, 2.6));
+      const ring = new THREE.Mesh(
+        new THREE.TorusGeometry(1.3, 0.07, 6, 24),
+        new THREE.MeshStandardMaterial({ color: 0x8844cc, emissive: 0x9955ee, emissiveIntensity: 1.1 })
+      );
+      ring.rotation.x = Math.PI / 2;
+      obj.add(ring);
+      obj.position.set(hit.x, hit.y + 1.1, hit.z);
+      G.scene.add(obj);
+      vortices.push({ x: hit.x, y: hit.y, z: hit.z, f: G.floor, t: sp.dur, tick: 0, radius: sp.radius, dmg, obj });
+      netSend({ t: 'fx', f: G.floor, x: hit.x, y: hit.y + 1, z: hit.z, color: 0xbb66ff, big: 1 });
+      break;
+    }
+    case 'ward': {
+      // Life Ward: plant a crystal that pulses healing for the whole party
+      sfx.potion(); sfx.levelup();
+      const obj = new THREE.Group();
+      const crystal = new THREE.Mesh(
+        new THREE.OctahedronGeometry(0.42, 0),
+        new THREE.MeshStandardMaterial({ color: 0x116644, emissive: 0x44ffaa, emissiveIntensity: 1.3 })
+      );
+      crystal.scale.y = 1.9;
+      obj.add(crystal);
+      obj.add(makeGlowSprite(0x66ffbb, 2.0));
+      const gy = groundHeightAt(origin.x, origin.z, origin.y);
+      obj.position.set(origin.x, gy + 0.7, origin.z);
+      G.scene.add(obj);
+      wards.push({
+        x: origin.x, y: gy, z: origin.z, f: G.floor, t: sp.dur, tick: 0.2, rate: sp.tick,
+        radius: sp.radius, amt: Math.max(2, Math.round(p.maxHp * sp.frac)), obj,
+      });
+      addMsg('A ward of life takes root.', 'gold');
+      break;
+    }
     case 'chain': {
       sfx.bolt(); sfx.crit();
       // hit the enemy nearest to the crosshair, then arc to nearest neighbours
@@ -351,4 +539,9 @@ export function updateBeams(dt) {
       beams.splice(i, 1);
     }
   }
+}
+
+// introspection for tests
+export function spellDebug() {
+  return { vortices: vortices.map(v => ({ x: v.x, z: v.z, t: +v.t.toFixed(1) })), wards: wards.length };
 }

@@ -10,7 +10,7 @@ export const CLASSES = {
     hp: 125, dmg: 16, speed: 8.2, crit: 0.06, attackAnims: ['1H_Melee_Attack_Slice_Horizontal', '1H_Melee_Attack_Chop'],
     attackTime: 0.7, attackRange: 3.0, attackArc: 1.1, mana: 60, manaRegen: 5,
     show: ['1H_Sword', 'Round_Shield'],
-    spellPool: ['holybolt', 'shieldbash', 'warcry', 'judgement', 'consecrate', 'bulwark', 'bonewall'],
+    spellPool: ['holybolt', 'shieldbash', 'warcry', 'judgement', 'consecrate', 'bulwark', 'bonewall', 'lifeward'],
   },
   barbarian: {
     name: 'Barbarian', icon: '🪓', model: 'Barbarian',
@@ -18,7 +18,7 @@ export const CLASSES = {
     hp: 150, dmg: 26, speed: 7.7, crit: 0.1, attackAnims: ['2H_Melee_Attack_Chop', '2H_Melee_Attack_Slice'],
     attackTime: 0.92, attackRange: 3.4, attackArc: 1.35, mana: 60, manaRegen: 5,
     show: ['2H_Axe'],
-    spellPool: ['axethrow', 'groundslam', 'rage', 'whirlwind', 'leap', 'bloodlust', 'bonewall'],
+    spellPool: ['axethrow', 'groundslam', 'rage', 'whirlwind', 'leap', 'bloodlust', 'bonewall', 'gravitywell'],
   },
   rogue: {
     name: 'Rogue', icon: '🗡', model: 'Rogue',
@@ -26,7 +26,7 @@ export const CLASSES = {
     hp: 92, dmg: 11, speed: 9.4, crit: 0.28, attackAnims: ['Dualwield_Melee_Attack_Slice', 'Dualwield_Melee_Attack_Stab'],
     attackTime: 0.44, attackRange: 2.6, attackArc: 1.0, mana: 70, manaRegen: 6,
     show: ['Knife', 'Knife_Offhand'],
-    spellPool: ['knifefan', 'shadowstep', 'venomvial', 'smokebomb', 'deathmark', 'shurikenstorm', 'bonewall'],
+    spellPool: ['knifefan', 'shadowstep', 'venomvial', 'smokebomb', 'deathmark', 'shurikenstorm', 'bonewall', 'mirrorimage', 'ricochet'],
   },
   mage: {
     name: 'Mage', icon: '🔮', model: 'Mage',
@@ -34,7 +34,7 @@ export const CLASSES = {
     hp: 84, dmg: 26, speed: 8.4, crit: 0.08, attackAnims: ['Spellcast_Shoot'],
     attackTime: 0.55, attackRange: 26, attackArc: 0, mana: 110, manaRegen: 9, manaAttack: 0.2,
     show: ['2H_Staff'], ranged: true, boltVis: 'fire',
-    spellPool: ['fireball', 'frostshard', 'chainlightning', 'meteor', 'blizzard', 'arcaneorb', 'bonewall'],
+    spellPool: ['fireball', 'frostshard', 'chainlightning', 'meteor', 'blizzard', 'arcaneorb', 'bonewall', 'stormlance', 'mirrorimage', 'gravitywell', 'ricochet'],
   },
   ranger: {
     name: 'Ranger', icon: '🏹', model: 'Rogue_Hooded',
@@ -42,7 +42,7 @@ export const CLASSES = {
     hp: 95, dmg: 14, speed: 9.0, crit: 0.15, attackAnims: ['2H_Ranged_Shoot'],
     attackTime: 0.95, attackRange: 28, attackArc: 0, mana: 80, manaRegen: 7,
     show: [], ranged: true, boltVis: 'arrow',
-    spellPool: ['powershot', 'multishot', 'rainarrows', 'shadowstep', 'smokebomb', 'bonewall'],
+    spellPool: ['powershot', 'multishot', 'rainarrows', 'shadowstep', 'smokebomb', 'bonewall', 'lifeward'],
   },
 };
 
@@ -80,6 +80,12 @@ export const SPELLS = {
   powershot:  { name: 'Power Shot', icon: '🎯', mana: 14, cd: 5, type: 'proj', dmgMult: 2.0, speed: 34, color: 0xd8e6b0, pierce: true, vis: 'arrow', arrows: 1 },
   multishot:  { name: 'Multishot', icon: '🏹', mana: 16, cd: 6, type: 'proj', dmgMult: 0.8, speed: 28, color: 0xd8e6b0, count: 3, spread: 0.35, vis: 'arrow', arrows: 3 },
   rainarrows: { name: 'Rain of Arrows', icon: '🌧️', mana: 24, cd: 10, type: 'targetaoe', dmgMult: 1.4, radius: 4.5, range: 26, delay: 0.7, color: 0xd8e6b0, fall: 'arrowrain', arrows: 7 },
+  // new schools
+  mirrorimage: { name: 'Mirror Legion', icon: '👥', mana: 34, cd: 20, type: 'phantoms', count: 2, dur: 12, dmgMult: 0.5 },
+  stormlance: { name: 'Storm Lance', icon: '⚡', mana: 20, cd: 6, type: 'lightning', dmgMult: 1.7, range: 18, forks: 3, forkRange: 8, forkMult: 0.75, stun: 0.6 },
+  gravitywell: { name: 'Gravity Well', icon: '🌀', mana: 26, cd: 12, type: 'vortex', dmgMult: 1.1, radius: 6.5, range: 22, dur: 2.6, color: 0xbb66ff },
+  ricochet:   { name: 'Ricochet Orb', icon: '🪩', mana: 14, cd: 5, type: 'proj', dmgMult: 1.05, speed: 15, color: 0x66ffee, size: 1.3, vis: 'orb', bounce: 4 },
+  lifeward:   { name: 'Life Ward', icon: '💠', mana: 24, cd: 16, type: 'ward', frac: 0.07, radius: 6, dur: 8, tick: 1.0 },
   // universal
   bonewall:   { name: 'Bone Wall', icon: '🦴', mana: 16, cd: 12, type: 'wall', dur: 10, range: 12 },
 };

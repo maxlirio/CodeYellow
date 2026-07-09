@@ -143,6 +143,14 @@ export function gainXp(amount) {
   refreshHud();
 }
 
+export function healLocalPlayer(amount) {
+  const p = G.player;
+  if (!p || p.dead || amount <= 0 || p.hp >= p.maxHp) return;
+  p.hp = Math.min(p.maxHp, p.hp + amount);
+  spawnDamageNumber(p.obj.position.clone().setY(p.obj.position.y + 2.2), `+${amount}`, '#66ff88');
+  refreshHud();
+}
+
 export function damageLocalPlayer(amount, effects = null) {
   const p = G.player;
   if (!p || p.dead || p.iframes > 0) return;

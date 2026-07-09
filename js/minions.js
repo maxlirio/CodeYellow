@@ -2,7 +2,7 @@
 // mirrored to guests; enemies treat them as valid targets.
 import * as THREE from 'three';
 import { G, floorState } from './state.js';
-import { makeCharacter, applyLook } from './assets.js';
+import { makeCharacter, applyLook, tintCharacter } from './assets.js';
 import { makeBlobShadow, spawnDamageNumber, spawnBurst } from './fx.js';
 import { sfx } from './audio.js';
 import { moveWithCollision, groundHeightAt, hasLineOfSight } from './dungeon.js';
@@ -17,6 +17,8 @@ let nextMinionId = 1;
 const KINDS = {
   sword: { model: 'Knight', show: ['1H_Sword', 'Round_Shield'], hp: 90, dmg: 12, speed: 7.5, range: 2.6, atkTime: 0.8, name: 'Sellsword' },
   bow: { model: 'Rogue', show: ['2H_Crossbow'], hp: 60, dmg: 10, speed: 7.5, range: 13, atkTime: 1.3, ranged: true, name: 'Marksman' },
+  // spectral copies of their caster: fast, fragile, and gone in seconds
+  phantom: { model: 'Mage', show: [], hp: 45, dmg: 8, speed: 9.5, range: 2.6, atkTime: 0.55, name: 'Phantom', phantom: true },
 };
 
 export function clearMinions() {
@@ -25,10 +27,13 @@ export function clearMinions() {
   nextMinionId = 1;
 }
 
-export function spawnMinion(kindId, owner, floor, x, z, id = null, broadcast = true) {
+export function spawnMinion(kindId, owner, floor, x, z, id = null, broadcast = true, opts = {}) {
   const kind = KINDS[kindId] || KINDS.sword;
-  const { obj, anim } = makeCharacter('char', kind.model, kind.show);
-  applyLook(obj, { cape: true, helmet: true, capeColor: 5 });
+  const model = opts.model || kind.model;
+  const show = opts.show || kind.show;
+  const { obj, anim } = makeCharacter('char', model, show);
+  if (kind.phantom) tintCharacter(obj, 0xbfe0ff, { ghost: true });
+  else applyLook(obj, { cape: true, helmet: true, capeColor: 5 });
   obj.position.set(x, 0, z);
   obj.add(makeBlobShadow(0.8));
   const c = document.createElement('canvas');
@@ -36,9 +41,10 @@ export function spawnMinion(kindId, owner, floor, x, z, id = null, broadcast = t
   const g = c.getContext('2d');
   g.font = 'bold 22px Trebuchet MS'; g.textAlign = 'center';
   g.strokeStyle = '#000'; g.lineWidth = 5;
-  g.strokeText('🤺 ' + kind.name, 128, 28);
-  g.fillStyle = '#9fd6ff';
-  g.fillText('🤺 ' + kind.name, 128, 28);
+  const tagText = (kind.phantom ? '👤 ' : '🤺 ') + kind.name;
+  g.strokeText(tagText, 128, 28);
+  g.fillStyle = kind.phantom ? '#cfe6ff' : '#9fd6ff';
+  g.fillText(tagText, 128, 28);
   const tag = new THREE.Sprite(new THREE.SpriteMaterial({ map: new THREE.CanvasTexture(c), transparent: true, depthTest: false }));
   tag.scale.set(2.2, 0.4, 1);
   tag.position.y = 2.45;
@@ -49,12 +55,15 @@ export function spawnMinion(kindId, owner, floor, x, z, id = null, broadcast = t
   obj.visible = floor === G.floor;
   const m = {
     id: id ?? nextMinionId++, owner, kind: kindId, cfg: kind, floor,
-    obj, anim, hp: kind.hp, maxHp: kind.hp, dmg: kind.dmg,
+    obj, anim, hp: kind.hp, maxHp: kind.hp, dmg: opts.dmg || kind.dmg,
+    life: opts.life ?? null,
     state: 'follow', atkT: 0, netX: x, netY: 0, netZ: z, netYaw: 0, vy: 0, dead: false,
   };
   if (id !== null && id >= nextMinionId) nextMinionId = id + 1;
   minions.push(m);
-  if (broadcast && G.net.role !== 'solo') netSend({ t: 'mspawn', id: m.id, kind: kindId, owner, f: floor, x, z });
+  if (broadcast && G.net.role !== 'solo') {
+    netSend({ t: 'mspawn', id: m.id, kind: kindId, owner, f: floor, x, z, o: { model, show, dmg: m.dmg, life: m.life } });
+  }
   return m;
 }
 
@@ -77,10 +86,15 @@ export function damageMinion(m, amount, fromNet = false) {
   if (G.net.role === 'host' && !fromNet) netSend({ t: 'mhp', id: m.id, hp: m.hp });
   if (m.hp <= 0) {
     m.dead = true;
-    m.anim.play('Death_A', { once: true, clamp: true });
-    if (m.floor === G.floor) { sfx.death(); addMsg('Your mercenary has fallen!', 'bad'); }
+    if (m.cfg.phantom) {
+      if (m.floor === G.floor) spawnBurst(m.obj.position.clone().setY(m.obj.position.y + 1.1), 0xbfe0ff, 18, 4, 0.13, 0.5);
+      m.obj.parent?.remove(m.obj);
+    } else {
+      m.anim.play('Death_A', { once: true, clamp: true });
+      if (m.floor === G.floor) { sfx.death(); addMsg('Your mercenary has fallen!', 'bad'); }
+      setTimeout(() => { m.obj.parent?.remove(m.obj); }, 4000);
+    }
     if (G.net.role === 'host' && !fromNet) netSend({ t: 'mdie', id: m.id });
-    setTimeout(() => { m.obj.parent?.remove(m.obj); }, 4000);
   }
 }
 
@@ -122,6 +136,11 @@ export function updateMinions(dt) {
 
     const fs = G.floors.get(m.floor);
     if (!fs?.grid) continue;
+    // summoned phantoms fade when their time runs out
+    if (m.life != null) {
+      m.life -= dt;
+      if (m.life <= 0) { damageMinion(m, m.hp + 1); continue; }
+    }
     const pos = m.obj.position;
     m.atkT -= dt;
 
@@ -141,7 +160,10 @@ export function updateMinions(dt) {
       if (inRange) {
         if (m.atkT <= 0) {
           m.atkT = m.cfg.atkTime;
-          m.anim.play(m.cfg.ranged ? '2H_Ranged_Shoot' : '1H_Melee_Attack_Slice_Horizontal', { once: true });
+          const atkClip = m.cfg.ranged ? '2H_Ranged_Shoot'
+            : m.anim.has('1H_Melee_Attack_Slice_Horizontal') ? '1H_Melee_Attack_Slice_Horizontal'
+            : 'Unarmed_Melee_Attack_Punch_A';
+          m.anim.play(atkClip, { once: true });
           if (m.cfg.ranged) {
             const from = pos.clone().setY(pos.y + 1.4);
             const to = target.obj.position.clone().setY(target.obj.position.y + 1.1);

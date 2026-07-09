@@ -174,7 +174,11 @@ function handleAsHost(conn, m) {
       relay(conn, { ...m, pid });
       break;
     case 'hire':
-      H?.minions.spawnMinion(m.kind, pid, m.f, m.x, m.z);
+      H?.minions.spawnMinion(m.kind, pid, m.f, m.x, m.z, null, true, m.o || {});
+      break;
+    case 'pheal':
+      applyPheal(m);
+      relay(conn, { ...m, pid });
       break;
     case 'pvp':
       if (m.target === myId()) H?.player.damageLocalPlayer(m.dmg);
@@ -256,7 +260,7 @@ function handleAsGuest(m) {
       break;
     }
     case 'mspawn':
-      if (!H?.minions.minionById(m.id)) H?.minions.spawnMinion(m.kind, m.owner, m.f, m.x, m.z, m.id, false);
+      if (!H?.minions.minionById(m.id)) H?.minions.spawnMinion(m.kind, m.owner, m.f, m.x, m.z, m.id, false, m.o || {});
       break;
     case 'msnap':
       H?.minions.applyMinionSnapshot(m.list);
@@ -290,6 +294,9 @@ function handleAsGuest(m) {
       break;
     case 'fx':
       if (m.f === G.floor) H?.fx.spawnBurst(new THREE.Vector3(m.x, m.y, m.z), m.color, m.big ? 26 : 14, m.big ? 7 : 4, 0.15, 0.5);
+      break;
+    case 'pheal':
+      applyPheal(m);
       break;
     case 'beam':
       if (m.f === G.floor) H?.spells.remoteBeam(m.a, m.b);
@@ -407,4 +414,12 @@ export function updateNet(dt) {
 export function shutdownNet() {
   try { G.net.peer?.destroy(); } catch {}
   G.net = { role: 'solo', peer: null, conns: [], code: '', players: new Map(), started: false };
+}
+
+// a Life Ward pulse: heal my player if I'm standing inside it
+function applyPheal(m) {
+  if (m.f !== G.floor || !G.player || G.player.dead) return;
+  const p = G.player.obj.position;
+  if (Math.hypot(p.x - m.x, p.z - m.z) > m.r) return;
+  H?.player.healLocalPlayer(m.amt);
 }

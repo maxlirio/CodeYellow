@@ -133,7 +133,7 @@ export function spawnBolt(b) {
   G.projectiles.push({
     sp: vis.obj, vis, x, z, y, dirX, dirY, dirZ, speed, dmg, owner, color, life: 0, trailT: 0,
     size: b.size || 1, aoe: b.aoe || 0, slow: b.slow || null, poison: b.poison || null,
-    lifesteal: b.lifesteal || 0, pierce: !!b.pierce, hitIds: null,
+    lifesteal: b.lifesteal || 0, pierce: !!b.pierce, hitIds: null, bounce: b.bounce || 0,
   });
 }
 
@@ -168,9 +168,29 @@ export function updateProjectiles(dt, hooks) {
   for (let i = G.projectiles.length - 1; i >= 0; i--) {
     const p = G.projectiles[i];
     p.life += dt;
+    const prevX = p.x, prevZ = p.z;
     p.x += p.dirX * p.speed * dt;
     p.y += (p.dirY || 0) * p.speed * dt;
     p.z += p.dirZ * p.speed * dt;
+    // ricochet: bounce off walls and floor instead of bursting
+    if (p.bounce > 0) {
+      if (solidAt(p.x, p.z)) {
+        const bx = solidAt(p.x, prevZ), bz = solidAt(prevX, p.z);
+        if (bx || !bz) p.dirX = -p.dirX;
+        if (bz || !bx) p.dirZ = -p.dirZ;
+        p.x = prevX; p.z = prevZ;
+        p.bounce--;
+        spawnBurst(new THREE.Vector3(p.x, p.y, p.z), p.color, 8, 3, 0.1, 0.3);
+        sfx.hit();
+      }
+      const g = groundHeightAt(p.x, p.z, p.y);
+      if (p.y < g + 0.15 && (p.dirY || 0) < 0) {
+        p.dirY = Math.abs(p.dirY) * 0.85;
+        p.y = g + 0.16;
+        p.bounce--;
+        spawnBurst(new THREE.Vector3(p.x, p.y, p.z), p.color, 8, 3, 0.1, 0.3);
+      }
+    }
     p.sp.position.set(p.x, p.y, p.z);
 
     // per-visual motion
@@ -197,7 +217,7 @@ export function updateProjectiles(dt, hooks) {
       }
     }
 
-    let dead = p.life > 2.2 || solidAt(p.x, p.z) ||
+    let dead = p.life > (p.bounce > 0 ? 4.5 : 2.2) || solidAt(p.x, p.z) ||
       p.y < groundHeightAt(p.x, p.z, p.y) + 0.12 || p.y > 16;
 
     if (!dead && p.owner === 'player' && G.runMode === 'duel') {
