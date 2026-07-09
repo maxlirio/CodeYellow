@@ -250,3 +250,12 @@ button.orange-btn:hover { filter: brightness(1.15); }
 .keys { margin: 10px auto 16px; border-collapse: collapse; }
 .keys td { padding: 5px 14px; border-bottom: 1px solid #262032; font-size: 14px; text-align: left; }
 .keys td:first-child { color: var(--orange); font-weight: bold; text-align: right; }
+
+/* floor select */
+.floor-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin: 14px 0; max-height: 300px; overflow-y: auto; }
+.floorbtn {
+  background: #16121e; border: 2px solid var(--border); border-radius: 8px; color: #f0e6d2;
+  padding: 10px 8px; cursor: pointer; font-family: inherit; font-size: 14px; transition: all 0.12s;
+}
+.floorbtn span { display: block; font-size: 10.5px; color: #9c8f77; margin-top: 3px; }
+.floorbtn:hover { border-color: var(--orange); transform: translateY(-1px); }

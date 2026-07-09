@@ -63,6 +63,7 @@ export async function loadAll(onProgress) {
       for (const key of Object.keys(geo.attributes)) {
         if (key !== 'position' && key !== 'normal' && key !== 'uv') geo.deleteAttribute(key);
       }
+      n.material.side = THREE.DoubleSide; // floors/roofs must be opaque from below
       parts.push({ geo, mat: n.material });
     });
     gltf.baked = parts;
@@ -210,13 +211,6 @@ export function buildBowModel() {
     tip.position.set(0, ty, 0.08);
     g.add(tip);
   }
-  // leather grip
-  const grip = new THREE.Mesh(
-    new THREE.CylinderGeometry(0.042, 0.042, 0.18, 8),
-    new THREE.MeshStandardMaterial({ color: 0x45311e, roughness: 1 })
-  );
-  grip.position.set(0, 0, -0.155);
-  g.add(grip);
   // the string: three vertices — top tip, NOCK (animated), bottom tip
   const stringGeo = new THREE.BufferGeometry();
   stringGeo.setAttribute('position', new THREE.BufferAttribute(new Float32Array([

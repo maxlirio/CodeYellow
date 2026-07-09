@@ -333,6 +333,11 @@ function doAttackHit() {
   const wfx = weaponHitEffects(dmg);
   const rangedAtk = cls.ranged || G.inv.weapon?.ranged;
   if (rangedAtk) {
+    if (G.inv.weapon?.ranged) {
+      if ((G.run.arrows || 0) <= 0) return;
+      G.run.arrows--;
+      refreshHud();
+    }
     // basic bolt is free; slight spread unless aiming
     const spread = p.aiming ? 0 : 0.035;
     const sx = (Math.random() - 0.5) * spread, sy = (Math.random() - 0.5) * spread, sz = (Math.random() - 0.5) * spread;
@@ -369,6 +374,10 @@ function doAttackHit() {
 export function tryAttack() {
   const p = G.player;
   if (!p || p.dead || p.attacking || p.dodgeT > 0 || G.mode !== 'playing') return;
+  if (G.inv.weapon?.ranged && (G.run.arrows || 0) <= 0) {
+    addMsg('Out of arrows! Buy more at the blacksmith or tavern.', 'bad');
+    return;
+  }
   p.attacking = true;
   p.attackT = 0;
   p.attackFired = false;

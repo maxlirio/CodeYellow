@@ -19,7 +19,9 @@ import { updateWalls, clearWalls } from './walls.js';
 import { initFloorTraps, updateTraps } from './traps.js';
 import { buildRopesForFloor, updateRopes } from './ropes.js';
 import { updateMinions, clearMinions, moveMinionsToFloor, refreshMinionVisibility } from './minions.js';
-import { horde, startHorde, stopHorde, updateHorde, tryHireMerc, toggleBuildMode, cycleBuildPiece, updateBuildGhost, placeCurrentBuild, buildState } from './horde.js';
+import { horde, startHorde, stopHorde, updateHorde, tryHireMerc } from './horde.js';
+import { toggleBuildMode, cycleBuildPiece, updateBuildGhost, placeCurrentBuild, buildState, clearBuilds } from './builds.js';
+import { themeFor } from './dungeon.js';
 import { fetchPublicGames, publishGame, unpublishGame } from './board.js';
 import {
   createPlayer, resetPlayerForFloor, updatePlayer, updateRemotes, tryAttack, tryDodge, tryInteract,
@@ -230,6 +232,10 @@ function setupMenu() {
 
   // shop overlay
   $('btnCloseShop').onclick = () => { hide('merchant'); G.mode = 'playing'; lockPointer(); };
+  $('btnHireSword').onclick = () => { hide('hireDialog'); tryHireMerc('sword'); lockPointer(); };
+  $('btnHireBow').onclick = () => { hide('hireDialog'); tryHireMerc('bow'); lockPointer(); };
+  $('btnHireCancel').onclick = () => { hide('hireDialog'); lockPointer(); };
+  $('btnFloorCancel').onclick = () => { hide('floorSelect'); G.mode = 'playing'; lockPointer(); };
   $('btnCloseInv').onclick = () => toggleInventory(false);
 
   setNetCallbacks({
@@ -271,7 +277,7 @@ function startRun(seed, mode = 'campaign') {
   G.floor = mode === 'horde' ? 1 : 0;
   G.endless = false;
   G.pendingVictory = false;
-  G.run = { gold: mode === 'horde' ? 60 : 0, potions: 1, keys: 0, atkBonus: 0, hpBonus: 0, speedBonus: 0, speedBuys: 0, level: 1, xp: 0, kills: 0, chests: 0, startTime: performance.now(), buys: {}, deepest: 1 };
+  G.run = { gold: mode === 'horde' ? 60 : 0, potions: 1, keys: 0, atkBonus: 0, hpBonus: 0, speedBonus: 0, speedBuys: 0, level: 1, xp: 0, kills: 0, chests: 0, startTime: performance.now(), buys: {}, deepest: 0 };
   resetCooldowns();
   stopHorde();
   hide('menu'); hide('lobby'); hide('merchant'); hide('dead'); hide('victory'); hide('inventory'); hide('stairsDialog'); hide('tavernBoard');
@@ -283,6 +289,8 @@ function startRun(seed, mode = 'campaign') {
   clearProjectiles();
   clearWalls();
   clearMinions();
+  clearBuilds();
+  G.run.arrows = 40;
 
   const classId = getClass();
   giveStartingGear(classId);
@@ -418,8 +426,7 @@ function onStairsUsed() {
   if (G.mode !== 'playing') return;
   sfx.stairs();
   if (G.grid.town) {
-    // the village gate leads to your deepest floor
-    descendTo(Math.max(1, G.run.deepest));
+    openFloorSelect(); // pick any floor you've reached (or the next one down)
     return;
   }
   G.mode = 'merchant';
@@ -429,6 +436,31 @@ function onStairsUsed() {
 }
 
 // shopkeeper interaction (E in town)
+// choose which mercenary to hire
+function openHireDialog() {
+  if (!G.player || G.player.dead) return;
+  document.exitPointerLock?.();
+  show('hireDialog');
+}
+
+// pick a dungeon floor at the village gate: anywhere you've been, plus the next
+function openFloorSelect() {
+  document.exitPointerLock?.();
+  G.mode = 'merchant';
+  const wrap = $('floorButtons');
+  wrap.innerHTML = '';
+  const maxPick = Math.max(1, (G.run.deepest || 0) + 1);
+  for (let n = 1; n <= maxPick; n++) {
+    const btn = document.createElement('button');
+    btn.className = 'floorbtn';
+    const boss = n === 3 || n === 6 || n === 9 || (n > 9 && n % 3 === 0);
+    btn.innerHTML = `<b>Floor ${n}</b><span>${themeFor(G.seed, n).name}${boss ? ' · 💀 boss' : ''}${n === maxPick && n > (G.run.deepest || 0) ? ' · unexplored' : ''}</span>`;
+    btn.onclick = () => { hide('floorSelect'); descendTo(n); };
+    wrap.appendChild(btn);
+  }
+  show('floorSelect');
+}
+
 function onShopOpened(type) {
   if (type === 'board') { document.exitPointerLock?.(); window.openTavernBoard(); return; }
   const table = SHOP_TABLES[type];
@@ -477,8 +509,16 @@ function buyItem(id, price) {
     return;
   }
   if (id === 'merc') {
-    // price handled inside tryHireMerc (fixed cost)
-    tryHireMerc();
+    openHireDialog(); // choose sellsword or marksman
+    return;
+  }
+  if (id === 'arrows') {
+    if (G.run.gold < price) { addMsg('Not enough gold.', 'bad'); return; }
+    G.run.gold -= price;
+    G.run.arrows = (G.run.arrows || 0) + 25;
+    addMsg('+25 arrows 🏹', 'gold');
+    sfx.coin();
+    refreshHud();
     return;
   }
   G.run.gold -= price;
@@ -607,7 +647,8 @@ function setupInput() {
     if (e.code === 'KeyE') tryInteract(onStairsUsed, onShopOpened);
     if (e.code === 'KeyQ') drinkPotion();
     if (e.code === 'KeyB' && horde.active) toggleBuildMode();
-    if (e.code === 'KeyH' && horde.active) tryHireMerc();
+    if (e.code === 'KeyH' && horde.active) openHireDialog();
+    if (e.code === 'KeyP' && horde.active) buyItem('arrows', 20);
     if (e.code === 'Digit1') castSpell(0, effectiveDamage);
     if (e.code === 'Digit2') castSpell(1, effectiveDamage);
     if (e.code === 'Digit3') castSpell(2, effectiveDamage);

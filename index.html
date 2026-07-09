@@ -98,6 +98,7 @@
     <div class="slot spell" id="spell1"><span class="sp-icon"></span><span class="key">2</span><div class="cdmask"></div></div>
     <div class="slot spell" id="spell2"><span class="sp-icon"></span><span class="key">3</span><div class="cdmask"></div></div>
     <div class="slot" id="slotPotion">🧪 <b id="potionCount">0</b> <span class="key">Q</span></div>
+    <div class="slot hidden" id="slotArrows">🏹 <b id="arrowCount">0</b></div>
     <div class="slot" id="slotDodge">💨 <span class="key">SPACE</span><div class="cool" id="dodgeCool"></div></div>
     <div class="slot">💰 <b id="goldCount">0</b></div>
     <div class="slot">🏰 <b id="floorNum">1</b></div>
@@ -140,6 +141,29 @@
     <div class="shop" id="shopItems"></div>
     <div class="shop-gold">Your gold: <b id="shopGold">0</b></div>
     <div class="menu-buttons"><button id="btnCloseShop" class="big orange-btn">Done</button></div>
+  </div>
+</div>
+
+<!-- Hire choice -->
+<div id="hireDialog" class="overlay">
+  <div class="panel">
+    <h2>🤺 Hire a mercenary — 120g</h2>
+    <div class="subtitle">They fight beside you until slain.</div>
+    <div class="menu-buttons">
+      <button id="btnHireSword" class="big orange-btn">⚔ Sellsword — sturdy melee</button>
+      <button id="btnHireBow" class="big orange-btn">🏹 Marksman — ranged support</button>
+      <button id="btnHireCancel" class="big">Not now</button>
+    </div>
+  </div>
+</div>
+
+<!-- Floor select (village gate) -->
+<div id="floorSelect" class="overlay">
+  <div class="panel">
+    <h2>⬇ The Dungeon Gate</h2>
+    <div class="subtitle">Descend to any floor you've reached — or push into the unknown.</div>
+    <div id="floorButtons" class="floor-grid"></div>
+    <div class="menu-buttons"><button id="btnFloorCancel" class="big">Stay in town</button></div>
   </div>
 </div>
 
@@ -206,7 +230,8 @@
       <tr><td>E</td><td>Open chest / take item / descend</td></tr>
       <tr><td>Q</td><td>Drink health potion</td></tr>
       <tr><td>Tab</td><td>Inventory & equipment</td></tr>
-      <tr><td>B / H</td><td>Last Stand: build barricade / hire mercenary</td></tr>
+      <tr><td>B</td><td>Last Stand: build mode (scroll = piece, click = place)</td></tr>
+      <tr><td>H / P</td><td>Last Stand: hire mercenary / buy arrows</td></tr>
       <tr><td>M</td><td>Mute</td></tr>
       <tr><td>Esc</td><td>Pause</td></tr>
     </table>

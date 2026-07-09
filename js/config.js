@@ -77,9 +77,9 @@ export const SPELLS = {
   blizzard:   { name: 'Blizzard', icon: '🌨️', mana: 22, cd: 10, type: 'aoe', dmgMult: 0.6, radius: 7, slowAll: { mult: 0.4, dur: 4 }, color: 0xaaddff },
   arcaneorb:  { name: 'Arcane Orb', icon: '🔮', mana: 20, cd: 8, type: 'proj', dmgMult: 1.1, speed: 10, color: 0xcc66ff, size: 2.2, pierce: true, vis: 'orb' },
   // ranger
-  powershot:  { name: 'Power Shot', icon: '🎯', mana: 14, cd: 5, type: 'proj', dmgMult: 2.0, speed: 34, color: 0xd8e6b0, pierce: true, vis: 'arrow' },
-  multishot:  { name: 'Multishot', icon: '🏹', mana: 16, cd: 6, type: 'proj', dmgMult: 0.8, speed: 28, color: 0xd8e6b0, count: 3, spread: 0.35, vis: 'arrow' },
-  rainarrows: { name: 'Rain of Arrows', icon: '🌧️', mana: 24, cd: 10, type: 'targetaoe', dmgMult: 1.4, radius: 4.5, range: 26, delay: 0.7, color: 0xd8e6b0, fall: 'arrowrain' },
+  powershot:  { name: 'Power Shot', icon: '🎯', mana: 14, cd: 5, type: 'proj', dmgMult: 2.0, speed: 34, color: 0xd8e6b0, pierce: true, vis: 'arrow', arrows: 1 },
+  multishot:  { name: 'Multishot', icon: '🏹', mana: 16, cd: 6, type: 'proj', dmgMult: 0.8, speed: 28, color: 0xd8e6b0, count: 3, spread: 0.35, vis: 'arrow', arrows: 3 },
+  rainarrows: { name: 'Rain of Arrows', icon: '🌧️', mana: 24, cd: 10, type: 'targetaoe', dmgMult: 1.4, radius: 4.5, range: 26, delay: 0.7, color: 0xd8e6b0, fall: 'arrowrain', arrows: 7 },
   // universal
   bonewall:   { name: 'Bone Wall', icon: '🦴', mana: 16, cd: 12, type: 'wall', dur: 10, range: 12 },
 };
@@ -276,14 +276,15 @@ export const SHOP_ITEMS = [
   { id: 'reforge', icon: '🔨', name: 'Reforge Weapon', desc: 'A brand-new random weapon for your class.', base: 60, grow: 18 },
   { id: 'offhand', icon: '🛡', name: 'Forge Offhand', desc: 'A random offhand item for your class.', base: 45, grow: 15 },
   { id: 'merc', icon: '🤺', name: 'Hire Mercenary', desc: 'A sellsword or marksman fights beside you until slain.', base: 120, grow: 60 },
+  { id: 'arrows', icon: '🏹', name: 'Bundle of Arrows', desc: '+25 arrows for bows and crossbows.', base: 20, grow: 0 },
 ];
 
 // which building sells what (the old floor-merchant is gone — shop in town)
 export const SHOP_TABLES = {
-  blacksmith: { title: '⚒ The Blacksmith', greet: '“Steel solves most problems.”', items: ['atk', 'reforge', 'offhand'] },
+  blacksmith: { title: '⚒ The Blacksmith', greet: '“Steel solves most problems.”', items: ['atk', 'reforge', 'offhand', 'arrows'] },
   alchemist: { title: '🧪 The Alchemist', greet: '“Drink up. Probably not poison.”', items: ['potion', 'hp'] },
   arcanum: { title: '🔮 The Arcanum', greet: '“Knowledge has a price.”', items: ['tome', 'relic'] },
-  tavern: { title: '🍺 The Cracked Flagon', greet: '“Swords for hire, ale for sale.”', items: ['merc', 'potion'] },
+  tavern: { title: '🍺 The Cracked Flagon', greet: '“Swords for hire, ale for sale.”', items: ['merc', 'potion', 'arrows'] },
 };
 
 // Weapon-ish meshes we hide by default; equipment then re-shows its kit.

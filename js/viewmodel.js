@@ -26,7 +26,7 @@ const STYLES = {
   crossbow: { rot: [-0.12, Math.PI, 0], scale: 0.42, attack: 'shoot', bolt: true, pos: [0.3, -0.3, -0.58] },
   staff: { rot: [-0.35, Math.PI + 0.25, 0.3], scale: 0.4, attack: 'cast' },
   wand: { rot: [-0.55, Math.PI + 0.35, 0.15], scale: 0.45, attack: 'cast' },
-  bow: { rot: [0, Math.PI / 2, 0.12], scale: 0.85, attack: 'bowshoot', bow: true, pos: [0.3, -0.28, -0.6] },
+  bow: { rot: [0, 0, 0.12], scale: 0.85, attack: 'bowshoot', bow: true, pos: [0.3, -0.28, -0.6] },
 };
 
 export function initViewmodel() {
@@ -72,7 +72,7 @@ export function setViewmodelWeapon(modelName, wtype = 'sword1h') {
   if (style.bow) {
     boltObj = makeWeaponModel('arrow');
     boltObj.traverse((n) => { if (n.isMesh) n.frustumCulled = false; });
-    boltObj.rotation.set(Math.PI / 2, 0, 0); // along -z, nock at string
+    boltObj.rotation.set(-Math.PI / 2, 0, 0); // tip points forward (-z)
     boltObj.scale.setScalar(0.55);
     boltObj.position.set(0, 0, 0.08);
     weaponObj.add(boltObj);

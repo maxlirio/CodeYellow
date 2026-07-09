@@ -42,6 +42,9 @@ export function refreshHud() {
   const need = XP_FOR_LEVEL(G.run.level);
   $('xpfill').style.width = `${Math.min(100, (G.run.xp / need) * 100)}%`;
   $('potionCount').textContent = G.run.potions;
+  const usesArrows = !!G.inv.weapon?.ranged;
+  setHidden('slotArrows', !usesArrows);
+  if (usesArrows) $('arrowCount').textContent = G.run.arrows || 0;
   $('goldCount').textContent = G.run.gold;
   $('floorNum').textContent = G.floor;
 }

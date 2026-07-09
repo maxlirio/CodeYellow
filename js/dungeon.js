@@ -223,7 +223,7 @@ export function generateFloorData(seedStr, floor) {
         for (let x = r.x + 2; x < r.x + r.w - 2; x += 3) {
           if (at(x, y) === FLOOR && rng.chance(0.8)) {
             hallPillars.push({ x, y });
-            colliders.push({ x: x * CELL, z: y * CELL, r: 0.85 });
+            colliders.push({ x: x * CELL, z: y * CELL, r: 0.7 });
           }
         }
       }
@@ -383,7 +383,7 @@ export function generateFloorData(seedStr, floor) {
         const exposed = wallDirs.some(d => { const nx = c.x + d.dx, ny = c.y + d.dy; return !isPlat(nx, ny) && (nx < 0 || ny < 0 || nx >= w || ny >= h ? false : at(nx, ny) !== SOLID); });
         if (exposed && at(c.x, c.y) === FLOOR) {
           place('pillar', c.x * CELL, 0, c.y * CELL);
-          colliders.push({ x: c.x * CELL, z: c.y * CELL, r: 0.85 });
+          colliders.push({ x: c.x * CELL, z: c.y * CELL, r: 0.7 });
         }
       }
     });
@@ -420,7 +420,7 @@ export function generateFloorData(seedStr, floor) {
       for (const [px, py] of [[r.x + 1, r.y + 1], [r.x + r.w - 2, r.y + 1], [r.x + 1, r.y + r.h - 2], [r.x + r.w - 2, r.y + r.h - 2]]) {
         if (rng.chance(0.55) && at(px, py) === FLOOR && !propAt(px, py) && !elev[idxOf(px, py)]) {
           place(rng.chance(0.3) ? 'pillar_decorated' : 'pillar', px * CELL, 0, py * CELL);
-          colliders.push({ x: px * CELL, z: py * CELL, r: 0.85 });
+          colliders.push({ x: px * CELL, z: py * CELL, r: 0.7 });
           props.push({ cx: px, cy: py });
         }
       }
@@ -586,17 +586,33 @@ export function groundHeightAt(x, z, curY = 0, grid = null) {
   const cx = Math.round(x / CELL), cy = Math.round(z / CELL);
   if (cx < 0 || cy < 0 || cx >= g.w || cy >= g.h) return 0;
   const idx = cy * g.w + cx;
+  let ground = 0;
   const ramp = g.ramps.get(idx);
   if (ramp) {
     const s = Math.min(1, Math.max(0, (ramp.dx * (x - cx * CELL) + ramp.dy * (z - cy * CELL)) / CELL + 0.5));
-    return s * PLATFORM_H;
+    ground = s * PLATFORM_H;
+  } else if (g.elev[idx]) {
+    ground = curY > PLATFORM_H * 0.6 ? PLATFORM_H : 0;
   }
-  if (g.elev[idx]) return curY > PLATFORM_H * 0.6 ? PLATFORM_H : 0;
-  return 0;
+  // player-built structures (multi-storey: only surfaces within a step of you count)
+  const b = g.builds;
+  if (b) {
+    const br = b.ramps.get(idx);
+    if (br) {
+      const s = Math.min(1, Math.max(0, (br.dx * (x - cx * CELL) + br.dy * (z - cy * CELL)) / CELL + 0.5));
+      const h = br.base + s * PLATFORM_H;
+      if (h <= curY + 1.7) ground = Math.max(ground, h);
+    }
+    const fls = b.floors.get(idx);
+    if (fls) {
+      for (const h of fls) if (h <= curY + 1.6) ground = Math.max(ground, h);
+    }
+  }
+  return ground;
 }
 
 // ---- movement & collision ----
-const cellBlocked = (g, x, z, y, ghost, ref) => {
+const cellBlocked = (g, x, z, y, ghost, ref, onPlat) => {
   const cx = Math.round(x / CELL), cy = Math.round(z / CELL);
   if (cx < 0 || cy < 0 || cx >= g.w || cy >= g.h) return true;
   const c = g.cells[cy * g.w + cx];
@@ -604,8 +620,8 @@ const cellBlocked = (g, x, z, y, ghost, ref) => {
   if (c === OBSTACLE && !ghost && y < 2.4) return true;
   const h = groundHeightAt(x, z, y, g);
   if (h > ref + 1.3) return true;
-  // platform rails: while elevated, the only way down is the staircase
-  if (!ghost && y > 2.4 && c !== RAMP && h < y - 2) return true;
+  // platform rails: while on a railed dungeon platform, the only way down is the staircase
+  if (!ghost && onPlat && c !== RAMP && h < y - 2) return true;
   return false;
 };
 
@@ -615,18 +631,20 @@ export function moveWithCollision(pos, dx, dz, radius = 0.55, opts = {}) {
   const y = opts.y ?? pos.y ?? 0;
   const ghost = !!opts.ghost;
   const ref = Math.max(y, groundHeightAt(pos.x, pos.z, y, g));
+  const curIdx = Math.round(pos.z / CELL) * g.w + Math.round(pos.x / CELL);
+  const onPlatform = y > 2.4 && g.elev[curIdx] === 1;
   const tryAxis = (nx, nz) => {
     const checks = [
       [nx + radius, nz], [nx - radius, nz], [nx, nz + radius], [nx, nz - radius],
       [nx + radius * 0.7, nz + radius * 0.7], [nx - radius * 0.7, nz + radius * 0.7],
       [nx + radius * 0.7, nz - radius * 0.7], [nx - radius * 0.7, nz - radius * 0.7],
     ];
-    if (!checks.every(([cx, cz]) => !cellBlocked(g, cx, cz, y, ghost, ref))) return false;
+    if (!checks.every(([cx, cz]) => !cellBlocked(g, cx, cz, y, ghost, ref, onPlatform))) return false;
     // precise cylinder colliders for props/trees/furniture (sized to the model)
     if (g.colliders && !ghost && y < 3) {
       for (const c of g.colliders) {
         const ddx = nx - c.x, ddz = nz - c.z;
-        const rr = radius + c.r;
+        const rr = radius * 0.55 + c.r; // hug props tighter than walls
         if (ddx * ddx + ddz * ddz < rr * rr) return false;
       }
     }
