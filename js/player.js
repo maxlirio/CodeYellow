@@ -353,13 +353,23 @@ function doAttackHit() {
       G.run.arrows--;
       refreshHud();
     }
-    // basic bolt is free; slight spread unless aiming
+    // mage bolts burn mana and scale with what was actually spent: a full-cost
+    // shot is a cannonball, a dry-tank shot is a feeble cantrip spark
+    let boltDmg = dmg, boltSize = 1;
+    if (cls.manaAttack && !G.inv.weapon?.ranged) {
+      const fullCost = Math.ceil(p.maxMana * cls.manaAttack);
+      const spend = Math.min(p.mana, fullCost);
+      p.mana -= spend;
+      const mult = 0.25 + 0.75 * (spend / fullCost);
+      boltDmg = Math.max(1, Math.round(dmg * mult));
+      boltSize = 0.6 + mult * 0.9;
+    }
     const spread = p.aiming ? 0 : 0.035;
     const sx = (Math.random() - 0.5) * spread, sy = (Math.random() - 0.5) * spread, sz = (Math.random() - 0.5) * spread;
     const b = {
       x: p.obj.position.x + dir.x * 0.7, z: p.obj.position.z + dir.z * 0.7, y: p.obj.position.y + 1.45,
       dirX: dir.x + sx, dirY: dir.y + sy, dirZ: dir.z + sz,
-      speed: G.inv.weapon?.ranged ? 28 : 20, dmg, owner: 'player',
+      speed: G.inv.weapon?.ranged ? 28 : 20, dmg: boltDmg, size: boltSize, owner: 'player',
       color: G.inv.weapon?.ranged ? 0xddcc99 : 0xff8833,
       vis: G.inv.weapon?.ranged ? 'arrow' : (p.cls.boltVis || 'fire'),
       slow: wfx?.slow || null, poison: wfx?.poison || null, lifesteal: wfx?.lifesteal || 0,

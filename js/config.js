@@ -30,9 +30,9 @@ export const CLASSES = {
   },
   mage: {
     name: 'Mage', icon: '🔮', model: 'Mage',
-    desc: 'Arcane staff. Hurls fire bolts from afar.',
-    hp: 84, dmg: 20, speed: 8.4, crit: 0.08, attackAnims: ['Spellcast_Shoot'],
-    attackTime: 0.55, attackRange: 26, attackArc: 0, mana: 110, manaRegen: 9,
+    desc: 'Arcane staff. Bolts burn mana — they hit like a cannon when your reserves are full.',
+    hp: 84, dmg: 26, speed: 8.4, crit: 0.08, attackAnims: ['Spellcast_Shoot'],
+    attackTime: 0.55, attackRange: 26, attackArc: 0, mana: 110, manaRegen: 9, manaAttack: 0.2,
     show: ['2H_Staff'], ranged: true, boltVis: 'fire',
     spellPool: ['fireball', 'frostshard', 'chainlightning', 'meteor', 'blizzard', 'arcaneorb', 'bonewall'],
   },
