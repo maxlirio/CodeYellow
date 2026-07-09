@@ -22,6 +22,7 @@ import { updateMinions, clearMinions, moveMinionsToFloor, refreshMinionVisibilit
 import { horde, startHorde, stopHorde, updateHorde, tryHireMerc } from './horde.js';
 import { toggleBuildMode, cycleBuildPiece, updateBuildGhost, placeCurrentBuild, buildState, clearBuilds } from './builds.js';
 import { themeFor } from './dungeon.js';
+import { setMusicBase, setBossMusic, musicCtxFor, toggleMusic, updateMusic } from './music.js';
 import { fetchPublicGames, publishGame, unpublishGame } from './board.js';
 import {
   createPlayer, resetPlayerForFloor, updatePlayer, updateRemotes, tryAttack, tryDodge, tryInteract,
@@ -368,6 +369,7 @@ function setLocalFloor(n) {
   G.floor = n;
   setFloorAliases(fs);
   applyThemeAtmosphere(fs);
+  setMusicBase(musicCtxFor(n, G.runMode, fs.theme?.id));
   clearTransientFx();
   clearProjectiles();
   buildTorchFx();
@@ -714,6 +716,7 @@ function setupInput() {
     if (e.code === 'KeyQ') drinkPotion();
     if (e.code === 'KeyB' && (horde.active || G.runMode === 'duel')) toggleBuildMode();
     if (e.code === 'KeyH' && horde.active) openHireDialog();
+    if (e.code === 'KeyM') addMsg(toggleMusic() ? '🎵 Music on' : '🔇 Music off');
     if (e.code === 'KeyP' && (horde.active || G.runMode === 'duel')) buyItem('arrows', 20);
     if (e.code === 'Digit1') castSpell(0, effectiveDamage);
     if (e.code === 'Digit2') castSpell(1, effectiveDamage);
@@ -822,6 +825,7 @@ function loop(t) {
       wh.textContent = '⚔ DUEL — B build · P arrows · last one standing';
     }
     updateNet(dt);
+    updateMusic(dt);
 
     if (G.pendingVictory) {
       G.pendingVictory = false;

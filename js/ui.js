@@ -2,6 +2,7 @@
 import { G } from './state.js';
 import { CLASSES, SHOP_ITEMS, XP_FOR_LEVEL, SPELLS, CAPE_COLORS } from './config.js';
 import { rarityOf } from './items.js';
+import { setBossMusic } from './music.js';
 
 const $ = (id) => document.getElementById(id);
 
@@ -194,13 +195,14 @@ export function flashVignette() {
 
 // ---------- boss bar ----------
 export function showBossBar(name) {
+  setBossMusic(true);
   $('bossName').textContent = name;
   setHidden('bossbarWrap', false);
 }
 export function updateBossBar(frac) {
   $('bossfill').style.width = `${Math.max(0, frac * 100)}%`;
 }
-export function hideBossBar() { setHidden('bossbarWrap', true); }
+export function hideBossBar() { setBossMusic(false); setHidden('bossbarWrap', true); }
 
 // ---------- party bar (co-op) ----------
 export function updatePartyBar() {

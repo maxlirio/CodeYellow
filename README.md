@@ -35,6 +35,7 @@ You can *see* yourself fight now — your equipped weapon is in-hand Minecraft-s
 | Key | Action |
 |---|---|
 | WASD | Move |
+| M | Music on/off |
 | Mouse | Look (click canvas to capture) |
 | Left click / F | Attack |
 | Shift | Aim (zoom + accuracy) |
@@ -68,5 +69,6 @@ Debug hooks: `?auto=1&seed=myseed` auto-starts a solo run with a fixed dungeon s
 
 - **Models & animations:** [KayKit](https://kaylousberg.com) — Dungeon Remastered, Adventurers, and Skeletons packs (CC0)
 - **Monsters & dragon:** [Quaternius](https://quaternius.com) — Ultimate Monsters pack (CC0)
+- **Music:** "Woodland Fantasy", "Dark Descent" & "Heroic Demise" by [Matthew Pablo](http://www.matthewpablo.com) (CC-BY 3.0, via OpenGameArt); "Crystal Cave" & "Battle Theme A" by [cynicmusic](https://cynicmusic.com) (CC0, via OpenGameArt)
 - **Engine:** [three.js](https://threejs.org) · **Networking:** [PeerJS](https://peerjs.com)
 - Built with Claude Code
