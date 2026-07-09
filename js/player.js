@@ -7,7 +7,7 @@ import { CLASSES, XP_FOR_LEVEL, CAPE_COLORS } from './config.js';
 import { makeCharacter, setEquipMeshes, applyLook } from './assets.js';
 import { makeBlobShadow, spawnDamageNumber, spawnBurst } from './fx.js';
 import { sfx } from './audio.js';
-import { moveWithCollision, groundHeightAt } from './dungeon.js';
+import { moveWithCollision, groundHeightAt, posBlocked, resolveStuck } from './dungeon.js';
 import { spawnBolt } from './projectiles.js';
 import { damageEnemy } from './enemies.js';
 import { gearStat, weaponDamage, equippedMeshes, affixOf } from './items.js';
@@ -207,6 +207,21 @@ export function updatePlayer(dt) {
       refreshHud();
     }
   }
+  // unstick self-heal: if we ever end up inside geometry (bad landing,
+  // desync, a wall raised nearby), nudge to the nearest free spot
+  p.stuckT = (p.stuckT || 0) + dt;
+  if (p.stuckT > 0.5) {
+    p.stuckT = 0;
+    const pos0 = p.obj.position;
+    if (posBlocked(pos0.x, pos0.z, pos0.y)) {
+      const free = resolveStuck(pos0.x, pos0.z, pos0.y);
+      if (free) {
+        pos0.x = free.x; pos0.z = free.z;
+        p.kbX = 0; p.kbZ = 0;
+      }
+    }
+  }
+
   // knockback impulse
   if (Math.abs(p.kbX) > 0.1 || Math.abs(p.kbZ) > 0.1) {
     moveWithCollision(p.obj.position, p.kbX * dt, p.kbZ * dt, 0.55, { y: p.obj.position.y });

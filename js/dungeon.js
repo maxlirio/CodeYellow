@@ -651,14 +651,15 @@ export function moveWithCollision(pos, dx, dz, radius = 0.55, opts = {}) {
       [nx + radius * 0.7, nz - radius * 0.7], [nx - radius * 0.7, nz - radius * 0.7],
     ];
     if (!checks.every(([cx, cz]) => !cellBlocked(g, cx, cz, y, ghost, ref, onPlatform))) return false;
-    // precise cylinder colliders for props/trees/furniture (sized to the model)
-    if (g.colliders && !ghost && y < 3) {
+    // precise colliders for props/trees/buildings (sized to the model).
+    // Boxes are buildings — solid at any height so you can't drop inside one;
+    // cylinders are props you may legitimately walk above on built floors.
+    if (g.colliders && !ghost) {
       const pr = radius * 0.55; // hug props tighter than walls
       for (const c of g.colliders) {
         if (c.hx !== undefined) {
-          // building-shaped box collider
-          if (Math.abs(nx - c.x) < c.hx + pr && Math.abs(nz - c.z) < c.hz + pr) return false;
-        } else {
+          if (y < (c.h ?? 99) && Math.abs(nx - c.x) < c.hx + pr && Math.abs(nz - c.z) < c.hz + pr) return false;
+        } else if (y < (c.h ?? 3)) {
           const ddx = nx - c.x, ddz = nz - c.z;
           const rr = pr + c.r;
           if (ddx * ddx + ddz * ddz < rr * rr) return false;
@@ -671,6 +672,42 @@ export function moveWithCollision(pos, dx, dz, radius = 0.55, opts = {}) {
   if (dx !== 0 && tryAxis(x + dx, z)) x += dx;
   if (dz !== 0 && tryAxis(x, z + dz)) z += dz;
   pos.x = x; pos.z = z;
+}
+
+// is this exact spot inside geometry? (used by the unstick self-heal)
+export function posBlocked(x, z, y, grid = null) {
+  const g = grid || G.grid;
+  if (!g) return false;
+  const cx = Math.round(x / CELL), cy = Math.round(z / CELL);
+  if (cx < 0 || cy < 0 || cx >= g.w || cy >= g.h) return true;
+  const c = g.cells[cy * g.w + cx];
+  if (c === SOLID) return true;
+  if (c === OBSTACLE && y < 2.4) return true;
+  if (g.colliders && y < 3) {
+    for (const col of g.colliders) {
+      if (col.hx !== undefined) {
+        if (y < (col.h ?? 99) && Math.abs(x - col.x) < col.hx && Math.abs(z - col.z) < col.hz) return true;
+      } else {
+        const dx = x - col.x, dz = z - col.z;
+        if (dx * dx + dz * dz < col.r * col.r) return true;
+      }
+    }
+  }
+  return false;
+}
+
+// find the nearest free spot when a position ended up inside geometry
+export function resolveStuck(x, z, y, grid = null) {
+  const g = grid || G.grid;
+  if (!g) return null;
+  for (let r = 0.6; r <= 6.01; r += 0.6) {
+    for (let i = 0; i < 14; i++) {
+      const a = (i / 14) * Math.PI * 2;
+      const nx = x + Math.cos(a) * r, nz = z + Math.sin(a) * r;
+      if (!posBlocked(nx, nz, y, g) && groundHeightAt(nx, nz, y, g) <= y + 1.3) return { x: nx, z: nz };
+    }
+  }
+  return null;
 }
 
 export function hasLineOfSight(x0, z0, x1, z1, grid = null) {
