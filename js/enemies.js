@@ -137,6 +137,20 @@ function trackTargetMotion(fs, players, dt) {
   }
 }
 
+// nearest climbable route (dungeon ramp cells or player-built ramps),
+// scored by detour length: enemy->ramp + ramp->target
+function nearestWayUp(fs, pos, tpos) {
+  const g = fs.grid;
+  let best = null, bs = Infinity;
+  const consider = (x, z) => {
+    const s = Math.hypot(x - pos.x, z - pos.z) + Math.hypot(x - tpos.x, z - tpos.z) * 0.7;
+    if (s < bs) { bs = s; best = { x, z }; }
+  };
+  if (g.ramps) for (const idx of g.ramps.keys()) consider((idx % g.w) * 4, Math.floor(idx / g.w) * 4);
+  if (g.builds?.ramps) for (const idx of g.builds.ramps.keys()) consider((idx % g.w) * 4, Math.floor(idx / g.w) * 4);
+  return best;
+}
+
 function tacticalGoal(e, fs, t, dt) {
   const pos = e.obj.position;
   const d = Math.max(0.001, t.dist);
@@ -158,6 +172,20 @@ function tacticalGoal(e, fs, t, dt) {
       else goal.surge = true;
     }
   }
+
+  // the target is up somewhere (keep, platform, player tower): ground troops
+  // can't fly — head for the nearest ramp or staircase that leads up
+  if (!e.cfg.fly && !e.ghost && t.pos.y - pos.y > 2.2) {
+    e.rampT = (e.rampT || 0) - dt;
+    if (e.rampT <= 0 || !e.rampGoal) {
+      e.rampT = 1.2;
+      e.rampGoal = nearestWayUp(fs, pos, t.pos);
+    }
+    if (e.rampGoal && Math.hypot(e.rampGoal.x - pos.x, e.rampGoal.z - pos.z) > 1.4) {
+      goal.x = e.rampGoal.x; goal.z = e.rampGoal.z;
+      return goal;
+    }
+  } else e.rampGoal = null;
 
   // lead pursuit: melee aim at where the target will be, not where it is
   if (!e.cfg.ranged && tSpeed > 2 && d > 3) {
@@ -186,7 +214,7 @@ function tacticalGoal(e, fs, t, dt) {
   if (e.tac && horde.active && fs.n === 1) {
     const c = fs._squadC?.get(e.tac.gate);
     if (e.tac.role === 'sieger' && (!e.siegeTarget || e.siegeTarget.dead)) {
-      e.siegeTarget = weakestBuildPieceNear(e.floor, pos.x, pos.z, 30);
+      e.siegeTarget = weakestBuildPieceNear(e.floor, pos.x, pos.z, 60);
     }
     if (e.siegeTarget && !e.siegeTarget.dead) {
       goal.x = e.siegeTarget.x; goal.z = e.siegeTarget.z;
@@ -331,7 +359,8 @@ function simulateEnemy(e, fs, players, dt, mine) {
         if (pd < Math.max(2.3, e.cfg.range + 0.9)) {
           setEnemyState(e, 'attack');
           e.attackFired = true; // the swing lands on timber, not flesh
-          damageBuild(e.siegeTarget, Math.round(e.dmg * 0.8));
+          damageBuild(e.siegeTarget, Math.max(10, Math.round(e.dmg * 1.5)));
+          if (onMyFloor(e)) spawnBurst(new THREE.Vector3(e.siegeTarget.x, e.obj.position.y + 1.2, e.siegeTarget.z), 0xcc9955, 8, 4, 0.12, 0.4);
           break;
         }
       } else e.siegeTarget = null;
@@ -371,8 +400,9 @@ function simulateEnemy(e, fs, players, dt, mine) {
               e.blockT = 0;
               setEnemyState(e, 'attack');
               e.attackFired = true; // the swing hits the obstacle, not a player
-              if (w) damageWall(w, Math.round(e.dmg * 0.8));
-              else damageBuild(bp, Math.round(e.dmg * 0.8));
+              if (w) damageWall(w, Math.max(8, Math.round(e.dmg * 1.2)));
+              else damageBuild(bp, Math.max(10, Math.round(e.dmg * 1.5)));
+              if (bp && onMyFloor(e)) spawnBurst(new THREE.Vector3(bp.x, e.obj.position.y + 1.2, bp.z), 0xcc9955, 8, 4, 0.12, 0.4);
             }
           }
         } else {

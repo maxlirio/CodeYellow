@@ -336,7 +336,7 @@ export function generateArenaData() {
   const grid = {
     w, h, cells, elev, ramps, colliders: [],
     rooms: [{ x: 2, y: 2, w: w - 4, h: h - 4, cx: 13, cy: 13 }],
-    spawn: { x: 13 * CELL, z: 15 * CELL },
+    spawn: { x: 13 * CELL, z: 17 * CELL }, // open field south of the keep stairs
     stairs: { x: -999, z: -999, cx: -99, cy: -99 },
     stairsLocked: false,
     portal: { dx: 0, dy: -1, yaw: 0 },

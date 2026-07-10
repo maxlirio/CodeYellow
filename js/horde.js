@@ -34,6 +34,9 @@ const SIEGERS = new Set(['ogre', 'juggernaut', 'brute', 'orcwar']);
 function roleFor(type, cfg) {
   if (cfg.ranged) return 'archer';
   if (SIEGERS.has(type)) return 'sieger';
+  // any melee can pick up a torch: ~1 in 4 joins the demolition crew, so
+  // fortifications come under attack from wave 1, not just when brutes show up
+  if (Math.random() < 0.25) return 'sieger';
   if (['rogue', 'goblin', 'shade', 'berserker'].includes(type)) return 'flanker';
   return 'vanguard';
 }

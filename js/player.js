@@ -69,6 +69,12 @@ export function refreshEquipVisuals() {
 export function resetPlayerForFloor() {
   const p = G.player;
   p.obj.position.set(G.grid.spawn.x, 0, G.grid.spawn.z);
+  p.obj.position.y = groundHeightAt(G.grid.spawn.x, G.grid.spawn.z, 0);
+  // never spawn embedded in geometry
+  if (posBlocked(p.obj.position.x, p.obj.position.z, p.obj.position.y)) {
+    const free = resolveStuck(p.obj.position.x, p.obj.position.z, p.obj.position.y);
+    if (free) { p.obj.position.x = free.x; p.obj.position.z = free.z; }
+  }
   if (G.grid.spawnYaw !== undefined) p.camYaw = G.grid.spawnYaw;
   p.vy = 0;
   p.obj.visible = false;
@@ -195,6 +201,59 @@ export function drinkPotion() {
 }
 
 // ---------- per-frame update ----------
+// ---- wedge extractor: holding move keys but going nowhere = trapped ----
+// If sustained input produces almost no movement AND nearly every direction
+// is physically blocked, the world has swallowed you: yank the player to the
+// nearest patch of open ground, charge a little blood, and say so.
+function trackWedge(p, dt, movedNow) {
+  p.wedgeT = (p.wedgeT || 0) + dt;
+  p.wedgeDist = (p.wedgeDist || 0) + movedNow;
+  if (p.wedgeDist > 1.0) { p.wedgeT = 0; p.wedgeDist = 0; return; } // clearly mobile
+  if (p.wedgeT < 2.2) return;
+  p.wedgeT = 0; p.wedgeDist = 0;
+  // pressing into a flat wall is normal: if ANY direction can carry us a real
+  // distance we're not wedged, just leaning. A true pocket lets you jiggle
+  // but never travel — no probe gets anywhere.
+  const pos = p.obj.position;
+  for (let i = 0; i < 8; i++) {
+    const a = (i / 8) * Math.PI * 2;
+    const t = { x: pos.x, z: pos.z, y: pos.y };
+    moveWithCollision(t, Math.sin(a) * 1.6, Math.cos(a) * 1.6, 0.55, { y: pos.y });
+    if (Math.hypot(t.x - pos.x, t.z - pos.z) > 1.2) return;
+  }
+  const free = findOpenGround(pos.x, pos.z);
+  if (!free) return;
+  const cost = Math.max(2, Math.round(p.maxHp * 0.04));
+  p.hp = Math.max(1, p.hp - cost);
+  spawnBurst(pos.clone().setY(pos.y + 1), 0xffaa55, 14, 4, 0.13, 0.5);
+  pos.set(free.x, groundHeightAt(free.x, free.z, 0), free.z);
+  p.vy = 0; p.kbX = 0; p.kbZ = 0;
+  spawnBurst(pos.clone().setY(pos.y + 1), 0xffaa55, 14, 4, 0.13, 0.5);
+  sfx.dodge(); sfx.hurt();
+  addMsg(`⚠ You were wedged in the world — pulled free to open ground (−${cost} HP)`, 'bad');
+  refreshHud();
+  sendPos(true);
+}
+
+// nearest spot of plain, unobstructed floor with breathing room on all sides
+function findOpenGround(x, z) {
+  for (let r = 2; r <= 16; r += 1) {
+    for (let i = 0; i < 16; i++) {
+      const a = (i / 16) * Math.PI * 2 + r * 0.5;
+      const nx = x + Math.sin(a) * r, nz = z + Math.cos(a) * r;
+      if (groundHeightAt(nx, nz, 0) > 0.3) continue; // plain ground only
+      if (posBlocked(nx, nz, 0)) continue;
+      // breathing room: all four neighbours clear too
+      let clear = true;
+      for (const [ox, oz] of [[0.9, 0], [-0.9, 0], [0, 0.9], [0, -0.9]]) {
+        if (posBlocked(nx + ox, nz + oz, 0)) { clear = false; break; }
+      }
+      if (clear) return { x: nx, z: nz };
+    }
+  }
+  return null;
+}
+
 export function updatePlayer(dt) {
   const p = G.player;
   if (!p) return;
@@ -295,7 +354,9 @@ export function updatePlayer(dt) {
       const wx = ix * cos + iz * sin;
       const wz = -ix * sin + iz * cos;
       const sp = effectiveSpeed() * (p.attacking ? 0.55 : 1);
+      const wbx = pos.x, wbz = pos.z;
       moveWithCollision(pos, wx * sp * dt, wz * sp * dt, 0.55, { y: pos.y });
+      trackWedge(p, dt, Math.hypot(pos.x - wbx, pos.z - wbz));
       p.bobT += dt * sp * 1.35;
       if (!p.moving) { p.anim.play('Running_A'); p.moving = true; }
     } else if (p.moving) {
