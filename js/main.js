@@ -12,7 +12,7 @@ import { spawnLootsForFloor, updateLoot, applyTakenSilently, dropItemLoot } from
 import { updateProjectiles, clearProjectiles } from './projectiles.js';
 import { castSpell, castSignature, updateSpells, updateBeams, resetCooldowns, cooldowns, dealSpells, rerollSpell } from './spells.js';
 import { giveStartingGear, equipItem, salvageItem, rollTrinket, rollWeapon, rollOffhand, addToBag, rarityOf } from './items.js';
-import { SPELLS, SHOP_TABLES, ENEMIES } from './config.js';
+import { SPELLS, SHOP_TABLES, ENEMIES, RARITIES } from './config.js';
 import { generateTownData, generateArenaData, spawnTownNpcs, updateTownNpcs } from './town.js';
 import { initViewmodel, updateViewmodel } from './viewmodel.js';
 import { updateWalls, clearWalls } from './walls.js';
@@ -100,6 +100,29 @@ async function boot() {
   if (params.get('auto')) {
     initAudio();
     startRun(params.get('seed') || randomSeed(), params.get('mode') || 'campaign');
+    // ?boss=1 — playtest kit: a seasoned delver dropped at the dragon's door
+    if (params.get('boss')) {
+      const classId = getClass();
+      G.run.level = 10;
+      G.run.gold = 500; G.run.potions = 6; G.run.arrows = 150;
+      G.run.atkBonus = 8; G.run.hpBonus = 60; G.run.deepest = 9;
+      let w = null;
+      for (let i = 0; i < 600; i++) {
+        const c = rollWeapon(classId, 9, 9);
+        if (c.rarity === 'legendary' && c.sig) { w = c; break; }
+        if (!w || RARITIES.findIndex(r => r.id === c.rarity) > RARITIES.findIndex(r => r.id === w.rarity)) w = c;
+      }
+      G.inv.weapon = w;
+      G.inv.offhand = rollOffhand(classId, 9, 9);
+      G.inv.trinket = rollTrinket(classId, 9, 9);
+      refreshEquipVisuals();
+      G.player.maxHp = effectiveMaxHp();
+      G.player.hp = G.player.maxHp;
+      G.player.mana = G.player.maxMana;
+      refreshHud();
+      addMsg(`⚔ Playtest kit: Lv10, ${w.name}`, 'gold');
+      setTimeout(() => descendTo(9), 800);
+    }
   } else if (params.get('join')) {
     history.replaceState(null, '', location.pathname);
     $('joinCode').value = params.get('join').toUpperCase();

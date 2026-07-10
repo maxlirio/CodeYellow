@@ -32,15 +32,17 @@ function buildVisual(b) {
       const obj = new THREE.Group();
       const axe = makeWeaponModel('axe_1handed');
       axe.scale.setScalar(1.2);
+      axe.rotation.x = Math.PI / 2; // blade into the travel plane (group is velocity-oriented)
       obj.add(axe);
-      return { obj, spin: 'blade', trail: { color: 0xffaa66, rate: 0.06, n: 2, s: 0.08 } };
+      return { obj, orient: true, spin: 'wheel', trail: { color: 0xffaa66, rate: 0.06, n: 2, s: 0.08 } };
     }
     case 'knife': {
       const obj = new THREE.Group();
       const k = makeWeaponModel('dagger');
       k.scale.setScalar(1.3);
+      k.rotation.x = Math.PI / 2;
       obj.add(k);
-      return { obj, spin: 'blade', trail: { color: 0xccddee, rate: 0.08, n: 1, s: 0.05 } };
+      return { obj, orient: true, spin: 'wheel', trail: { color: 0xccddee, rate: 0.08, n: 1, s: 0.05 } };
     }
     case 'vial': {
       const obj = new THREE.Group();
@@ -195,7 +197,8 @@ export function updateProjectiles(dt, hooks) {
 
     // per-visual motion
     const v = p.vis;
-    if (v.spin === 'blade') p.sp.rotation.z -= dt * 16; // wheel spin
+    if (v.spin === 'blade') p.sp.rotation.z -= dt * 16; // wheel spin (legacy, unoriented)
+    else if (v.spin === 'wheel') p.sp.rotateX(dt * 16);  // tomahawk flip in the vertical travel plane
     else if (v.spin === 'tumble') { p.sp.rotation.x += dt * 7; p.sp.rotation.z += dt * 5; }
     else if (v.spin === 'roll') p.sp.rotateZ(dt * 9);
     else if (v.spin === 'pulse') {
