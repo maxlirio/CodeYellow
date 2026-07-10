@@ -27,6 +27,16 @@ const STYLES = {
   staff: { rot: [-0.35, Math.PI + 0.25, 0.3], scale: 0.4, attack: 'cast' },
   wand: { rot: [-0.55, Math.PI + 0.35, 0.15], scale: 0.45, attack: 'cast' },
   bow: { rot: [0, 0, 0.12], scale: 0.85, attack: 'bowshoot', bow: true, pos: [0.3, -0.28, -0.6] },
+  // generic per-verb styles: any new archetype resolves to one of these
+  _slash: { rot: [-0.5, Math.PI + 0.45, 0.18], scale: 0.62, attack: 'slash' },
+  _cleave: { rot: [-0.5, Math.PI + 0.45, 0.2], scale: 0.65, attack: 'cleave' },
+  _stab: { rot: [-0.9, Math.PI + 0.3, 0.05], scale: 0.6, attack: 'stab', dual: false },
+  _stab2: { rot: [-0.9, Math.PI + 0.3, 0.05], scale: 0.6, attack: 'stab', dual: true },
+  _smash: { rot: [-0.45, Math.PI + 0.4, 0.22], scale: 0.62, attack: 'smash' },
+  _sweep: { rot: [-0.4, Math.PI + 0.55, 0.25], scale: 0.6, attack: 'sweep' },
+  _shoot: { rot: [-0.12, Math.PI, 0], scale: 0.55, attack: 'shoot', bolt: true, pos: [0.3, -0.3, -0.58] },
+  _bowshoot: { rot: [0, 0, 0.12], scale: 0.62, attack: 'bowshoot', pos: [0.3, -0.28, -0.6] },
+  _cast: { rot: [-0.35, Math.PI + 0.25, 0.3], scale: 0.55, attack: 'cast' },
 };
 
 export function initViewmodel() {
@@ -41,12 +51,15 @@ export function initViewmodel() {
   rig.add(offholder);
 }
 
-export function setViewmodelWeapon(modelName, wtype = 'sword1h') {
+export function setViewmodelWeapon(modelName, wtype = 'sword1h', verb = null, sig = null) {
   if (!holder) return;
-  const key = modelName + ':' + wtype;
+  const key = modelName + ':' + wtype + ':' + (sig || '');
   if (key === currentKey) return;
   currentKey = key;
-  const style = STYLES[wtype] || STYLES.sword1h;
+  let style = STYLES[wtype];
+  if (!style && verb) style = STYLES['_' + verb + (verb === 'stab' && G.inv?.weapon?.held2 ? '2' : '')];
+  style = style || STYLES.sword1h;
+  hasSig = !!sig;
   rig.userData.style = style;
   if (weaponObj) holder.remove(weaponObj);
   if (offhandObj) { offholder.remove(offhandObj); offhandObj = null; }
@@ -98,7 +111,32 @@ export function triggerSwing(kind, dur = 0.45) {
   if (resolved === 'shoot' && boltObj) boltObj.visible = false; // the bolt flies
 }
 
+let hasSig = false;
+let glowPulse = 0;
+function updateSigGlow(dt) {
+  if (!weaponObj) return;
+  const ready = hasSig && G.player?.sigCharge != null && G.player.sigReadyFlag;
+  glowPulse += dt * 6;
+  const glow = ready ? 0.65 + Math.sin(glowPulse) * 0.35 : 0;
+  for (const root of [weaponObj, offhandObj]) root?.traverse((n) => {
+    if (!n.isMesh || n.material.isMeshBasicMaterial) return;
+    if (!n.userData.origEmissive) {
+      n.material = n.material.clone(); // don't glow every copy of this weapon in the world
+      n.userData.origEmissive = { c: n.material.emissive?.clone?.() || null, i: n.material.emissiveIntensity ?? 0 };
+    }
+    if (!n.material.emissive) return;
+    if (glow > 0) {
+      n.material.emissive.setHex(0xffcc44);
+      n.material.emissiveIntensity = glow;
+    } else if (n.userData.origEmissive.c) {
+      n.material.emissive.copy(n.userData.origEmissive.c);
+      n.material.emissiveIntensity = n.userData.origEmissive.i;
+    }
+  });
+}
+
 export function updateViewmodel(dt) {
+  updateSigGlow(dt);
   if (!rig) return;
   const p = G.player;
   const active = p && !p.dead && (G.mode === 'playing' || G.mode === 'merchant');
@@ -163,6 +201,27 @@ export function updateViewmodel(dt) {
         const arc = Math.sin(k * Math.PI);
         if (anim.dir > 0) { pz -= arc * 0.42; rx = -arc * 0.15; }
         else { offPz = -arc * 0.42; offRx = -arc * 0.15; }
+        break;
+      }
+      case 'smash': {
+        // hammer: slow wind-up way overhead, brutal drop, long ring-out
+        const wind = Math.min(1, k / 0.4);
+        const drop = k < 0.4 ? 0 : Math.min(1, (k - 0.4) / 0.2);
+        const rec = k < 0.6 ? 0 : (k - 0.6) / 0.4;
+        const w = 1 - rec * rec * (3 - 2 * rec);
+        rx = (wind * 1.5 - drop * 3.1) * w;
+        py += (wind * 0.42 - drop * 0.62) * w;
+        pz -= drop * 0.3 * w;
+        if (k > 0.58 && k < 0.85) { px += Math.sin(k * 110) * 0.018 * w; py += Math.sin(k * 85) * 0.014 * w; }
+        break;
+      }
+      case 'sweep': {
+        // scythe: a huge flat horizontal reap across the whole view
+        const arc = Math.sin(k * Math.PI);
+        ry = (k - 0.5) * 2.6 * arc;
+        px += (k - 0.5) * 1.1 * arc;
+        rz = arc * 0.35;
+        rx = -arc * 0.2;
         break;
       }
       case 'shoot': {

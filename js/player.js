@@ -3,8 +3,8 @@
 // Remote player avatars (full 3D models) are also maintained here.
 import * as THREE from 'three';
 import { G } from './state.js';
-import { CLASSES, XP_FOR_LEVEL, CAPE_COLORS } from './config.js';
-import { makeCharacter, setEquipMeshes, applyLook } from './assets.js';
+import { CLASSES, XP_FOR_LEVEL, CAPE_COLORS, SIGNATURES } from './config.js';
+import { makeCharacter, setEquipMeshes, applyLook, makeWeaponModel } from './assets.js';
 import { makeBlobShadow, spawnDamageNumber, spawnBurst } from './fx.js';
 import { sfx } from './audio.js';
 import { moveWithCollision, groundHeightAt, posBlocked, resolveStuck } from './dungeon.js';
@@ -53,16 +53,36 @@ export function createPlayer(classId, name) {
   return p;
 }
 
+function attachHeldWeapon(obj, held, held2) {
+  // clear previous held models
+  const olds = [];
+  obj.traverse((n) => { if (n.userData.heldWeapon) olds.push(n); });
+  for (const o of olds) o.parent.remove(o);
+  if (!held) return;
+  const sides = held2 ? [['handslotr', 'handslot.r'], ['handslotl', 'handslot.l']] : [['handslotr', 'handslot.r']];
+  for (const names of sides) {
+    const bone = obj.getObjectByName(names[0]) || obj.getObjectByName(names[1]);
+    if (!bone) continue;
+    const m = makeWeaponModel(held);
+    m.userData.heldWeapon = true;
+    m.rotation.x = Math.PI / 2; // grip points along the forearm
+    bone.add(m);
+  }
+}
+
 export function refreshEquipVisuals() {
   const p = G.player;
   if (!p) return;
-  const meshes = equippedMeshes(p.classId);
-  setEquipMeshes(p.obj, meshes);
   const w = G.inv.weapon;
-  setViewmodelWeapon(w?.model || WEAPON_TYPES[p.classId][0].model, w?.wtype || WEAPON_TYPES[p.classId][0].id);
+  const meshes = w?.held ? [] : equippedMeshes(p.classId);
+  setEquipMeshes(p.obj, meshes);
+  attachHeldWeapon(p.obj, w?.held, w?.held2);
+  setViewmodelWeapon(w?.model || WEAPON_TYPES[p.classId][0].model, w?.wtype || WEAPON_TYPES[p.classId][0].id, w?.verb, w?.sig);
+  p.sigCharge = 0;
+  refreshSigSlot();
   p.maxHp = effectiveMaxHp();
   p.hp = Math.min(p.hp, p.maxHp);
-  netSend({ t: 'equip', meshes });
+  netSend({ t: 'equip', meshes, held: w?.held || null, held2: !!w?.held2 });
   refreshHud();
 }
 
@@ -84,10 +104,20 @@ export function resetPlayerForFloor() {
 }
 
 // ---------- stats (class + level + run bonuses + gear + buffs) ----------
+function bannerMult() {
+  const p = G.player;
+  if (!p || !G.banners?.length) return 1;
+  for (const b of G.banners) {
+    if (Math.hypot(p.obj.position.x - b.x, p.obj.position.z - b.z) <= b.r) return b.mult;
+  }
+  return 1;
+}
+
 export function effectiveDamage() {
   const p = G.player;
   let d = weaponDamage(p.cls) + G.run.atkBonus + (G.run.level - 1) * 2;
   if (p.buff) d *= p.buff.dmgMult;
+  d *= bannerMult();
   return Math.round(d);
 }
 export function effectiveSpeed() {
@@ -119,15 +149,57 @@ export function effectiveAttackTime() {
 }
 // on-hit effects granted by the equipped weapon (+ active buffs)
 export function weaponHitEffects(dmg) {
-  const af = affixOf(G.inv.weapon);
+  const w = G.inv.weapon;
+  const af = affixOf(w);
   const fx = {};
   if (af?.burn) fx.poison = { dps: Math.max(2, Math.round(dmg * af.burn.mult)), dur: af.burn.dur };
   if (af?.slow) fx.slow = af.slow;
-  let steal = af?.lifesteal || 0;
+  let steal = (af?.lifesteal || 0) + (w?.lifestealAdd || 0);
   if (G.player.buff?.lifesteal) steal += G.player.buff.lifesteal;
   if (steal) fx.lifesteal = steal;
+  if (w?.stunHit && Math.random() < w.stunHit) fx.stun = 0.7; // hammers ring skulls
   return Object.keys(fx).length ? fx : null;
 }
+
+// weapon reach and swing width extend the class baseline
+export function effectiveAttackRange() {
+  return G.player.cls.attackRange + (G.inv.weapon?.rangeAdd || 0);
+}
+export function effectiveAttackArc() {
+  return G.player.cls.attackArc + (G.inv.weapon?.arcAdd || 0);
+}
+
+// ---- signature charge: landed basic hits wind the weapon's power ----
+export function addSigCharge(n = 1) {
+  const p = G.player, w = G.inv.weapon;
+  if (!p || !w?.sig) return;
+  const need = SIGNATURES[w.sig].hits;
+  const was = p.sigCharge || 0;
+  p.sigCharge = Math.min(need, was + n);
+  p.sigReadyFlag = p.sigCharge >= need;
+  if (p.sigCharge >= need && was < need) {
+    addMsg(`${SIGNATURES[w.sig].icon} ${SIGNATURES[w.sig].name} is CHARGED — press 4!`, 'gold');
+    sfx.levelup();
+  }
+  refreshSigSlot();
+}
+export function sigReady() {
+  const w = G.inv.weapon;
+  return !!(w?.sig && (G.player?.sigCharge || 0) >= SIGNATURES[w.sig].hits);
+}
+export function spendSigCharge() { if (G.player) { G.player.sigCharge = 0; G.player.sigReadyFlag = false; refreshSigSlot(); } }
+function refreshSigSlot() {
+  const w = G.inv.weapon;
+  const el = document.getElementById('sigSlot');
+  if (!el) return;
+  if (!w?.sig) { el.classList.add('hidden'); return; }
+  const sig = SIGNATURES[w.sig];
+  el.classList.remove('hidden');
+  el.classList.toggle('charged', sigReady());
+  el.querySelector('.icon').textContent = sig.icon;
+  el.querySelector('.fill').style.height = `${Math.min(100, ((G.player?.sigCharge || 0) / sig.hits) * 100)}%`;
+}
+export { refreshSigSlot };
 export function effectiveManaRegen() {
   return (G.player.cls.manaRegen || 0) + gearStat('mregen');
 }
@@ -319,6 +391,35 @@ export function updatePlayer(dt) {
     return;
   }
 
+  // Gravity Lash: perched on a distant surface — hold position, aim freely
+  if (p.perch) {
+    p.perch.t -= dt;
+    p.obj.position.set(p.perch.x, p.perch.y, p.perch.z);
+    if (p.attacking) {
+      p.attackT += dt;
+      const atkTime = effectiveAttackTime();
+      if (!p.attackFired && p.attackT >= atkTime * 0.45) { p.attackFired = true; doAttackHit(); }
+      if (p.attackT >= atkTime) p.attacking = false;
+    }
+    showPrompt('<b>SPACE</b> — Let go');
+    if (p.perch.t <= 0) { p.perch = null; hidePrompt(); }
+    updateCamera(dt, false);
+    updateCrosshairHover();
+    p.lastPosSend += dt;
+    if (p.lastPosSend > 0.09) sendPos();
+    return;
+  }
+  if (p.swapCritT > 0) p.swapCritT -= dt;
+  // Ember Trail: burning footprints
+  if (p.trailT > 0) {
+    p.trailT -= dt;
+    const tpos = p.obj.position;
+    if (!p.trailDropAt || Math.hypot(tpos.x - p.trailDropAt.x, tpos.z - p.trailDropAt.z) > 1.1) {
+      p.trailDropAt = { x: tpos.x, z: tpos.z };
+      G.dropEmber?.(tpos.x, tpos.z, p.trailDmg || 5);
+    }
+  }
+
   const k = G.keys;
   let ix = 0, iz = 0;
   if (k['KeyW']) iz -= 1;
@@ -367,7 +468,13 @@ export function updatePlayer(dt) {
 
   // gravity & ground snap (platforms, stairs)
   const ground = groundHeightAt(pos.x, pos.z, pos.y);
-  if (pos.y > ground + 0.02) {
+  if (p.levitateT > 0) {
+    // LEVITATE: glide serenely above the stones
+    p.levitateT -= dt;
+    pos.y += ((ground + 2.6) - pos.y) * Math.min(1, dt * 3);
+    p.vy = 0;
+    if (Math.random() < dt * 6) spawnBurst(pos.clone().setY(pos.y - 0.4), 0xccaaff, 2, 1, 0.08, 0.4);
+  } else if (pos.y > ground + 0.02) {
     // momentum from a rope release carries through the air
     if (p.airVX || p.airVZ) moveWithCollision(pos, p.airVX * dt, p.airVZ * dt, 0.55, { y: pos.y });
     p.vy -= 26 * dt;
@@ -438,7 +545,7 @@ function doAttackHit() {
     const b = {
       x: p.obj.position.x + dir.x * 0.7, z: p.obj.position.z + dir.z * 0.7, y: p.obj.position.y + 1.45,
       dirX: dir.x + sx, dirY: dir.y + sy, dirZ: dir.z + sz,
-      speed: G.inv.weapon?.ranged ? 28 : 20, dmg: boltDmg, size: boltSize, owner: 'player',
+      speed: G.inv.weapon?.ranged ? 28 : 20, dmg: boltDmg, size: boltSize, owner: 'player', basic: true,
       color: G.inv.weapon?.ranged ? 0xddcc99 : 0xff8833,
       vis: G.inv.weapon?.ranged ? 'arrow' : (p.cls.boltVis || 'fire'),
       slow: wfx?.slow || null, poison: wfx?.poison || null, lifesteal: wfx?.lifesteal || 0,
@@ -466,20 +573,29 @@ function doAttackHit() {
       notifyHit(crit);
     }
   }
+  let landed = false;
   for (const e of G.enemies) {
     if (e.state === 'dead') continue;
     const dx = e.obj.position.x - p.obj.position.x;
     const dz = e.obj.position.z - p.obj.position.z;
     const d = Math.hypot(dx, dz);
-    if (d > cls.attackRange * (e.boss ? 1.4 : 1)) continue;
+    if (d > effectiveAttackRange() * (e.boss ? 1.4 : 1)) continue;
     if (Math.abs(e.obj.position.y - p.obj.position.y) > 2.2) continue;
     let ang = Math.atan2(dx, dz) - p.yaw;
     while (ang > Math.PI) ang -= Math.PI * 2;
     while (ang < -Math.PI) ang += Math.PI * 2;
-    if (Math.abs(ang) > cls.attackArc) continue;
-    const crit = Math.random() < effectiveCrit();
-    damageEnemy(e, crit ? Math.round(dmg * 1.8) : dmg, crit, false, 'local', wfx);
+    if (Math.abs(ang) > effectiveAttackArc()) continue;
+    let hitDmg = crit4(dmg);
+    if (p.swapCritT > 0) { hitDmg = Math.round(dmg * 2); p.swapCritT = 0; }
+    damageEnemy(e, hitDmg.v, hitDmg.crit, false, 'local', wfx);
+    landed = true;
   }
+  if (landed) addSigCharge(1);
+}
+
+function crit4(dmg) {
+  const crit = Math.random() < effectiveCrit();
+  return { v: crit ? Math.round(dmg * 1.8) : dmg, crit };
 }
 
 export function tryAttack() {
@@ -507,6 +623,7 @@ export function tryAttack() {
 export function tryDodge() {
   const p = G.player;
   if (!p || p.dead || G.mode !== 'playing') return;
+  if (p.perch) { p.perch = null; hidePrompt(); p.vy = 2; return; }
   if (p.rope) { releaseRope(1.3); return; }
   const ground = groundHeightAt(p.obj.position.x, p.obj.position.z, p.obj.position.y);
   if (p.obj.position.y <= ground + 0.08) {
@@ -695,9 +812,11 @@ export function removeRemotePlayer(pid) {
   updatePartyBar();
 }
 
-export function applyRemoteEquip(pid, meshes) {
+export function applyRemoteEquip(pid, meshes, held, held2) {
   const r = G.remotes.get(pid);
-  if (r) setEquipMeshes(r.obj, meshes);
+  if (!r) return;
+  setEquipMeshes(r.obj, meshes);
+  attachHeldWeapon(r.obj, held, held2);
 }
 
 export function updateRemotes(dt) {

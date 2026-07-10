@@ -19,6 +19,8 @@ const KINDS = {
   bow: { model: 'Rogue', show: ['2H_Crossbow'], hp: 60, dmg: 10, speed: 7.5, range: 13, atkTime: 1.3, ranged: true, name: 'Marksman' },
   // spectral copies of their caster: fast, fragile, and gone in seconds
   phantom: { model: 'Mage', show: [], hp: 45, dmg: 8, speed: 9.5, range: 2.6, atkTime: 0.55, name: 'Phantom', phantom: true },
+  // a straw scarecrow of the caster: never moves, never fights, soaks aggro
+  decoy: { model: 'Knight', show: [], hp: 140, dmg: 0, speed: 0, range: 0, atkTime: 9, name: 'Straw Double', phantom: true, decoy: true },
   // Last Stand only: crews turrets & cannons, doesn't fight back
   worker: { model: 'Rogue', show: [], hp: 45, dmg: 2, speed: 7.5, range: 2.0, atkTime: 1.2, name: 'Worker', worker: true },
 };
@@ -34,7 +36,8 @@ export function spawnMinion(kindId, owner, floor, x, z, id = null, broadcast = t
   const model = opts.model || kind.model;
   const show = opts.show || kind.show;
   const { obj, anim } = makeCharacter('char', model, show);
-  if (kind.phantom) tintCharacter(obj, 0xbfe0ff, { ghost: true });
+  if (kind.decoy) tintCharacter(obj, 0xd9b36c, { ghost: false });
+  else if (kind.phantom) tintCharacter(obj, 0xbfe0ff, { ghost: true });
   else applyLook(obj, { cape: true, helmet: true, capeColor: 5 });
   obj.position.set(x, 0, z);
   obj.add(makeBlobShadow(0.8));
@@ -57,7 +60,7 @@ export function spawnMinion(kindId, owner, floor, x, z, id = null, broadcast = t
   obj.visible = floor === G.floor;
   const m = {
     id: id ?? nextMinionId++, owner, kind: kindId, cfg: kind, floor,
-    obj, anim, hp: kind.hp, maxHp: kind.hp, dmg: opts.dmg || kind.dmg,
+    obj, anim, hp: opts.hp || kind.hp, maxHp: opts.hp || kind.hp, dmg: opts.dmg ?? kind.dmg,
     life: opts.life ?? null,
     state: 'follow', atkT: 0, netX: x, netY: 0, netZ: z, netYaw: 0, vy: 0, dead: false,
   };
@@ -146,6 +149,7 @@ export function updateMinions(dt) {
       m.life -= dt;
       if (m.life <= 0) { damageMinion(m, m.hp + 1); continue; }
     }
+    if (m.cfg.decoy) continue; // scarecrows just stand there, gloriously
     const pos = m.obj.position;
     m.atkT -= dt;
 

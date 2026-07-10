@@ -270,3 +270,10 @@ button.orange-btn:hover { filter: brightness(1.15); }
 
 /* ---- commander map ---- */
 .cmd-canvas { width: min(58vh, 82vw); height: min(58vh, 82vw); border: 2px solid var(--border); border-radius: 8px; background: #0d0a14; cursor: crosshair; margin: 8px 0; }
+
+/* ---- weapon signature slot: fills as you land hits, blazes when ready ---- */
+#sigSlot { position: relative; overflow: hidden; }
+#sigSlot .fill { position: absolute; left: 0; right: 0; bottom: 0; height: 0%; background: rgba(240,180,60,0.28); transition: height 0.15s; pointer-events: none; }
+#sigSlot .icon { position: relative; }
+#sigSlot.charged { border-color: #ffcc44; box-shadow: 0 0 12px rgba(255,204,68,0.7); animation: sigpulse 0.9s infinite alternate; }
+@keyframes sigpulse { from { box-shadow: 0 0 6px rgba(255,204,68,0.4); } to { box-shadow: 0 0 16px rgba(255,204,68,0.9); } }

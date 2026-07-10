@@ -725,6 +725,31 @@ function simulateDragon(e, fs, players, dt, mine) {
   e.obj.rotation.y += dyw * Math.min(1, dt * 5);
 }
 
+// visual status effects other clients must see too (via 'evfx' messages)
+export function applyEnemyVfx(e, kind, dur) {
+  if (!e || e.state === 'dead') return;
+  const old = e.obj.children.find(c => c.userData.evfx);
+  if (old) e.obj.remove(old);
+  let obj = null;
+  if (kind === 'ice') {
+    obj = new THREE.Mesh(
+      new THREE.BoxGeometry(1.5, 2.3, 1.5),
+      new THREE.MeshStandardMaterial({ color: 0xbfe8ff, transparent: true, opacity: 0.5, roughness: 0.15 })
+    );
+    obj.position.y = 1.1;
+  } else if (kind === 'freeze') {
+    obj = new THREE.Mesh(
+      new THREE.SphereGeometry(1.2, 10, 8),
+      new THREE.MeshBasicMaterial({ color: 0x88ccff, transparent: true, opacity: 0.25, depthWrite: false })
+    );
+    obj.position.y = 1.1;
+  }
+  if (!obj) return;
+  obj.userData.evfx = true;
+  e.obj.add(obj);
+  setTimeout(() => { e.obj.remove(obj); obj.geometry?.dispose(); obj.material?.dispose(); }, dur * 1000);
+}
+
 export function setEnemyState(e, s, fromNet = false) {
   if (e.state === 'dead') return;
   if (e.state === s) return;

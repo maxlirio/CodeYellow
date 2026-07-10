@@ -155,12 +155,18 @@ function handleAsHost(conn, m) {
       if (m.f === G.floor) H?.fx.spawnBurst(new THREE.Vector3(m.x, m.y, m.z), m.color, m.big ? 26 : 14, m.big ? 7 : 4, 0.15, 0.5);
       relay(conn, { ...m, pid });
       break;
+    case 'evfx': {
+      const e2 = H?.enemies.enemyById(m.f, m.id);
+      if (e2) H.enemies.applyEnemyVfx(e2, m.kind, m.dur);
+      relay(conn, { ...m, pid });
+      break;
+    }
     case 'beam':
       if (m.f === G.floor) H?.spells.remoteBeam(m.a, m.b);
       relay(conn, { ...m, pid });
       break;
     case 'equip':
-      H?.player.applyRemoteEquip(pid, m.meshes);
+      H?.player.applyRemoteEquip(pid, m.meshes, m.held, m.held2);
       relay(conn, { ...m, pid });
       break;
     case 'dmg': {
@@ -314,11 +320,16 @@ function handleAsGuest(m) {
     case 'pheal':
       applyPheal(m);
       break;
+    case 'evfx': {
+      const e2 = H?.enemies.enemyById(m.f, m.id);
+      if (e2) H.enemies.applyEnemyVfx(e2, m.kind, m.dur);
+      break;
+    }
     case 'beam':
       if (m.f === G.floor) H?.spells.remoteBeam(m.a, m.b);
       break;
     case 'equip':
-      H?.player.applyRemoteEquip(m.pid, m.meshes);
+      H?.player.applyRemoteEquip(m.pid, m.meshes, m.held, m.held2);
       break;
     case 'ehp': {
       const e = H?.enemies.enemyById(m.f, m.id);

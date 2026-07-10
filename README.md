@@ -20,6 +20,9 @@ You can *see* yourself fight now — your equipped weapon is in-hand Minecraft-s
 - **4 layout generators** — classic rooms & corridors, cramped trap-riddled warrens, organic caverns grown by cellular automata, and vast pillared great halls
 - **Floor mutators** — INFESTED, CURSED, TREASURE VAULT, HAUNTED, SWIFT DEATH, PITCH DARK: random modifiers announced as you descend
 - **5 classes with deep spell schools, dealt 3 per run** — your loadout is random every run (30 spells: fireballs, meteors called onto your crosshair, chain lightning, **Storm Lance** (a forked bolt ripping from your staff), **Mirror Legion** (spectral copies of yourself that fight beside you), **Gravity Well** (a vortex that drags the pack into a heap), **Ricochet Orb** (bounces off walls down corridors), **Life Ward** (a crystal that pulses party-wide healing), piercing arcane orbs, blizzards, whirlwinds, savage leaps, smoke bombs, death marks…). The merchant's Spell Tome rerolls a slot mid-run.
+- **30 weapon archetypes with SIGNATURE powers** — claymores, warhammers, reaper scythes, spears, twin fangs, skull staves, crystal scepters, dreadbows, grave crossbows and more (Quaternius + KayKit models, every archetype swings differently). Rare+ weapons can roll a **signature**: land hits to charge it, the weapon **glows**, then key **4** unleashes it — Radiant Beam, Fire Nova, Thunderclap, Void Rip, Life Drain, Arrow Storm, Frost Wave, Shadow Flurry, Earthsplitter, Dragon's Breath.
+- **Exotic spells, not just projectiles** — Gravity Lash (lash yourself to a wall and fight from your perch), Chrono Bubble (freeze time in a dome), Shadow Swap (blink behind your mark), Frost Prison, Steel Traps, a Straw Double decoy, True Sight through walls, Levitation, Ember Trail, Sanctuary.
+- **Warriors don't cast — they ERUPT**: Knight and Barbarian have physical power-up abilities instead of magic (Charge, War Banner, Chain Hook, Sunder Stomp, Executioner's Arc that triples damage on wounded foes).
 - **Change ventures mid-run** — the **Wayfarer Post** in the tavern (or the pause menu) switches between Campaign, Last Stand and Duel **without losing your character**: gold, gear, bag, potions, levels and campaign progress all travel with you. In co-op the host switches everyone together.
 - **First-person combat** — crosshair that flares on targets, **Shift to aim** (FOV zoom, steadier shots), dodge dash with i-frames, hit markers, crits, knockback, slows, poison, burns
 - **Verticality** — climbable staircases lead to railed platforms, central islands with twin stairs, and wall balconies where skeleton archers guard treasure
@@ -70,6 +73,7 @@ Debug hooks: `?auto=1&seed=myseed` auto-starts a solo run with a fixed dungeon s
 
 - **Models & animations:** [KayKit](https://kaylousberg.com) — Dungeon Remastered, Adventurers, and Skeletons packs (CC0)
 - **Monsters & dragon:** [Quaternius](https://quaternius.com) — Ultimate Monsters pack (CC0)
+- **Weapons:** [Quaternius](https://quaternius.com) — RPG Items & Medieval Weapons packs (CC0)
 - **Music:** "Woodland Fantasy", "Dark Descent" & "Heroic Demise" by [Matthew Pablo](http://www.matthewpablo.com) (CC-BY 3.0, via OpenGameArt); "Crystal Cave" & "Battle Theme A" by [cynicmusic](https://cynicmusic.com) (CC0, via OpenGameArt)
 - **Engine:** [three.js](https://threejs.org) · **Networking:** [PeerJS](https://peerjs.com)
 - Built with Claude Code

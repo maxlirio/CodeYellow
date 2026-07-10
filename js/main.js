@@ -10,7 +10,7 @@ import { generateFloorData, buildFloorMeshes, disposeAllFloors } from './dungeon
 import { spawnEnemiesForFloor, updateEnemies, damageEnemy, spawnEnemy, setEnemyState, killEnemy, refreshBossBarForFloor } from './enemies.js';
 import { spawnLootsForFloor, updateLoot, applyTakenSilently, dropItemLoot } from './loot.js';
 import { updateProjectiles, clearProjectiles } from './projectiles.js';
-import { castSpell, updateSpells, updateBeams, resetCooldowns, cooldowns, dealSpells, rerollSpell } from './spells.js';
+import { castSpell, castSignature, updateSpells, updateBeams, resetCooldowns, cooldowns, dealSpells, rerollSpell } from './spells.js';
 import { giveStartingGear, equipItem, salvageItem, rollTrinket, rollWeapon, rollOffhand, addToBag, rarityOf } from './items.js';
 import { SPELLS, SHOP_TABLES, ENEMIES } from './config.js';
 import { generateTownData, generateArenaData, spawnTownNpcs, updateTownNpcs } from './town.js';
@@ -30,7 +30,7 @@ import {
   createPlayer, resetPlayerForFloor, updatePlayer, updateRemotes, tryAttack, tryDodge, tryInteract,
   drinkPotion, onMouseMove, damageLocalPlayer, sendPos, effectiveMaxHp, effectiveDamage,
   effectiveSpeed, effectiveCrit, effectiveArmor, effectiveManaRegen, refreshEquipVisuals,
-  refreshRemoteVisibility, effectiveAttackTime, weaponHitEffects,
+  refreshRemoteVisibility, effectiveAttackTime, weaponHitEffects, addSigCharge,
 } from './player.js';
 import {
   show, hide, setHidden, addMsg, refreshHud, updateMinimap, updateDodgeCooldown,
@@ -323,7 +323,8 @@ function startRun(seed, mode = 'campaign') {
   G.player.maxHp = effectiveMaxHp();
   G.player.hp = G.player.maxHp;
   const spells = dealSpells(classId);
-  addMsg(`Your spells this run: ${spells.map(s => `${SPELLS[s].icon} ${SPELLS[s].name}`).join(' · ')}`, 'gold');
+  const kitWord = CLASSES[classId].physical ? 'abilities' : 'spells';
+  addMsg(`Your ${kitWord} this run: ${spells.map(s => `${SPELLS[s].icon} ${SPELLS[s].name}`).join(' · ')}`, 'gold');
 
   if (mode === 'horde') {
     setLocalFloor(1);
@@ -597,6 +598,19 @@ function spellDetail(sp, dmg, p) {
     case 'vortex': bits.push(`drags every foe within ${sp.radius}u to its heart for ${sp.dur}s; <b>${sd}</b> dmg at the core`); break;
     case 'ward': bits.push(`heals <b>${Math.max(2, Math.round(p.maxHp * sp.frac))}</b> HP every ${sp.tick}s for ${sp.dur}s, within ${sp.radius}u`); break;
     case 'wall': bits.push(`raises a bone wall for ${sp.dur}s, up to ${sp.range}u away`); break;
+    case 'charge': bits.push(`dash ${sp.dist}u forward — <b>${sd}</b> dmg and knockback to everything in your path`); break;
+    case 'banner': bits.push(`plant a banner: +${Math.round((sp.dmgAura - 1) * 100)}% damage within ${sp.radius}u for ${sp.dur}s`); break;
+    case 'hook': bits.push(`yank a foe (up to ${sp.range}u) to your feet — <b>${sd}</b> dmg, stun ${sp.stun}s`); break;
+    case 'lash': bits.push(`lash yourself to a surface up to ${sp.range}u away and perch there ${sp.dur}s`); break;
+    case 'trap': bits.push(`set a steel trap (max ${sp.max}): <b>${sd}</b> dmg and roots ${sp.root}s`); break;
+    case 'freeze': bits.push(`freezes every foe within ${sp.radius}u of the mark for ${sp.dur}s`); break;
+    case 'swap': bits.push(`teleport behind your mark (${sp.range}u); next strike deals double`); break;
+    case 'decoy': bits.push(`a straw double (${sp.hp} HP) draws attacks for ${sp.dur}s`); break;
+    case 'prison': bits.push(`entombs the mark in ice: ${sp.dur}s frozen and taking bonus damage`); break;
+    case 'sight': bits.push(`see every enemy through the walls for ${sp.dur}s`); break;
+    case 'levitate': bits.push(`float above the ground for ${sp.dur}s`); break;
+    case 'trail': bits.push(`your footsteps burn for ${sp.dur}s — <b>${sd}</b> dmg to pursuers`); break;
+    case 'sanctuary': bits.push(`a dome (${sp.radius}u) that blocks all enemy projectiles for ${sp.dur}s`); break;
   }
   return bits.join(' · ');
 }
@@ -936,6 +950,7 @@ function setupInput() {
     if (e.code === 'Digit1') castSpell(0, effectiveDamage);
     if (e.code === 'Digit2') castSpell(1, effectiveDamage);
     if (e.code === 'Digit3') castSpell(2, effectiveDamage);
+    if (e.code === 'Digit4' || e.code === 'KeyR') castSignature(effectiveDamage);
     if (e.code === 'Escape' && G.mode === 'playing') {
       G.mode = 'paused';
       G.paused = true;
@@ -1016,7 +1031,7 @@ function loop(t) {
     updateEnemies(dt);
     updateRemotes(dt);
     updateLoot(dt);
-    updateProjectiles(dt, { damageEnemy, damageLocalPlayer });
+    updateProjectiles(dt, { damageEnemy, damageLocalPlayer, onBasicHit: () => addSigCharge(1) });
     updateSpells(dt);
     updateBeams(dt);
     updateFx(dt);

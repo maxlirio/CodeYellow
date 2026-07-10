@@ -6,19 +6,21 @@ export const PLATFORM_H = 4;        // height of climbable platforms
 export const CLASSES = {
   knight: {
     name: 'Knight', icon: '🛡', model: 'Knight',
-    desc: 'Sturdy sword & board. Balanced damage, high health.',
+    desc: 'Sturdy sword & board. No magic — raw martial power-ups.',
+    physical: true,
     hp: 125, dmg: 16, speed: 8.2, crit: 0.06, attackAnims: ['1H_Melee_Attack_Slice_Horizontal', '1H_Melee_Attack_Chop'],
     attackTime: 0.7, attackRange: 3.0, attackArc: 1.1, mana: 60, manaRegen: 2,
     show: ['1H_Sword', 'Round_Shield'],
-    spellPool: ['holybolt', 'shieldbash', 'warcry', 'judgement', 'consecrate', 'bulwark', 'bonewall', 'lifeward'],
+    spellPool: ['shieldbash', 'warcry', 'bulwark', 'bullcharge', 'warbanner', 'executioner', 'chainhook'],
   },
   barbarian: {
     name: 'Barbarian', icon: '🪓', model: 'Barbarian',
-    desc: 'Massive two-handed axe. Slow swings, huge damage.',
+    desc: 'Massive two-handed axe. No magic — raw martial power-ups.',
+    physical: true,
     hp: 150, dmg: 26, speed: 7.7, crit: 0.1, attackAnims: ['2H_Melee_Attack_Chop', '2H_Melee_Attack_Slice'],
     attackTime: 0.92, attackRange: 3.4, attackArc: 1.35, mana: 60, manaRegen: 2,
     show: ['2H_Axe'],
-    spellPool: ['axethrow', 'groundslam', 'rage', 'whirlwind', 'leap', 'bloodlust', 'bonewall', 'gravitywell'],
+    spellPool: ['axethrow', 'groundslam', 'rage', 'whirlwind', 'leap', 'bloodlust', 'bullcharge', 'sunderstomp', 'chainhook', 'executioner'],
   },
   rogue: {
     name: 'Rogue', icon: '🗡', model: 'Rogue',
@@ -26,7 +28,7 @@ export const CLASSES = {
     hp: 92, dmg: 11, speed: 9.4, crit: 0.28, attackAnims: ['Dualwield_Melee_Attack_Slice', 'Dualwield_Melee_Attack_Stab'],
     attackTime: 0.44, attackRange: 2.6, attackArc: 1.0, mana: 70, manaRegen: 2.5,
     show: ['Knife', 'Knife_Offhand'],
-    spellPool: ['knifefan', 'shadowstep', 'venomvial', 'smokebomb', 'deathmark', 'shurikenstorm', 'bonewall', 'mirrorimage', 'ricochet'],
+    spellPool: ['knifefan', 'shadowstep', 'venomvial', 'smokebomb', 'deathmark', 'shurikenstorm', 'bonewall', 'mirrorimage', 'ricochet', 'shadowswap', 'decoy', 'beartrap', 'embertrail'],
   },
   mage: {
     name: 'Mage', icon: '🔮', model: 'Mage',
@@ -34,7 +36,7 @@ export const CLASSES = {
     hp: 84, dmg: 26, speed: 8.4, crit: 0.08, attackAnims: ['Spellcast_Shoot'],
     attackTime: 0.55, attackRange: 26, attackArc: 0, mana: 110, manaRegen: 3.5, manaAttack: 0.2,
     show: ['2H_Staff'], ranged: true, boltVis: 'fire',
-    spellPool: ['fireball', 'frostshard', 'chainlightning', 'meteor', 'blizzard', 'arcaneorb', 'bonewall', 'stormlance', 'mirrorimage', 'gravitywell', 'ricochet'],
+    spellPool: ['fireball', 'frostshard', 'chainlightning', 'meteor', 'blizzard', 'arcaneorb', 'bonewall', 'stormlance', 'mirrorimage', 'gravitywell', 'ricochet', 'gravitylash', 'chronobubble', 'frostprison', 'levitate', 'sanctuary'],
   },
   ranger: {
     name: 'Ranger', icon: '🏹', model: 'Rogue_Hooded',
@@ -42,7 +44,7 @@ export const CLASSES = {
     hp: 95, dmg: 14, speed: 9.0, crit: 0.15, attackAnims: ['2H_Ranged_Shoot'],
     attackTime: 0.95, attackRange: 28, attackArc: 0, mana: 80, manaRegen: 2.5,
     show: [], ranged: true, boltVis: 'arrow',
-    spellPool: ['powershot', 'multishot', 'rainarrows', 'shadowstep', 'smokebomb', 'bonewall', 'lifeward'],
+    spellPool: ['powershot', 'multishot', 'rainarrows', 'shadowstep', 'smokebomb', 'bonewall', 'lifeward', 'beartrap', 'truesight', 'decoy', 'embertrail', 'sanctuary'],
   },
 };
 
@@ -56,7 +58,7 @@ export const SPELLS = {
   consecrate: { name: 'Consecrate', icon: '🕯️', mana: 27, cd: 10, type: 'aoe', dmgMult: 0.7, radius: 5, burn: { mult: 0.35, dur: 4 }, color: 0xffcc66 },
   bulwark:    { name: 'Bulwark', icon: '🧱', mana: 24, cd: 14, type: 'buff', armorAdd: 0.5, dmgMult: 1, speedMult: 1, dur: 5 },
   // barbarian
-  axethrow:   { name: 'Axe Throw', icon: '🪓', mana: 18, cd: 4,  type: 'proj', dmgMult: 1.8, speed: 18, color: 0xff8844, size: 1.5, vis: 'axe' },
+  axethrow:   { name: 'Axe Throw', icon: '🪓', mana: 18, cd: 4,  type: 'proj', dmgMult: 1.8, speed: 18, color: 0xff8844, size: 1.5, vis: 'axe', phys: true },
   groundslam: { name: 'Ground Slam', icon: '💥', mana: 27, cd: 8, type: 'aoe', dmgMult: 1.3, radius: 5.5, stun: 1.0 },
   rage:       { name: 'Battle Rage', icon: '😤', mana: 30, cd: 16, type: 'buff', dmgMult: 1.45, speedMult: 1.25, dur: 6 },
   whirlwind:  { name: 'Whirlwind', icon: '🌪️', mana: 30, cd: 7, type: 'aoe', dmgMult: 1.7, radius: 4.2, color: 0xffbb66 },
@@ -80,6 +82,23 @@ export const SPELLS = {
   powershot:  { name: 'Power Shot', icon: '🎯', mana: 21, cd: 5, type: 'proj', dmgMult: 2.0, speed: 34, color: 0xd8e6b0, pierce: true, vis: 'arrow', arrows: 1 },
   multishot:  { name: 'Multishot', icon: '🏹', mana: 24, cd: 6, type: 'proj', dmgMult: 0.8, speed: 28, color: 0xd8e6b0, count: 3, spread: 0.35, vis: 'arrow', arrows: 3 },
   rainarrows: { name: 'Rain of Arrows', icon: '🌧️', mana: 36, cd: 10, type: 'targetaoe', dmgMult: 1.4, radius: 4.5, range: 26, delay: 0.7, color: 0xd8e6b0, fall: 'arrowrain', arrows: 7 },
+  // ---- physical power-up abilities (knight & barbarian) ----
+  bullcharge:  { name: 'Charge', icon: '🐗', mana: 24, cd: 9, type: 'charge', dist: 9, dmgMult: 1.2, phys: true },
+  warbanner:   { name: 'War Banner', icon: '🚩', mana: 30, cd: 18, type: 'banner', dur: 10, radius: 7, dmgAura: 1.25, phys: true },
+  executioner: { name: "Executioner's Arc", icon: '🪓', mana: 27, cd: 10, type: 'cone', dmgMult: 1.3, range: 4.5, arc: 1.4, knockback: 4, execute: 0.3, execMult: 3, phys: true },
+  sunderstomp: { name: 'Sunder Stomp', icon: '🦶', mana: 24, cd: 9, type: 'aoe', dmgMult: 0.9, radius: 5.5, vulnAll: 4, slowAll: { mult: 0.6, dur: 2.5 }, phys: true },
+  chainhook:   { name: 'Chain Hook', icon: '⛓', mana: 21, cd: 8, type: 'hook', range: 16, dmgMult: 0.8, stun: 0.6, phys: true },
+  // ---- exotic effect spells ----
+  gravitylash: { name: 'Gravity Lash', icon: '🧲', mana: 27, cd: 12, type: 'lash', range: 22, dur: 7 },
+  beartrap:    { name: 'Steel Trap', icon: '🪤', mana: 15, cd: 6, type: 'trap', dmgMult: 1.2, root: 2.5, max: 3 },
+  chronobubble:{ name: 'Chrono Bubble', icon: '⏳', mana: 33, cd: 16, type: 'freeze', radius: 6, range: 20, dur: 3.5 },
+  shadowswap:  { name: 'Shadow Swap', icon: '🌑', mana: 21, cd: 9, type: 'swap', range: 18, critDur: 3 },
+  decoy:       { name: 'Straw Double', icon: '🎭', mana: 24, cd: 14, type: 'decoy', hp: 140, dur: 9 },
+  frostprison: { name: 'Frost Prison', icon: '🧊', mana: 27, cd: 11, type: 'prison', range: 20, dur: 4, vuln: 4 },
+  truesight:   { name: 'True Sight', icon: '👁', mana: 15, cd: 18, type: 'sight', dur: 12 },
+  levitate:    { name: 'Levitate', icon: '🎈', mana: 24, cd: 14, type: 'levitate', dur: 4.5 },
+  embertrail:  { name: 'Ember Trail', icon: '🔥', mana: 21, cd: 12, type: 'trail', dur: 6, dmgMult: 0.5 },
+  sanctuary:   { name: 'Sanctuary', icon: '🛡', mana: 27, cd: 16, type: 'sanctuary', radius: 5.5, dur: 6 },
   // new schools
   mirrorimage: { name: 'Mirror Legion', icon: '👥', mana: 51, cd: 20, type: 'phantoms', count: 2, dur: 12, dmgMult: 0.5 },
   stormlance: { name: 'Storm Lance', icon: '⚡', mana: 30, cd: 6, type: 'lightning', dmgMult: 1.7, range: 18, forks: 3, forkRange: 8, forkMult: 0.75, stun: 0.6 },
@@ -109,27 +128,66 @@ export const RARITIES = [
 ];
 
 // weapon archetypes: rig mesh(es) + drop model; `ranged` swaps your basic attack style
+// Every archetype swings differently (verb -> viewmodel anim), has its own
+// stats, and lists which signature powers it can roll at rare+ quality.
+// mesh = KayKit rig meshes; held = a GLB attached to the hand instead.
 export const WEAPON_TYPES = {
   knight: [
-    { id: 'sword1h', noun: 'Sword', mesh: ['1H_Sword', 'OFFHAND'], model: 'sword_1handed' },
-    { id: 'sword2h', noun: 'Greatsword', mesh: ['2H_Sword'], model: 'sword_2handed', dmgBonus: 1.15 },
+    { id: 'sword1h', noun: 'Sword', mesh: ['1H_Sword', 'OFFHAND'], model: 'sword_1handed', verb: 'slash', sigPool: ['radiantbeam', 'frostwave'] },
+    { id: 'sword2h', noun: 'Greatsword', mesh: ['2H_Sword'], model: 'sword_2handed', verb: 'cleave', dmgBonus: 1.15, sigPool: ['radiantbeam', 'earthsplitter'] },
+    { id: 'knightblade', noun: 'Blade', mesh: [], held: 'Sword', model: 'Sword', verb: 'slash', dmgBonus: 0.95, atkTime: 0.6, critAdd: 0.05, sigPool: ['radiantbeam', 'frostwave'] },
+    { id: 'claymore', noun: 'Claymore', mesh: [], held: 'Claymore', model: 'Claymore', verb: 'cleave', dmgBonus: 1.45, atkTime: 1.1, sigPool: ['earthsplitter', 'thunderclap'] },
+    { id: 'warhammer', noun: 'Warhammer', mesh: [], held: 'Hammer_Double', model: 'Hammer_Double', verb: 'smash', dmgBonus: 1.3, atkTime: 1.0, stunHit: 0.4, sigPool: ['thunderclap', 'earthsplitter'] },
+    { id: 'spear', noun: 'Spear', mesh: [], held: 'Spear', model: 'Spear', verb: 'stab', dmgBonus: 1.05, rangeAdd: 1.3, sigPool: ['frostwave', 'radiantbeam'] },
+    { id: 'runesword', noun: 'Runeblade', mesh: [], held: 'Sword_Golden', model: 'Sword_Golden', verb: 'slash', dmgBonus: 1.1, atkTime: 0.62, critAdd: 0.08, minRarity: 2, sigPool: ['radiantbeam', 'dragonsbreath'] },
   ],
   barbarian: [
-    { id: 'axe1h', noun: 'Axe', mesh: ['1H_Axe', 'OFFHAND'], model: 'axe_1handed' },
-    { id: 'axe2h', noun: 'Great Axe', mesh: ['2H_Axe'], model: 'axe_2handed', dmgBonus: 1.15 },
+    { id: 'axe1h', noun: 'Axe', mesh: ['1H_Axe', 'OFFHAND'], model: 'axe_1handed', verb: 'slash', sigPool: ['firenova', 'dragonsbreath'] },
+    { id: 'axe2h', noun: 'Great Axe', mesh: ['2H_Axe'], model: 'axe_2handed', verb: 'cleave', dmgBonus: 1.15, sigPool: ['firenova', 'earthsplitter'] },
+    { id: 'waraxe', noun: 'War Axe', mesh: [], held: 'Axe', model: 'Axe', verb: 'cleave', dmgBonus: 1.25, atkTime: 1.0, sigPool: ['firenova', 'thunderclap'] },
+    { id: 'doubleaxe', noun: 'Twinblade Axe', mesh: [], held: 'Axe_Double', model: 'Axe_Double', verb: 'cleave', dmgBonus: 1.2, arcAdd: 0.3, sigPool: ['firenova', 'earthsplitter'] },
+    { id: 'maul', noun: 'Maul', mesh: [], held: 'Hammer_Small', model: 'Hammer_Small', verb: 'smash', dmgBonus: 1.5, atkTime: 1.25, stunHit: 0.5, sigPool: ['thunderclap', 'earthsplitter'] },
+    { id: 'scythe', noun: 'Reaper Scythe', mesh: [], held: 'Scythe', model: 'Scythe', verb: 'sweep', dmgBonus: 1.15, arcAdd: 0.5, rangeAdd: 0.6, sigPool: ['lifedrain', 'dragonsbreath'], minRarity: 1 },
+    { id: 'boneaxe', noun: 'Bone Cleaver', mesh: [], held: 'Skeleton_Axe', model: 'Skeleton_Axe', verb: 'cleave', dmgBonus: 1.1, lifestealAdd: 0.05, sigPool: ['lifedrain', 'firenova'] },
   ],
   rogue: [
-    { id: 'daggers', noun: 'Daggers', mesh: ['Knife', 'Knife_Offhand'], model: 'dagger' },
-    { id: 'crossbow', noun: 'Crossbow', mesh: ['2H_Crossbow'], model: 'crossbow_2handed', dmgBonus: 1.1, ranged: true, atkTime: 0.85 },
+    { id: 'daggers', noun: 'Daggers', mesh: ['Knife', 'Knife_Offhand'], model: 'dagger', verb: 'stab', sigPool: ['shadowflurry', 'frostwave'] },
+    { id: 'crossbow', noun: 'Crossbow', mesh: ['2H_Crossbow'], model: 'crossbow_2handed', verb: 'shoot', dmgBonus: 1.1, ranged: true, atkTime: 0.85, sigPool: ['arrowstorm', 'shadowflurry'] },
+    { id: 'fangs', noun: 'Twin Fangs', mesh: [], held: 'Dagger', held2: true, model: 'Dagger', verb: 'stab', dmgBonus: 0.9, atkTime: 0.4, critAdd: 0.07, sigPool: ['shadowflurry', 'dragonsbreath'] },
+    { id: 'shadowfangs', noun: 'Shadow Fangs', mesh: [], held: 'Dagger_2', held2: true, model: 'Dagger_2', verb: 'stab', dmgBonus: 1.05, atkTime: 0.45, critAdd: 0.1, minRarity: 2, sigPool: ['shadowflurry', 'lifedrain'] },
+    { id: 'boneblade', noun: 'Bone Shiv', mesh: [], held: 'Skeleton_Blade', model: 'Skeleton_Blade', verb: 'slash', dmgBonus: 1.0, lifestealAdd: 0.06, sigPool: ['lifedrain', 'shadowflurry'] },
+    { id: 'bonecrossbow', noun: 'Grave Crossbow', mesh: [], held: 'Skeleton_Crossbow', model: 'Skeleton_Crossbow', verb: 'shoot', dmgBonus: 1.2, ranged: true, atkTime: 1.0, sigPool: ['arrowstorm', 'lifedrain'] },
   ],
   mage: [
-    { id: 'staff', noun: 'Staff', mesh: ['2H_Staff'], model: 'staff' },
-    { id: 'wand', noun: 'Wand', mesh: ['1H_Wand'], model: 'wand', dmgBonus: 0.82, atkTime: 0.38, speedAdd: 0.4 },
+    { id: 'staff', noun: 'Staff', mesh: ['2H_Staff'], model: 'staff', verb: 'cast', sigPool: ['voidrip', 'frostwave'] },
+    { id: 'wand', noun: 'Wand', mesh: ['1H_Wand'], model: 'wand', verb: 'cast', dmgBonus: 0.82, atkTime: 0.38, speedAdd: 0.4, sigPool: ['voidrip', 'dragonsbreath'] },
+    { id: 'skullstaff', noun: 'Skull Staff', mesh: [], held: 'skullstaff', model: 'skullstaff', verb: 'cast', dmgBonus: 1.15, atkTime: 0.65, lifestealAdd: 0.05, sigPool: ['lifedrain', 'voidrip'] },
+    { id: 'crystalscepter', noun: 'Crystal Scepter', mesh: [], held: 'crystalscepter', model: 'crystalscepter', verb: 'cast', dmgBonus: 0.95, atkTime: 0.45, manaRegenAdd: 1.5, sigPool: ['frostwave', 'voidrip'], minRarity: 1 },
+    { id: 'bonestaff', noun: 'Grave Staff', mesh: [], held: 'Skeleton_Staff', model: 'Skeleton_Staff', verb: 'cast', dmgBonus: 1.05, lifestealAdd: 0.06, sigPool: ['lifedrain', 'thunderclap'] },
   ],
   ranger: [
-    { id: 'bow', noun: 'Bow', mesh: [], model: 'bow', ranged: true },
-    { id: 'crossbow', noun: 'Crossbow', mesh: ['2H_Crossbow'], model: 'crossbow_2handed', dmgBonus: 1.15, ranged: true, atkTime: 1.1 },
+    { id: 'bow', noun: 'Bow', mesh: [], model: 'bow', verb: 'bowshoot', ranged: true, sigPool: ['arrowstorm', 'frostwave'] },
+    { id: 'crossbow', noun: 'Crossbow', mesh: ['2H_Crossbow'], model: 'crossbow_2handed', verb: 'shoot', dmgBonus: 1.15, ranged: true, atkTime: 1.1, sigPool: ['arrowstorm', 'thunderclap'] },
+    { id: 'longbow', noun: 'Longbow', mesh: [], held: 'Bow_Wooden', model: 'Bow_Wooden', verb: 'bowshoot', ranged: true, dmgBonus: 1.2, atkTime: 1.05, sigPool: ['arrowstorm', 'frostwave'] },
+    { id: 'goldenbow', noun: 'Sunstrand Bow', mesh: [], held: 'Bow_Golden', model: 'Bow_Golden', verb: 'bowshoot', ranged: true, dmgBonus: 1.0, atkTime: 0.7, critAdd: 0.06, minRarity: 2, sigPool: ['radiantbeam', 'arrowstorm'] },
+    { id: 'evilbow', noun: 'Dreadbow', mesh: [], held: 'Bow_Evil', model: 'Bow_Evil', verb: 'bowshoot', ranged: true, dmgBonus: 1.35, atkTime: 1.15, lifestealAdd: 0.05, minRarity: 1, sigPool: ['dragonsbreath', 'lifedrain'] },
   ],
+};
+
+// ---------------- weapon signature powers ----------------
+// Rare+ weapons can roll one: landing basic hits builds charge; at full charge
+// the weapon glows and key 4 unleashes it (costing mana + the charge).
+export const SIGNATURES = {
+  radiantbeam:   { name: 'Radiant Beam', icon: '🌟', mana: 20, hits: 8, desc: 'a piercing lance of light burns through everything in a line' },
+  firenova:      { name: 'Fire Nova', icon: '💥', mana: 22, hits: 9, desc: 'an explosion of flame erupts around you, igniting the pack' },
+  thunderclap:   { name: 'Thunderclap', icon: '🌩', mana: 22, hits: 9, desc: 'a stunning shockwave of thunder around you' },
+  voidrip:       { name: 'Void Rip', icon: '🕳', mana: 25, hits: 10, desc: 'tear a hungry vortex open at your crosshair' },
+  lifedrain:     { name: 'Life Drain', icon: '🩸', mana: 18, hits: 8, desc: 'siphon the life from every foe near you' },
+  arrowstorm:    { name: 'Arrow Storm', icon: '🌪', mana: 20, hits: 8, desc: 'a fan of seven arrows in one draw' },
+  frostwave:     { name: 'Frost Wave', icon: '❄️', mana: 20, hits: 8, desc: 'a freezing cone that chills all it touches' },
+  shadowflurry:  { name: 'Shadow Flurry', icon: '🌑', mana: 22, hits: 9, desc: 'blink between the three nearest foes, striking each' },
+  earthsplitter: { name: 'Earthsplitter', icon: '⛰', mana: 24, hits: 10, desc: 'a rupturing line of stone spikes ahead of you' },
+  dragonsbreath: { name: "Dragon's Breath", icon: '🐉', mana: 24, hits: 10, desc: 'exhale a cone of dragonfire that keeps burning' },
 };
 export const OFFHAND_TYPES = {
   knight: { noun: 'Shield', meshes: ['Round_Shield', 'Badge_Shield', 'Spike_Shield'], models: ['shield_round', 'shield_badge', 'shield_spikes'], stat: 'armor' },

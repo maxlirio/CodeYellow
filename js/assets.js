@@ -3,12 +3,21 @@ import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import * as SkeletonUtils from 'three/addons/utils/SkeletonUtils.js';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import { G } from './state.js';
+import { makeGlowSprite } from './fx.js';
 import { WEAPON_MESHES, CAPE_COLORS } from './config.js';
 
 const CHAR_MODELS = ['Knight', 'Mage', 'Rogue', 'Rogue_Hooded', 'Barbarian'];
 const ENEMY_MODELS = ['Skeleton_Minion', 'Skeleton_Warrior', 'Skeleton_Rogue', 'Skeleton_Mage'];
 // Quaternius Ultimate Monsters (CC0) — same low-poly big-head style as KayKit
 const MONSTER_MODELS = ['Orc', 'Goblin', 'Ogre', 'Imp', 'MushroomKing', 'Slime', 'Glub', 'Drake', 'Dragon'];
+const WEAPON2_MODELS = [
+  'Sword', 'Sword_big', 'Sword_Golden', 'Sword_big_Golden', 'Sword_2', 'Claymore',
+  'Axe', 'Axe_Double', 'Axe_small', 'Axe_Double_Golden', 'Hammer_Double', 'Hammer_Double_Golden', 'Hammer_Small',
+  'Dagger', 'Dagger_Golden', 'Dagger_2', 'Scythe', 'Spear',
+  'Bow_Wooden', 'Bow_Golden', 'Bow_Evil',
+  'Crystal1', 'Crystal3', 'Crystal5', 'Skull',
+  'Skeleton_Blade', 'Skeleton_Axe', 'Skeleton_Staff', 'Skeleton_Crossbow',
+];
 const WEAPON_MODELS = ['sword_1handed', 'sword_2handed', 'axe_1handed', 'axe_2handed', 'dagger', 'staff', 'wand', 'shield_round', 'shield_badge', 'shield_spikes', 'crossbow_1handed', 'crossbow_2handed', 'arrow'];
 // village assets (KayKit Medieval Hexagon / Halloween / Furniture packs, CC0)
 const TOWN_PIECES = {
@@ -52,6 +61,10 @@ export async function loadAll(onProgress) {
   for (const p of DUNGEON_PIECES) jobs.push(load(`assets/dungeon/${p}.glb`).then(g => assets.piece[p] = g));
   for (const [key, file] of Object.entries(TOWN_PIECES)) jobs.push(load(`assets/town/${file}.gltf`).then(g => assets.piece[key] = g));
   for (const w of WEAPON_MODELS) jobs.push(load(`assets/weapons/${w}.gltf`).then(g => assets.weapon[w] = g));
+  for (const w of WEAPON2_MODELS) {
+    const ext = w.startsWith('Skeleton_') ? 'gltf' : 'glb';
+    jobs.push(load(`assets/weapons2/${w}.${ext}`).then(g => assets.weapon[w] = g));
+  }
   await Promise.all(jobs);
 
   // Pre-bake static piece geometry (world-transform applied, attributes normalized)
@@ -225,10 +238,60 @@ export function makePiece(name) {
 }
 
 // A weapon/shield model instance (for ground drops & previews).
+// pack models come in wildly different scales — normalize to a hand-sized length
+const WEAPON_LEN = {
+  Sword: 1.1, Sword_big: 1.35, Sword_Golden: 1.1, Sword_big_Golden: 1.35, Sword_2: 1.3, Claymore: 1.55,
+  Axe: 1.3, Axe_Double: 1.25, Axe_small: 0.85, Axe_Double_Golden: 1.25,
+  Hammer_Double: 1.25, Hammer_Double_Golden: 1.25, Hammer_Small: 1.35,
+  Dagger: 0.62, Dagger_Golden: 0.62, Dagger_2: 0.7, Scythe: 1.7, Spear: 2.0,
+  Bow_Wooden: 1.15, Bow_Golden: 1.15, Bow_Evil: 1.3,
+  Skeleton_Blade: 0.95, Skeleton_Axe: 1.0, Skeleton_Staff: 1.45, Skeleton_Crossbow: 0.8,
+  Crystal1: 0.3, Crystal3: 0.3, Crystal5: 0.3, Skull: 0.32,
+};
+
 export function makeWeaponModel(name) {
   if (name === 'bow') return buildBowModel();
+  if (name === 'skullstaff' || name === 'crystalscepter') return buildComposedStaff(name);
   const gltf = G.assets.weapon[name];
-  return gltf ? gltf.scene.clone(true) : makePiece('key');
+  if (!gltf) return makePiece('key');
+  const obj = gltf.scene.clone(true);
+  const target = WEAPON_LEN[name];
+  if (target) {
+    const box = new THREE.Box3().setFromObject(obj);
+    const s = new THREE.Vector3(); box.getSize(s);
+    const m = target / Math.max(s.x, s.y, s.z, 0.001);
+    const wrap = new THREE.Group();
+    obj.scale.setScalar(m);
+    // ground the grip at the wrap origin (models often center oddly)
+    const box2 = new THREE.Box3().setFromObject(obj);
+    obj.position.y -= box2.min.y;
+    wrap.add(obj);
+    return wrap;
+  }
+  return obj;
+}
+
+// mage exotics assembled from parts: a dark rod crowned with a skull / crystal
+function buildComposedStaff(kind) {
+  const g = new THREE.Group();
+  const rod = new THREE.Mesh(
+    new THREE.CylinderGeometry(0.035, 0.05, 1.35, 6),
+    new THREE.MeshStandardMaterial({ color: kind === 'skullstaff' ? 0x3a2c22 : 0x5a4632, roughness: 0.85 })
+  );
+  rod.position.y = 0.675;
+  g.add(rod);
+  const topper = makeWeaponModel(kind === 'skullstaff' ? 'Skull' : 'Crystal1');
+  topper.position.y = 1.32;
+  g.add(topper);
+  const glowCol = kind === 'skullstaff' ? 0x88ff66 : 0x66ccff;
+  const glow = makeGlowSprite(glowCol, 0.55);
+  glow.position.y = 1.5;
+  g.add(glow);
+  if (kind === 'crystalscepter') {
+    const c = topper.children[0];
+    c?.traverse?.((n) => { if (n.isMesh) { n.material = n.material.clone(); n.material.emissive = new THREE.Color(0x3388cc); n.material.emissiveIntensity = 0.8; } });
+  }
+  return g;
 }
 
 // Procedural recurve bow — no pack has one, so we build it: curved wooden limb,

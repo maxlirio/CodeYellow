@@ -2,7 +2,7 @@
 import { G } from './state.js';
 import {
   RARITIES, WEAPON_TYPES, OFFHAND_TYPES, NAME_PREFIX, NAME_SUFFIX,
-  TRINKET_NAMES, TRINKET_STATS, CLASSES, AFFIXES,
+  TRINKET_NAMES, TRINKET_STATS, CLASSES, AFFIXES, SIGNATURES,
 } from './config.js';
 
 let uidCounter = 1;
@@ -27,16 +27,25 @@ function itemName(rarity, noun) {
 
 export function rollWeapon(classId, floor, luck = 0) {
   const rarity = pickRarity(floor, luck);
-  const wt = pick(WEAPON_TYPES[classId]);
+  const RARITY_ORDER = ['common', 'fine', 'rare', 'epic', 'legendary'];
+  const rIdx = RARITY_ORDER.indexOf(rarity.id);
+  // some archetypes only appear at higher quality
+  const pool = WEAPON_TYPES[classId].filter(w => (w.minRarity || 0) <= rIdx);
+  const wt = pick(pool);
   const cls = CLASSES[classId];
   const dmg = Math.round(cls.dmg * rarity.mult * (wt.dmgBonus || 1) * (1 + 0.09 * (floor - 1)));
   const item = {
     uid: uidCounter++, slot: 'weapon', classId, wtype: wt.id, mesh: wt.mesh, model: wt.model,
+    held: wt.held || null, held2: !!wt.held2, verb: wt.verb || 'slash',
     name: itemName(rarity, wt.noun), rarity: rarity.id, icon: wt.ranged ? '🏹' : '⚔',
     ranged: !!wt.ranged, atkTime: wt.atkTime || null,
+    rangeAdd: wt.rangeAdd || 0, arcAdd: wt.arcAdd || 0, stunHit: wt.stunHit || 0,
     stats: { dmg },
   };
   if (wt.speedAdd) item.stats.speed = wt.speedAdd;
+  if (wt.critAdd) item.stats.crit = (item.stats.crit || 0) + wt.critAdd * 100;
+  if (wt.lifestealAdd) item.lifestealAdd = wt.lifestealAdd;
+  if (wt.manaRegenAdd) item.stats.mregen = (item.stats.mregen || 0) + wt.manaRegenAdd;
   if (rarity.mult >= 1.4) { // rare+: bonus stat
     const t = pick(TRINKET_STATS);
     item.stats[t.stat] = +(t.min + Math.random() * (t.max - t.min) * 0.6).toFixed(1);
@@ -47,6 +56,12 @@ export function rollWeapon(classId, floor, luck = 0) {
     item.affix = affix.id;
     item.name = `${affix.name} ${item.name}`;
     if (affix.crit) item.stats.crit = (item.stats.crit || 0) + affix.crit;
+  }
+  // rare+ can carry a SIGNATURE power (legendary always does)
+  const sigChance = rIdx >= 4 ? 1 : rIdx === 3 ? 0.75 : rIdx === 2 ? 0.4 : 0;
+  if (wt.sigPool && Math.random() < sigChance) {
+    item.sig = pick(wt.sigPool);
+    item.name = `${item.name} of ${SIGNATURES[item.sig].name}`;
   }
   return item;
 }

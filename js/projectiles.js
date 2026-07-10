@@ -132,7 +132,7 @@ export function spawnBolt(b) {
   G.scene.add(vis.obj);
   G.projectiles.push({
     sp: vis.obj, vis, x, z, y, dirX, dirY, dirZ, speed, dmg, owner, color, life: 0, trailT: 0,
-    size: b.size || 1, aoe: b.aoe || 0, slow: b.slow || null, poison: b.poison || null,
+    size: b.size || 1, aoe: b.aoe || 0, slow: b.slow || null, poison: b.poison || null, basic: !!b.basic,
     lifesteal: b.lifesteal || 0, pierce: !!b.pierce, hitIds: null, bounce: b.bounce || 0,
   });
 }
@@ -241,6 +241,7 @@ export function updateProjectiles(dt, hooks) {
           if (p.aoe) { explode(p, hooks); p.exploded = true; dead = true; }
           else {
             hooks.damageEnemy(e, p.dmg, Math.random() < 0.08, false, 'local', { slow: p.slow, poison: p.poison, lifesteal: p.lifesteal });
+            if (p.basic) hooks.onBasicHit?.();
             if (p.pierce) {
               (p.hitIds ??= new Set()).add(e.id);
               spawnBurst(new THREE.Vector3(p.x, p.y, p.z), p.color, 6, 3, 0.1, 0.3);
@@ -250,8 +251,16 @@ export function updateProjectiles(dt, hooks) {
         }
       }
     } else if (!dead && p.owner === 'enemy') {
+      // sanctuaries swallow hostile bolts at their edge
+      for (const s of G.sanctuaries || []) {
+        if (s.f === G.floor && Math.hypot(p.x - s.x, p.z - s.z) < s.r) {
+          spawnBurst(new THREE.Vector3(p.x, p.y, p.z), 0xffe9a0, 8, 3, 0.1, 0.35);
+          dead = true;
+          break;
+        }
+      }
       const pl = G.player;
-      if (pl && !pl.dead && pl.iframes <= 0 &&
+      if (!dead && pl && !pl.dead && pl.iframes <= 0 &&
           Math.hypot(pl.obj.position.x - p.x, pl.obj.position.z - p.z) < 0.8 &&
           Math.abs(pl.obj.position.y + 1.3 - p.y) < 1.6) {
         hooks.damageLocalPlayer(p.dmg, p.slow ? { slow: p.slow } : null);
