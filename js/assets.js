@@ -70,9 +70,43 @@ export async function loadAll(onProgress) {
       parts.push({ geo, mat: n.material });
     });
     gltf.baked = parts;
+    // measured collision shapes: one local-space AABB per mesh part, so
+    // colliders can match what the model actually looks like (walls vs roof
+    // vs chimney), not a hand-tuned circle.
+    gltf.bounds = parts.map(({ geo }) => {
+      geo.computeBoundingBox();
+      return geo.boundingBox.clone();
+    });
   }
   G.assets = assets;
   return assets;
+}
+
+// World-space collider boxes for a placed piece, measured from the real model:
+// one {x, z, hx, hz, y0, h} box per solid mesh part (y0 = base, h = top — tops
+// are standable, see dungeon.js). Flat decals and wafer-thin trim are skipped.
+// Arbitrary yaw expands each part to its rotated AABB.
+export function pieceColliders(name, { x = 0, z = 0, y = 0, yaw = 0, scale = 1 } = {}) {
+  const gltf = G.assets?.piece?.[name];
+  const sx = Array.isArray(scale) ? scale[0] : scale;
+  const sy = Array.isArray(scale) ? scale[1] : scale;
+  const sz = Array.isArray(scale) ? scale[2] : scale;
+  if (!gltf?.bounds) return [{ x, z, r: 0.8 * Math.max(sx, sz), y0: y, h: y + 2.5 * sy }];
+  const cos = Math.cos(yaw), sin = Math.sin(yaw);
+  const out = [];
+  for (const b of gltf.bounds) {
+    const cx = ((b.min.x + b.max.x) / 2) * sx, cz = ((b.min.z + b.max.z) / 2) * sz;
+    const hx0 = ((b.max.x - b.min.x) / 2) * sx, hz0 = ((b.max.z - b.min.z) / 2) * sz;
+    const hx = Math.abs(hx0 * cos) + Math.abs(hz0 * sin);
+    const hz = Math.abs(hx0 * sin) + Math.abs(hz0 * cos);
+    const y0 = y + b.min.y * sy, h = y + b.max.y * sy;
+    if (hx < 0.16 || hz < 0.16) continue; // wafer-thin trim
+    if (h - y0 < 0.3) continue;           // flat decals / rugs
+    out.push({ x: x + cx * cos + cz * sin, z: z - cx * sin + cz * cos, hx, hz, y0, h });
+  }
+  // largest parts first, capped — walls & roofs matter, door trim is noise
+  out.sort((a, b) => (b.hx * b.hz * (b.h - b.y0)) - (a.hx * a.hz * (a.h - a.y0)));
+  return out.slice(0, 8);
 }
 
 // ---- character instancing ----

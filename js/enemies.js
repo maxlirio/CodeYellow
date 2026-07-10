@@ -16,6 +16,8 @@ import { rollAnyItem } from './items.js';
 import { dropItemLoot } from './loot.js';
 import { minionTargetsOnFloor, damageMinion } from './minions.js';
 import { wallAt, damageWall } from './walls.js';
+import { nearestBuildPiece, weakestBuildPieceNear, damageBuild } from './builds.js';
+import { horde } from './horde.js';
 
 export function spawnEnemiesForFloor(fs) {
   if (fs.spawned) return;
@@ -100,6 +102,114 @@ function nearestPlayer(e, players) {
   return best ? { ...best, dist: bd } : null;
 }
 
+// ---------------- strategy ----------------
+// Monsters don't just run at you in a straight line. Everywhere: melee lead
+// their pursuit (they aim where you're GOING), skirmishers hook around your
+// flanks, archers hold their range band. In Last Stand, waves also march in
+// squads with roles — vanguard line, archers volleying from the back rank,
+// flankers taking the long way round, and siegers tearing at your weakest
+// structure. And backpedal-kiting stops working: a chaser you keep stringing
+// along gets frustrated, surges, or turns on your buildings instead.
+const FAST_FLANKERS = new Set(['rogue', 'goblin', 'shade', 'berserker', 'slimelet']);
+
+function trackTargetMotion(fs, players, dt) {
+  if (!fs._tprev) { fs._tprev = new Map(); fs._tvel = new Map(); }
+  for (const p of players) {
+    const prev = fs._tprev.get(p.id);
+    if (prev && dt > 0) {
+      const cur = fs._tvel.get(p.id) || { vx: 0, vz: 0 };
+      cur.vx += ((p.pos.x - prev.x) / dt - cur.vx) * Math.min(1, dt * 4);
+      cur.vz += ((p.pos.z - prev.z) / dt - cur.vz) * Math.min(1, dt * 4);
+      fs._tvel.set(p.id, cur);
+    }
+    fs._tprev.set(p.id, { x: p.pos.x, z: p.pos.z });
+  }
+  // squad centroids for the horde formations
+  if (horde.active && fs.n === 1) {
+    fs._squadC = new Map();
+    for (const e of fs.enemies) {
+      if (!e.tac || e.state === 'dead' || e.state === 'inactive') continue;
+      const c = fs._squadC.get(e.tac.gate) || { x: 0, z: 0, n: 0 };
+      c.x += e.obj.position.x; c.z += e.obj.position.z; c.n++;
+      fs._squadC.set(e.tac.gate, c);
+    }
+    for (const c of fs._squadC.values()) { c.x /= c.n; c.z /= c.n; }
+  }
+}
+
+function tacticalGoal(e, fs, t, dt) {
+  const pos = e.obj.position;
+  const d = Math.max(0.001, t.dist);
+  const goal = { x: t.pos.x, z: t.pos.z, surge: false, hold: false };
+  if (e.boss || e.cfg.dragon) return goal;
+  const v = fs._tvel?.get(t.id) || { vx: 0, vz: 0 };
+  const tSpeed = Math.hypot(v.vx, v.vz);
+
+  // frustration: a target that keeps pulling away earns a response
+  if (!t.minion) {
+    const closing = (e.lastTD ?? d) - d;
+    e.lastTD = d;
+    if (closing < -0.4 * dt && d > 4) e.frust = (e.frust || 0) + dt;
+    else e.frust = Math.max(0, (e.frust || 0) - dt * 0.7);
+    if (e.frust > 5 && !e.cfg.ranged) {
+      // take it out on their fortifications if any are near, else surge
+      const weak = weakestBuildPieceNear(e.floor, pos.x, pos.z, 26);
+      if (weak) { e.siegeTarget = weak; e.frust = 0; }
+      else goal.surge = true;
+    }
+  }
+
+  // lead pursuit: melee aim at where the target will be, not where it is
+  if (!e.cfg.ranged && tSpeed > 2 && d > 3) {
+    const lead = Math.min(1.1, d / Math.max(4, e.cfg.speed));
+    goal.x += v.vx * lead; goal.z += v.vz * lead;
+  }
+
+  // archers keep to their band: retreat when crowded, never charge to melee
+  if (e.cfg.ranged) {
+    if (d < e.cfg.range * 0.45) {
+      goal.x = pos.x - (t.pos.x - pos.x) / d * 5;
+      goal.z = pos.z - (t.pos.z - pos.z) / d * 5;
+      return goal;
+    }
+  }
+
+  // fast skirmishers hook around the side instead of joining the conga line
+  if (!e.cfg.ranged && !e.ghost && FAST_FLANKERS.has(e.type) && d > 6) {
+    const side = e.id % 2 === 0 ? 1 : -1;
+    const px = -(t.pos.z - pos.z) / d, pz = (t.pos.x - pos.x) / d;
+    const hook = Math.min(e.tac ? 9 : 6, d - 4);
+    goal.x += px * side * hook; goal.z += pz * side * hook;
+  }
+
+  // ---- Last Stand squad roles ----
+  if (e.tac && horde.active && fs.n === 1) {
+    const c = fs._squadC?.get(e.tac.gate);
+    if (e.tac.role === 'sieger' && (!e.siegeTarget || e.siegeTarget.dead)) {
+      e.siegeTarget = weakestBuildPieceNear(e.floor, pos.x, pos.z, 30);
+    }
+    if (e.siegeTarget && !e.siegeTarget.dead) {
+      goal.x = e.siegeTarget.x; goal.z = e.siegeTarget.z;
+      return goal;
+    }
+    if (e.tac.role === 'vanguard' && c && c.n >= 3 && d > 12) {
+      // march as a line abreast: advance with the squad, hold your rank slot
+      const adx = t.pos.x - c.x, adz = t.pos.z - c.z;
+      const ad = Math.max(0.001, Math.hypot(adx, adz));
+      const px = -adz / ad, pz = adx / ad;
+      const slot = ((e.tac.rank % 5) - 2) * 1.8;
+      goal.x = c.x + (adx / ad) * 5 + px * slot;
+      goal.z = c.z + (adz / ad) * 5 + pz * slot;
+    } else if (e.tac.role === 'archer' && c && d > e.cfg.range * 0.55) {
+      // volley from behind the vanguard, not from the front row
+      const bx = c.x - (t.pos.x - c.x) / Math.max(0.001, Math.hypot(t.pos.x - c.x, t.pos.z - c.z)) * 4;
+      const bz = c.z - (t.pos.z - c.z) / Math.max(0.001, Math.hypot(t.pos.x - c.x, t.pos.z - c.z)) * 4;
+      goal.x = (goal.x + bx * 2) / 3; goal.z = (goal.z + bz * 2) / 3;
+    }
+  }
+  return goal;
+}
+
 const ATTACK_ANIMS = ['Unarmed_Melee_Attack_Punch_A', 'Unarmed_Melee_Attack_Punch_B'];
 const ANIM_MAPS = { ground: ANIM_GROUND, critter: ANIM_CRITTER, flyer: ANIM_FLYER };
 const amap = (e) => e.cfg.animMap ? ANIM_MAPS[e.cfg.animMap] : null;
@@ -133,6 +243,8 @@ export function updateEnemies(dt) {
     const players = authority ? playersOnFloor(fs.n) : null;
     if (authority && !mine && !players.length) continue; // pause floors nobody is on
     if (!authority && !mine) continue;
+
+    if (authority) trackTargetMotion(fs, players, dt);
 
     for (const e of fs.enemies) {
       if (mine) e.anim.update(dt);
@@ -208,18 +320,32 @@ function simulateEnemy(e, fs, players, dt, mine) {
       if (e.cfg.explode && t.dist < e.cfg.range && dy3 < 2) { bomberExplode(e); break; }
       const canSee = e.ghost || hasLineOfSight(e.obj.position.x, e.obj.position.z, t.pos.x, t.pos.z, grid);
       const inRange = t.dist < e.cfg.range && (e.cfg.ranged ? true : dy3 < 1.8);
-      if (inRange && canSee) {
+      if (inRange && canSee && !e.siegeTarget) {
         setEnemyState(e, 'attack');
         e.attackFired = false;
         break;
       }
-      const dx = t.pos.x - e.obj.position.x, dz = t.pos.z - e.obj.position.z;
+      // siegers (and frustrated chasers) tear down structures instead
+      if (e.siegeTarget && !e.siegeTarget.dead) {
+        const pd = Math.hypot(e.siegeTarget.x - e.obj.position.x, e.siegeTarget.z - e.obj.position.z);
+        if (pd < Math.max(2.3, e.cfg.range + 0.9)) {
+          setEnemyState(e, 'attack');
+          e.attackFired = true; // the swing lands on timber, not flesh
+          damageBuild(e.siegeTarget, Math.round(e.dmg * 0.8));
+          break;
+        }
+      } else e.siegeTarget = null;
+
+      const goal = tacticalGoal(e, fs, t, dt);
+      const dx = goal.x - e.obj.position.x, dz = goal.z - e.obj.position.z;
       const d = Math.max(0.001, Math.hypot(dx, dz));
-      e.yaw = Math.atan2(dx, dz);
-      // berserkers get faster as they take damage
+      e.yaw = t.dist < 6 ? Math.atan2(t.pos.x - e.obj.position.x, t.pos.z - e.obj.position.z) : Math.atan2(dx, dz);
+      // berserkers get faster as they take damage; frustrated chasers surge
       const enrage = e.cfg.enrage ? 1 + (1 - e.hp / e.maxHp) * 0.9 : 1;
-      const speed = e.cfg.speed * e.slowMult * e.speedMult * enrage;
+      const surge = goal.surge ? 1.25 : 1;
+      const speed = e.cfg.speed * e.slowMult * e.speedMult * enrage * surge;
       let mx = (dx / d) * speed * dt, mz = (dz / d) * speed * dt;
+      if (goal.hold) { mx = 0; mz = 0; }
       for (const o of fs.enemies) {
         if (o === e || o.state === 'dead') continue;
         const ox = e.obj.position.x - o.obj.position.x, oz = e.obj.position.z - o.obj.position.z;
@@ -228,8 +354,8 @@ function simulateEnemy(e, fs, players, dt, mine) {
       }
       const beforeX = e.obj.position.x, beforeZ = e.obj.position.z;
       moveWithCollision(e.obj.position, mx, mz, 0.5 * e.scale, { y: e.obj.position.y, ghost: e.ghost, grid });
-      // blocked by a barricade? smash through it
-      if (!e.ghost) {
+      // blocked? smash whatever stands in the way — barricades, posts, walls, machines
+      if (!e.ghost && !goal.hold) {
         const moved = Math.hypot(e.obj.position.x - beforeX, e.obj.position.z - beforeZ);
         if (moved < speed * dt * 0.25) {
           e.blockT = (e.blockT || 0) + dt;
@@ -239,11 +365,14 @@ function simulateEnemy(e, fs, players, dt, mine) {
             const w = wallAt(e.floor, cx, cy) ||
               wallAt(e.floor, Math.round(e.obj.position.x / 4) + Math.sign(Math.round(dx)), Math.round(e.obj.position.z / 4)) ||
               wallAt(e.floor, Math.round(e.obj.position.x / 4), Math.round(e.obj.position.z / 4) + Math.sign(Math.round(dz)));
-            if (w) {
+            const bp = w ? null : nearestBuildPiece(e.floor,
+              e.obj.position.x + (dx / d) * 1.6, e.obj.position.z + (dz / d) * 1.6, 2.4, e.obj.position.y);
+            if (w || bp) {
               e.blockT = 0;
               setEnemyState(e, 'attack');
-              e.attackFired = true; // the swing hits the wall, not a player
-              damageWall(w, Math.round(e.dmg * 0.8));
+              e.attackFired = true; // the swing hits the obstacle, not a player
+              if (w) damageWall(w, Math.round(e.dmg * 0.8));
+              else damageBuild(bp, Math.round(e.dmg * 0.8));
             }
           }
         } else {

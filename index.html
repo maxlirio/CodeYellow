@@ -172,8 +172,32 @@
     <div class="menu-buttons">
       <button id="btnHireSword" class="big orange-btn">⚔ Sellsword — sturdy melee</button>
       <button id="btnHireBow" class="big orange-btn">🏹 Marksman — ranged support</button>
+      <button id="btnHireWorker" class="big orange-btn hidden">🔧 Worker — crews machines (60g)</button>
       <button id="btnHireCancel" class="big">Not now</button>
     </div>
+  </div>
+</div>
+
+<!-- Commander view (M): station your minions from above -->
+<div id="commandMap" class="overlay">
+  <div class="panel">
+    <h2>🗺 Commander</h2>
+    <div class="subtitle">Click a minion, then click the field to station them there. Click your own marker to recall one.</div>
+    <canvas id="cmdCanvas" width="640" height="640" class="cmd-canvas"></canvas>
+    <div class="menu-buttons">
+      <button id="btnCmdFollowAll" class="big">📣 All follow me</button>
+      <button id="btnCloseCmd" class="big orange-btn">Done (M)</button>
+    </div>
+  </div>
+</div>
+
+<!-- Combat codex: the drillmaster's exact numbers / the hunter's bestiary -->
+<div id="codexDialog" class="overlay">
+  <div class="panel">
+    <h2 id="codexTitle">📖 Codex</h2>
+    <div class="subtitle" id="codexSub"></div>
+    <div id="codexBody" class="codex-body"></div>
+    <div class="menu-buttons"><button id="btnCloseCodex" class="big orange-btn">Done</button></div>
   </div>
 </div>
 

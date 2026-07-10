@@ -9,7 +9,7 @@ import {
   CELL, BOSS_FLOORS, PLATFORM_H, enemyPool, eliteChance, ARCHERS,
   THEMES, MUTATORS, MUTATOR_CHANCE, MIDBOSS_TYPES,
 } from './config.js';
-import { buildMergedStatic } from './assets.js';
+import { buildMergedStatic, pieceColliders } from './assets.js';
 import { ENEMIES } from './config.js';
 const ENEMIES_TRIO = new Set(Object.keys(ENEMIES).filter(k => ENEMIES[k].trio));
 
@@ -225,8 +225,9 @@ export function generateFloorData(seedStr, floor) {
       for (let y = r.y + 2; y < r.y + r.h - 2; y += 3) {
         for (let x = r.x + 2; x < r.x + r.w - 2; x += 3) {
           if (at(x, y) === FLOOR && rng.chance(0.8)) {
-            hallPillars.push({ x, y });
-            colliders.push({ x: x * CELL, z: y * CELL, r: 0.7 });
+            const piece = rng.chance(0.4) ? 'pillar_decorated' : 'pillar';
+            hallPillars.push({ x, y, piece });
+            colliders.push(...pieceColliders(piece, { x: x * CELL, z: y * CELL }));
           }
         }
       }
@@ -367,7 +368,7 @@ export function generateFloorData(seedStr, floor) {
 
   // hall colonnade pillar visuals
   for (const hp of hallPillars) {
-    place(rng.chance(0.4) ? 'pillar_decorated' : 'pillar', hp.x * CELL, 0, hp.y * CELL);
+    place(hp.piece, hp.x * CELL, 0, hp.y * CELL);
   }
 
   // ---- platform decks, rails, stairs, supports ----
@@ -386,7 +387,7 @@ export function generateFloorData(seedStr, floor) {
         const exposed = wallDirs.some(d => { const nx = c.x + d.dx, ny = c.y + d.dy; return !isPlat(nx, ny) && (nx < 0 || ny < 0 || nx >= w || ny >= h ? false : at(nx, ny) !== SOLID); });
         if (exposed && at(c.x, c.y) === FLOOR) {
           place('pillar', c.x * CELL, 0, c.y * CELL);
-          colliders.push({ x: c.x * CELL, z: c.y * CELL, r: 0.7 });
+          colliders.push(...pieceColliders('pillar', { x: c.x * CELL, z: c.y * CELL }));
         }
       }
     });
@@ -396,11 +397,7 @@ export function generateFloorData(seedStr, floor) {
     }
   }
 
-  // ---- props (precise colliders sized to each model, not whole cells) ----
-  const PROP_RADIUS = {
-    barrel_large: 0.85, barrel_small: 0.5, box_small: 0.65, box_large: 1.05,
-    crates_stacked: 1.2, table_medium: 1.3, chair: 0.45, shelf_small: 0.85,
-  };
+  // ---- props (colliders measured from each model — tops are standable) ----
   const props = [];
   const propAt = (x, y) => props.find(p => p.cx === x && p.cy === y);
   for (const r of rooms) {
@@ -416,14 +413,15 @@ export function generateFloorData(seedStr, floor) {
       const yaw = rng.int(0, 3) * Math.PI / 2;
       place(kind, x * CELL, 0, y * CELL, yaw);
       if (kind === 'table_medium' && rng.chance(0.8)) place(rng.pick(['candle_lit', 'candle_triple', 'bottle_A_brown', 'bottle_B_brown']), x * CELL, 1.05, y * CELL, rng.next() * Math.PI * 2);
-      colliders.push({ x: x * CELL, z: y * CELL, r: PROP_RADIUS[kind] ?? 0.8 });
+      colliders.push(...pieceColliders(kind, { x: x * CELL, z: y * CELL, yaw }));
       props.push({ cx: x, cy: y });
     }
     if (!isCavern && !carved.halls && r.w >= 6 && r.h >= 6) {
       for (const [px, py] of [[r.x + 1, r.y + 1], [r.x + r.w - 2, r.y + 1], [r.x + 1, r.y + r.h - 2], [r.x + r.w - 2, r.y + r.h - 2]]) {
         if (rng.chance(0.55) && at(px, py) === FLOOR && !propAt(px, py) && !elev[idxOf(px, py)]) {
-          place(rng.chance(0.3) ? 'pillar_decorated' : 'pillar', px * CELL, 0, py * CELL);
-          colliders.push({ x: px * CELL, z: py * CELL, r: 0.7 });
+          const pp = rng.chance(0.3) ? 'pillar_decorated' : 'pillar';
+          place(pp, px * CELL, 0, py * CELL);
+          colliders.push(...pieceColliders(pp, { x: px * CELL, z: py * CELL }));
           props.push({ cx: px, cy: py });
         }
       }
@@ -619,6 +617,19 @@ export function groundHeightAt(x, z, curY = 0, grid = null) {
       for (const h of fls) if (h <= curY + 1.6) ground = Math.max(ground, h);
     }
   }
+  // solid props & buildings: their measured tops are standable — jump onto a
+  // barrel, a market roof, even a house if you find a path up. The curY gate
+  // means a top only counts once you're already about level with it (landing),
+  // so you never get popped up while walking past at ground level.
+  if (g.colliders) {
+    for (const c of g.colliders) {
+      const top = c.h;
+      if (top === undefined || top > curY + 0.5 || top <= ground) continue;
+      if (c.hx !== undefined) {
+        if (Math.abs(x - c.x) < c.hx + 0.3 && Math.abs(z - c.z) < c.hz + 0.3) ground = top;
+      } else if ((x - c.x) ** 2 + (z - c.z) ** 2 < (c.r + 0.3) ** 2) ground = top;
+    }
+  }
   return ground;
 }
 
@@ -651,15 +662,17 @@ export function moveWithCollision(pos, dx, dz, radius = 0.55, opts = {}) {
       [nx + radius * 0.7, nz - radius * 0.7], [nx - radius * 0.7, nz - radius * 0.7],
     ];
     if (!checks.every(([cx, cz]) => !cellBlocked(g, cx, cz, y, ghost, ref, onPlatform))) return false;
-    // precise colliders for props/trees/buildings (sized to the model).
-    // Boxes are buildings — solid at any height so you can't drop inside one;
-    // cylinders are props you may legitimately walk above on built floors.
+    // measured colliders for props/trees/buildings, each with a real vertical
+    // extent [y0, h]: solid only at heights the model actually occupies, so you
+    // can walk on top of anything (y >= h) and under overhangs (body clears y0).
     if (g.colliders && !ghost) {
       const pr = radius * 0.55; // hug props tighter than walls
       for (const c of g.colliders) {
+        const top = c.h ?? (c.hx !== undefined ? 99 : 3);
+        if (y >= top - 0.05 || y + 2.0 <= (c.y0 ?? 0)) continue;
         if (c.hx !== undefined) {
-          if (y < (c.h ?? 99) && Math.abs(nx - c.x) < c.hx + pr && Math.abs(nz - c.z) < c.hz + pr) return false;
-        } else if (y < (c.h ?? 3)) {
+          if (Math.abs(nx - c.x) < c.hx + pr && Math.abs(nz - c.z) < c.hz + pr) return false;
+        } else {
           const ddx = nx - c.x, ddz = nz - c.z;
           const rr = pr + c.r;
           if (ddx * ddx + ddz * ddz < rr * rr) return false;
@@ -683,10 +696,12 @@ export function posBlocked(x, z, y, grid = null) {
   const c = g.cells[cy * g.w + cx];
   if (c === SOLID) return true;
   if (c === OBSTACLE && y < 2.4) return true;
-  if (g.colliders && y < 3) {
+  if (g.colliders) {
     for (const col of g.colliders) {
+      const top = col.h ?? (col.hx !== undefined ? 99 : 3);
+      if (y >= top - 0.05 || y + 2.0 <= (col.y0 ?? 0)) continue;
       if (col.hx !== undefined) {
-        if (y < (col.h ?? 99) && Math.abs(x - col.x) < col.hx && Math.abs(z - col.z) < col.hz) return true;
+        if (Math.abs(x - col.x) < col.hx && Math.abs(z - col.z) < col.hz) return true;
       } else {
         const dx = x - col.x, dz = z - col.z;
         if (dx * dx + dz * dz < col.r * col.r) return true;

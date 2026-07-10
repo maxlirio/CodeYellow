@@ -26,7 +26,9 @@ export async function wireHandlers() {
   const minions = await import('./minions.js');
   const horde = await import('./horde.js');
   const builds = await import('./builds.js');
-  H = { player, enemies, loot, proj, fx, spells, walls, minions, horde, builds };
+  const machines = await import('./machines.js');
+  const commander = await import('./commander.js');
+  H = { player, enemies, loot, proj, fx, spells, walls, minions, horde, builds, machines, commander };
 }
 
 // CodeBlue lesson: if a guest ever references an entity it doesn't have (missed
@@ -187,6 +189,13 @@ function handleAsHost(conn, m) {
     case 'build':
       H?.builds.applyBuild(m, false);
       relay(conn, { ...m, pid });
+      break;
+    case 'mach':
+      H?.machines.applyMachine(m, false);
+      relay(conn, { ...m, pid });
+      break;
+    case 'morder':
+      H?.commander.applyMinionOrder(m, pid);
       break;
     case 'pdead': {
       const p = G.net.players.get(pid);
@@ -352,6 +361,19 @@ function handleAsGuest(m) {
     case 'build':
       H?.builds.applyBuild(m, false);
       break;
+    case 'mach':
+      H?.machines.applyMachine(m, false);
+      break;
+    case 'bhp': {
+      const p = H?.builds.pieceByKey(m.f, m.key);
+      if (p) p.hp = m.hp;
+      break;
+    }
+    case 'bdie': {
+      const p = H?.builds.pieceByKey(m.f, m.key);
+      if (p) H.builds.destroyBuild(p, true);
+      break;
+    }
     case 'ldrop': {
       const fs = G.floors.get(m.f);
       if (fs && fs.spawned) H?.loot.dropItemLoot(fs, m.item, m.x, m.z, m.y, m.id);

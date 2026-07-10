@@ -26,16 +26,171 @@ export const BUILD_PIECES = [
 
 export const buildState = { on: false, idx: 0, ghost: null, ghostKey: '', valid: false, target: null };
 
-function ensureBuilds(fs) {
+// every placed piece has HP — enemies smash what stands in their way
+export const BUILD_HP = { post: 60, floor: 90, ramp: 70, wall: 140 };
+
+export function ensureBuilds(fs) {
   if (!fs.grid.builds) {
     fs.grid.builds = {
       posts: new Map(),   // 'i,j' -> Set(topHeights)
       floors: new Map(),  // cellIdx -> [heights]
       ramps: new Map(),   // cellIdx -> {dx,dy,base}
       walls: new Set(),   // edgeKey
+      pieces: [],         // {key, kind, f, hp, maxHp, obj, cols, ...placement}
     };
   }
+  if (!fs.grid.builds.pieces) fs.grid.builds.pieces = [];
   return fs.grid.builds;
+}
+
+// pieces are identified by a content key (kind + position + height), identical
+// on every peer regardless of message order
+const postKey = (i, j, top) => `p:${i},${j}:${top}`;
+const floorKey = (idx, h) => `f:${idx}:${h}`;
+const rampKey = (idx) => `r:${idx}`;
+
+export function pieceByKey(f, key) {
+  const fs = G.floors.get(f);
+  return fs?.grid?.builds?.pieces.find(p => p.key === key) || null;
+}
+
+// nearest attackable piece (post/wall/ramp/machine — floors are hit via posts)
+export function nearestBuildPiece(f, x, z, maxD = 2.4, y = 0) {
+  const fs = G.floors.get(f);
+  const pieces = fs?.grid?.builds?.pieces;
+  if (!pieces) return null;
+  let best = null, bd = maxD;
+  for (const p of pieces) {
+    if (p.kind === 'floor') continue;
+    if (p.base !== undefined && (y < p.base - 1 || y > p.base + 5)) continue;
+    const d = Math.hypot(p.x - x, p.z - z);
+    if (d < bd) { bd = d; best = p; }
+  }
+  return best;
+}
+
+// the structurally weakest piece nearby — what a sieger goes for ("weak spots":
+// already-damaged pieces first, then whatever is closest)
+export function weakestBuildPieceNear(f, x, z, maxD = 26) {
+  const fs = G.floors.get(f);
+  const pieces = fs?.grid?.builds?.pieces;
+  if (!pieces?.length) return null;
+  let best = null, bs = Infinity;
+  for (const p of pieces) {
+    if (p.kind === 'floor') continue;
+    const d = Math.hypot(p.x - x, p.z - z);
+    if (d > maxD) continue;
+    const score = (p.hp / p.maxHp) * 40 + d;
+    if (score < bs) { bs = score; best = p; }
+  }
+  return best;
+}
+
+export function damageBuild(p, amount, fromNet = false) {
+  if (!p || p.dead) return;
+  p.hp -= amount;
+  const fs = G.floors.get(p.f);
+  if (p.f === G.floor) spawnBurst(new THREE.Vector3(p.x, (p.base ?? 0) + 1.4, p.z), 0xbb9966, 6, 3, 0.1, 0.3);
+  if (G.net.role === 'host' && !fromNet) netSend({ t: 'bhp', f: p.f, key: p.key, hp: p.hp });
+  if (p.hp <= 0) destroyBuild(p, fromNet);
+}
+
+// cascade=true for pieces destroyed BY a collapse — every peer derives those
+// from the same trigger, so they are not re-broadcast
+export function destroyBuild(p, fromNet = false, cascade = false) {
+  if (!p || p.dead) return;
+  const fs = G.floors.get(p.f);
+  if (!fs?.grid?.builds) return;
+  const b = fs.grid.builds;
+  p.dead = true;
+  const pi = b.pieces.indexOf(p);
+  if (pi >= 0) b.pieces.splice(pi, 1);
+  p.obj?.parent?.remove(p.obj);
+  if (p.cols) fs.grid.colliders = fs.grid.colliders.filter(c => !p.cols.includes(c));
+  if (p.kind === 'post') b.posts.get(p.i + ',' + p.j)?.delete(p.base + LVL);
+  else if (p.kind === 'floor') {
+    const fl = b.floors.get(p.idx);
+    if (fl) { const k = fl.indexOf(p.h); if (k >= 0) fl.splice(k, 1); }
+  } else if (p.kind === 'ramp') b.ramps.delete(p.idx);
+  else if (p.kind === 'wall') b.walls.delete(p.wkey);
+  else if (p.kind === 'machine') p.onDestroy?.(p);
+  if (p.f === G.floor) {
+    spawnBurst(new THREE.Vector3(p.x, (p.base ?? p.h ?? 0) + 1.2, p.z), 0xccaa77, 16, 5, 0.14, 0.5);
+    sfx.bones();
+  }
+  if (G.net.role === 'host' && !fromNet && !cascade) netSend({ t: 'bdie', f: p.f, key: p.key });
+  // a felled post can bring a storey down with it — but supports crumbled BY a
+  // collapse must not re-trigger it (the storey is already coming down)
+  if (p.kind === 'post' && !cascade) checkCollapse(fs, p);
+}
+
+// ---- structural collapse ----
+// A floor slab needs its 4 corner posts. Lose a post and drop to half support
+// (2 or fewer): the storey gives way — its remaining supports crumble, and the
+// slab plus EVERYTHING stacked above drops onto whatever surface is next below.
+function checkCollapse(fs, post) {
+  const b = fs.grid.builds;
+  const top = post.base + LVL;
+  for (const [cx, cy] of [[post.i - 1, post.j - 1], [post.i, post.j - 1], [post.i - 1, post.j], [post.i, post.j]]) {
+    const idx = cy * fs.grid.w + cx;
+    const fl = b.floors.get(idx);
+    if (!fl || !fl.includes(top)) continue;
+    const corners = [[cx, cy], [cx + 1, cy], [cx, cy + 1], [cx + 1, cy + 1]];
+    const supports = corners.filter(([i, j]) => (b.posts.get(i + ',' + j) || new Set()).has(top)).length;
+    if (supports > 2) continue;
+    collapseStorey(fs, cx, cy, top);
+  }
+}
+
+function collapseStorey(fs, cx, cy, h) {
+  const b = fs.grid.builds;
+  const idx = cy * fs.grid.w + cx;
+  // where does it land? the next surface below: another slab, a platform, or dirt
+  let landing = fs.grid.elev[idx] ? PLATFORM_H : 0;
+  for (const fh of (b.floors.get(idx) || [])) if (fh < h) landing = Math.max(landing, fh);
+  const delta = h - landing;
+  if (delta <= 0) return;
+  const corners = [[cx, cy], [cx + 1, cy], [cx, cy + 1], [cx + 1, cy + 1]];
+  const isCorner = (p) => corners.some(([i, j]) => p.i === i && p.j === j);
+  const nearCell = (p) => Math.abs(p.x - cx * CELL) <= CELL * 0.75 && Math.abs(p.z - cy * CELL) <= CELL * 0.75;
+  // 1) the storey's remaining supports crumble (posts topping at h, walls of that storey)
+  for (const p of [...b.pieces]) {
+    if (p.kind === 'post' && isCorner(p) && p.base + LVL === h) destroyBuild(p, true, true);
+    else if (p.kind === 'wall' && nearCell(p) && p.base === h - LVL) destroyBuild(p, true, true);
+  }
+  // 2) everything at or above h on this cell rides down by delta and lands
+  for (const p of b.pieces) {
+    if (p.f !== fs.n) continue;
+    let drop = false;
+    if (p.kind === 'floor' && p.idx === idx && p.h >= h) {
+      const fl = b.floors.get(idx);
+      const k = fl.indexOf(p.h);
+      if (k >= 0) fl[k] = p.h - delta;
+      p.h -= delta; p.key = floorKey(idx, p.h); drop = true;
+    } else if (p.kind === 'post' && isCorner(p) && p.base >= h) {
+      const set = b.posts.get(p.i + ',' + p.j);
+      set?.delete(p.base + LVL); set?.add(p.base - delta + LVL);
+      p.base -= delta; p.key = postKey(p.i, p.j, p.base + LVL); drop = true;
+    } else if ((p.kind === 'wall' || p.kind === 'machine') && nearCell(p) && (p.base ?? 0) >= h) {
+      if (p.kind === 'wall') {
+        b.walls.delete(p.wkey);
+        p.wkey = p.wkey.replace(/,[^,]*$/, ',' + (p.base - delta));
+        b.walls.add(p.wkey);
+        p.key = 'w:' + p.wkey;
+      }
+      p.base -= delta; drop = true;
+    }
+    if (drop && p.obj) p.obj.position.y -= delta;
+    if (drop && p.cols) for (const c of p.cols) { if (c.y0 !== undefined) c.y0 -= delta; if (c.h !== undefined) c.h -= delta; }
+  }
+  // 3) dust and thunder
+  if (fs.n === G.floor) {
+    for (let i = 0; i < 3; i++) {
+      spawnBurst(new THREE.Vector3(cx * CELL + (i - 1) * 1.4, landing + 0.8 + i * 0.7, cy * CELL + (i - 1) * 1.1), 0xb9a684, 26, 6, 0.2, 0.9);
+    }
+    sfx.rumble();
+    addMsg('💨 A tower storey gives way!', 'bad');
+  }
 }
 
 export function clearBuilds() {
@@ -168,7 +323,9 @@ export function applyBuild(m, broadcast = true) {
     obj.scale.set(0.55, 1, 0.55);
     obj.position.set(m.x, m.base, m.z);
     group.add(obj);
-    fs.grid.colliders.push({ x: m.x, z: m.z, r: 0.42 });
+    const col = { x: m.x, z: m.z, r: 0.42, y0: m.base, h: m.base + LVL };
+    fs.grid.colliders.push(col);
+    b.pieces.push({ key: postKey(m.i, m.j, top), kind: 'post', f: m.f ?? G.floor, i: m.i, j: m.j, base: m.base, x: m.x, z: m.z, hp: BUILD_HP.post, maxHp: BUILD_HP.post, obj, cols: [col] });
   } else if (m.kind === 'floor') {
     const idx = m.cy * fs.grid.w + m.cx;
     if (!b.floors.has(idx)) b.floors.set(idx, []);
@@ -177,6 +334,7 @@ export function applyBuild(m, broadcast = true) {
     const obj = makePiece('floor_wood_large');
     obj.position.set(m.x, m.h, m.z);
     group.add(obj);
+    b.pieces.push({ key: floorKey(idx, m.h), kind: 'floor', f: m.f ?? G.floor, idx, h: m.h, x: m.x, z: m.z, hp: BUILD_HP.floor, maxHp: BUILD_HP.floor, obj, cols: [] });
   } else if (m.kind === 'ramp') {
     const idx = m.cy * fs.grid.w + m.cx;
     if (b.ramps.has(idx)) return false;
@@ -186,6 +344,7 @@ export function applyBuild(m, broadcast = true) {
     obj.position.set(m.x + m.dir.dx * CELL / 2, m.base, m.z + m.dir.dy * CELL / 2);
     obj.rotation.y = Math.atan2(-m.dir.dx, -m.dir.dy);
     group.add(obj);
+    b.pieces.push({ key: rampKey(idx), kind: 'ramp', f: m.f ?? G.floor, idx, base: m.base, x: m.x, z: m.z, hp: BUILD_HP.ramp, maxHp: BUILD_HP.ramp, obj, cols: [] });
   } else if (m.kind === 'wall') {
     if (b.walls.has(m.key)) return false;
     b.walls.add(m.key);
@@ -193,11 +352,15 @@ export function applyBuild(m, broadcast = true) {
     obj.position.set(m.x, m.base, m.z);
     obj.rotation.y = m.yaw;
     group.add(obj);
-    // three colliders approximate the wall line
+    // three colliders approximate the wall line; the top edge is standable
     const alongX = m.yaw === 0 ? 1 : 0, alongZ = m.yaw === 0 ? 0 : 1;
+    const cols = [];
     for (const o of [-1.35, 0, 1.35]) {
-      fs.grid.colliders.push({ x: m.x + alongX * o, z: m.z + alongZ * o, r: 0.6 });
+      const col = { x: m.x + alongX * o, z: m.z + alongZ * o, r: 0.6, y0: m.base, h: m.base + PLATFORM_H };
+      fs.grid.colliders.push(col);
+      cols.push(col);
     }
+    b.pieces.push({ key: 'w:' + m.key, kind: 'wall', f: m.f ?? G.floor, wkey: m.key, base: m.base, x: m.x, z: m.z, hp: BUILD_HP.wall, maxHp: BUILD_HP.wall, obj, cols });
   }
   if ((m.f ?? G.floor) === G.floor) { sfx.bones(); spawnBurst(new THREE.Vector3(m.x, (m.base ?? m.h ?? 0) + 1, m.z), 0xccbb88, 8, 3, 0.1, 0.35); }
   if (broadcast) netSend({ t: 'build', ...m, f: G.floor });

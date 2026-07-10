@@ -5,7 +5,7 @@ import { G, floorState } from './state.js';
 import { makeCharacter, applyLook, tintCharacter } from './assets.js';
 import { makeBlobShadow, spawnDamageNumber, spawnBurst } from './fx.js';
 import { sfx } from './audio.js';
-import { moveWithCollision, groundHeightAt, hasLineOfSight } from './dungeon.js';
+import { moveWithCollision, groundHeightAt, hasLineOfSight, resolveStuck } from './dungeon.js';
 import { damageEnemy } from './enemies.js';
 import { spawnBolt } from './projectiles.js';
 import { netSend, isAuthority, myId } from './net.js';
@@ -19,6 +19,8 @@ const KINDS = {
   bow: { model: 'Rogue', show: ['2H_Crossbow'], hp: 60, dmg: 10, speed: 7.5, range: 13, atkTime: 1.3, ranged: true, name: 'Marksman' },
   // spectral copies of their caster: fast, fragile, and gone in seconds
   phantom: { model: 'Mage', show: [], hp: 45, dmg: 8, speed: 9.5, range: 2.6, atkTime: 0.55, name: 'Phantom', phantom: true },
+  // Last Stand only: crews turrets & cannons, doesn't fight back
+  worker: { model: 'Rogue', show: [], hp: 45, dmg: 2, speed: 7.5, range: 2.0, atkTime: 1.2, name: 'Worker', worker: true },
 };
 
 export function clearMinions() {
@@ -41,7 +43,7 @@ export function spawnMinion(kindId, owner, floor, x, z, id = null, broadcast = t
   const g = c.getContext('2d');
   g.font = 'bold 22px Trebuchet MS'; g.textAlign = 'center';
   g.strokeStyle = '#000'; g.lineWidth = 5;
-  const tagText = (kind.phantom ? '👤 ' : '🤺 ') + kind.name;
+  const tagText = (kind.phantom ? '👤 ' : kind.worker ? '🔧 ' : '🤺 ') + kind.name;
   g.strokeText(tagText, 128, 28);
   g.fillStyle = kind.phantom ? '#cfe6ff' : '#9fd6ff';
   g.fillText(tagText, 128, 28);
@@ -124,6 +126,9 @@ export function updateMinions(dt) {
 
     if (!authority) {
       if (m.floor !== G.floor) { m.obj.position.set(m.netX, m.netY, m.netZ); continue; }
+      // big jumps (door teleports) snap instead of gliding across the map
+      const jump = Math.hypot(m.netX - m.obj.position.x, m.netZ - m.obj.position.z);
+      if (jump > 12) { m.obj.position.set(m.netX, m.netY, m.netZ); continue; }
       m.obj.position.x += (m.netX - m.obj.position.x) * Math.min(1, dt * 10);
       m.obj.position.y += (m.netY - m.obj.position.y) * Math.min(1, dt * 10);
       m.obj.position.z += (m.netZ - m.obj.position.z) * Math.min(1, dt * 10);
@@ -144,12 +149,14 @@ export function updateMinions(dt) {
     const pos = m.obj.position;
     m.atkT -= dt;
 
-    // pick a target: nearest living enemy in aggro range
+    // pick a target: nearest living enemy in aggro range (workers never fight)
     let target = null, td = 14;
-    for (const e of fs.enemies) {
-      if (e.state === 'dead' || e.state === 'inactive') continue;
-      const d = Math.hypot(e.obj.position.x - pos.x, e.obj.position.z - pos.z);
-      if (d < td) { td = d; target = e; }
+    if (!m.cfg.worker) {
+      for (const e of fs.enemies) {
+        if (e.state === 'dead' || e.state === 'inactive') continue;
+        const d = Math.hypot(e.obj.position.x - pos.x, e.obj.position.z - pos.z);
+        if (d < td) { td = d; target = e; }
+      }
     }
 
     let moveTo = null, moveSpeed = m.cfg.speed;
@@ -181,8 +188,24 @@ export function updateMinions(dt) {
         moveTo = target.obj.position;
       }
     } else {
-      const op = ownerPos(m);
-      if (op && Math.hypot(op.x - pos.x, op.z - pos.z) > 3.2) moveTo = op;
+      // a work crank or a commander's station order outranks following
+      const post = m.workPost || m.order;
+      if (post) {
+        if (Math.hypot(post.x - pos.x, post.z - pos.z) > 1.4) moveTo = post;
+      } else {
+        const op = ownerPos(m);
+        if (op) {
+          const d = Math.hypot(op.x - pos.x, op.z - pos.z);
+          if (d > 18) {
+            // the owner went somewhere no path leads (shop doors teleport you
+            // indoors) — slip through after them instead of pacing outside
+            const spot = resolveStuck(op.x, op.z, op.y, fs.grid) || { x: op.x - 1.2, z: op.z };
+            pos.set(spot.x, groundHeightAt(spot.x, spot.z, op.y, fs.grid), spot.z);
+            m.vy = 0;
+            if (m.floor === G.floor) spawnBurst(pos.clone().setY(pos.y + 1.1), 0x9fd6ff, 10, 3, 0.1, 0.35);
+          } else if (d > 3.2) moveTo = op;
+        }
+      }
     }
 
     if (moveTo) {

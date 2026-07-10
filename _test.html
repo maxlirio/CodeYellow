@@ -1,0 +1,170 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="UTF-8">
+<script type="importmap">
+{
+  "imports": {
+    "three": "https://cdn.jsdelivr.net/npm/three@0.165.0/build/three.module.js",
+    "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.165.0/examples/jsm/"
+  }
+}
+</script>
+</head>
+<body>
+<pre id="out">running…</pre>
+<div id="msgs" style="display:none"></div>
+<script type="module">
+// the game's HUD code touches many DOM ids — auto-create any it asks for
+const realGet = document.getElementById.bind(document);
+document.getElementById = (id) => {
+  let el = realGet(id);
+  if (!el) { el = document.createElement('div'); el.id = id; el.style.display = 'none'; document.body.appendChild(el); }
+  return el;
+};
+const out = [];
+const log = (s) => { out.push(s); console.log('TEST| ' + s); realGet('out').textContent = out.join('\n'); };
+const assert = (cond, name) => log((cond ? 'PASS ' : 'FAIL ') + name);
+window.addEventListener('error', (e) => log('ERROR ' + e.message));
+
+try {
+  const THREE = await import('three');
+  const { G } = await import('./js/state.js');
+  G.scene = new THREE.Scene();
+  const { loadAll, pieceColliders } = await import('./js/assets.js');
+  await loadAll(() => {});
+  log('assets loaded');
+
+  // --- pieceColliders: measured boxes with real heights ---
+  const tavern = pieceColliders('town_tavern', { x: 88, z: 40, scale: 8.5 });
+  assert(tavern.length > 0, 'tavern has collider boxes (' + tavern.length + ')');
+  const tallest = Math.max(...tavern.map(b => b.h));
+  assert(tallest > 4 && tallest < 40, 'tavern roof height sane: ' + tallest.toFixed(1));
+  const barrel = pieceColliders('barrel_large', { x: 0, z: 0 });
+  assert(barrel.length >= 1, 'barrel has a collider');
+  const bTop = Math.max(...barrel.map(b => b.h));
+  assert(bTop > 0.5 && bTop < 2.2, 'barrel top jumpable: ' + bTop.toFixed(2));
+  const grain = pieceColliders('town_grain', { x: 0, z: 0, scale: 6 });
+  log('info: grain would have ' + grain.length + ' boxes (not used — hay is soft)');
+
+  // --- town generation with measured colliders ---
+  const { generateTownData } = await import('./js/town.js');
+  const town = generateTownData();
+  assert(town.grid.colliders.length > 20, 'town colliders: ' + town.grid.colliders.length);
+  assert(town.grid.colliders.every(c => c.h === undefined || c.h > (c.y0 ?? 0)), 'all collider tops above bases');
+  const npcNames = town.npcs.map(n => n.name);
+  assert(npcNames.includes('Drillmaster Otho') && npcNames.includes('Maren the Hunter'), 'codex NPCs present');
+
+  // --- standing on / blocking against a measured box ---
+  const { moveWithCollision, groundHeightAt } = await import('./js/dungeon.js');
+  const g = town.grid;
+  const box = { x: 60, z: 60, hx: 1, hz: 1, y0: 0, h: 1.2 };
+  g.colliders.push(box);
+  const pos = { x: 57, y: 0, z: 60 };
+  moveWithCollision(pos, 2.0, 0, 0.55, { y: 0, grid: g });
+  assert(pos.x < 58.9, 'ground-level walker blocked by box: x=' + pos.x.toFixed(2));
+  const pos2 = { x: 57, y: 1.5, z: 60 };
+  moveWithCollision(pos2, 3.0, 0, 0.55, { y: 1.5, grid: g });
+  assert(pos2.x === 60, 'jumper above box passes over: x=' + pos2.x.toFixed(2));
+  const gh = groundHeightAt(60, 60, 1.5, g);
+  assert(gh === 1.2, 'box top standable at apex: ground=' + gh);
+  const gh0 = groundHeightAt(60.9, 60, 0, g);
+  assert(gh0 === 0, 'box top NOT ground while walking beside it: ' + gh0);
+
+  // --- builds: pieces registry, damage, storey collapse ---
+  G.floors = new Map();
+  const fsMock = { n: 1, grid: g, meshGroup: new THREE.Group(), enemies: [] };
+  G.floors.set(1, fsMock);
+  G.floor = 1;
+  G.net = { role: 'solo' };
+  G.run = { gold: 9999 };
+  const { applyBuild, damageBuild, ensureBuilds, BUILD_HP } = await import('./js/builds.js');
+  const b = ensureBuilds(fsMock);
+  // 4 posts + floor at 4, then a second storey
+  const corners = [[5, 5], [6, 5], [5, 6], [6, 6]];
+  for (const [i, j] of corners) applyBuild({ kind: 'post', f: 1, i, j, base: 0, x: i * 4 - 2, z: j * 4 - 2 }, false);
+  applyBuild({ kind: 'floor', f: 1, cx: 5, cy: 5, h: 4, x: 20, z: 20 }, false);
+  for (const [i, j] of corners) applyBuild({ kind: 'post', f: 1, i, j, base: 4, x: i * 4 - 2, z: j * 4 - 2 }, false);
+  applyBuild({ kind: 'floor', f: 1, cx: 5, cy: 5, h: 8, x: 20, z: 20 }, false);
+  assert(b.pieces.length === 10, 'tower built: 10 pieces (' + b.pieces.length + ')');
+  const idx = 5 * g.w + 5;
+  assert(b.floors.get(idx).join(',') === '4,8', 'floors at 4 and 8');
+  // smash two ground-storey posts -> storey collapses, upper floor drops
+  const groundPosts = b.pieces.filter(p => p.kind === 'post' && p.base === 0);
+  damageBuild(groundPosts[0], 9999);
+  damageBuild(groundPosts[1], 9999);
+  const floorsNow = (b.floors.get(idx) || []).slice().sort((a, c) => a - c);
+  log('info: floors after collapse: [' + floorsNow.join(',') + ']');
+  assert(floorsNow.length === 2 && floorsNow[0] === 0 && floorsNow[1] === 4, 'storey collapsed: tower landed (0,4)');
+  assert(groundPosts.every(p => p.dead || !b.pieces.includes(p)), 'crumbled ground supports removed');
+  assert(b.pieces.filter(p => p.kind === 'post').every(p => p.base === 0), 'upper posts rode down to the ground');
+
+  // --- machines ---
+  const { applyMachine, machines, MACHINES } = await import('./js/machines.js');
+  const ok = applyMachine({ kind: 'turret', f: 1, cx: 8, cy: 8, x: 32, z: 32, base: 0 }, false);
+  assert(ok && machines.length === 1, 'turret placed');
+  assert(b.pieces.some(p => p.kind === 'machine'), 'machine registered as attackable piece');
+
+  // --- horde roles ---
+  const { ENEMIES } = await import('./js/config.js');
+  assert(Object.entries(ENEMIES).filter(([, e]) => !e.boss).length >= 20, 'bestiary has 20+ non-boss entries');
+
+  // --- live simulation: tactics, machines, workers ---
+  fsMock.enemyGroup = new THREE.Group();
+  fsMock.summons = [];
+  fsMock.nextSummonId = 0;
+  fsMock.spawned = true;
+  fsMock.loots = []; fsMock.drops = [];
+  G.scene.add(fsMock.enemyGroup);
+  const { CLASSES } = await import('./js/config.js');
+  G.player = {
+    obj: new THREE.Group(), dead: false, name: 't', classId: 'knight', cls: CLASSES.knight,
+    hp: 500, maxHp: 500, iframes: 0, mana: 60, maxMana: 60, slowT: 0, dodgeT: 0, buff: null, deadT: 0, vy: 0,
+  };
+  G.player.obj.position.set(30, 0, 30);
+  G.remotes = new Map();
+  G.projectiles = [];
+  G.enemies = fsMock.enemies;
+  G.time = 0; G.keys = {};
+  G.inv = { bag: [], weapon: null, offhand: null, trinkets: [] };
+  G.run = { gold: 9999, level: 1, xp: 0, kills: 0, potions: 0, atkBonus: 0, hpBonus: 0, speedBonus: 0, buys: {}, arrows: 0 };
+  const { spawnEnemy, updateEnemies, setEnemyState } = await import('./js/enemies.js');
+  const { horde } = await import('./js/horde.js');
+  const e1 = spawnEnemy(fsMock, 'warrior', 70, 70, { id: 1 });
+  setEnemyState(e1, 'chase');
+  const d0 = Math.hypot(70 - 30, 70 - 30);
+  for (let i = 0; i < 120; i++) updateEnemies(0.05);
+  const d1 = Math.hypot(e1.obj.position.x - 30, e1.obj.position.z - 30);
+  assert(d1 < d0 - 4, 'campaign chaser closes distance (lead pursuit): ' + d0.toFixed(1) + ' → ' + d1.toFixed(1));
+
+  // horde sieger tears at the tower
+  horde.active = true;
+  fsMock.n = 1;
+  const alivePost = b.pieces.find(p => p.kind === 'post');
+  const hpBefore = alivePost.hp;
+  const e2 = spawnEnemy(fsMock, 'ogre', alivePost.x + 8, alivePost.z + 8, { id: 2 });
+  e2.tac = { role: 'sieger', gate: 0, rank: 0 };
+  setEnemyState(e2, 'chase');
+  for (let i = 0; i < 300 && alivePost.hp === hpBefore && !alivePost.dead; i++) updateEnemies(0.05);
+  assert(alivePost.dead || alivePost.hp < hpBefore, 'sieger attacks the structure: ' + hpBefore + ' → ' + (alivePost.dead ? 'destroyed' : alivePost.hp));
+  horde.active = false;
+
+  // a worker mans the turret and it fires
+  const { spawnMinion, updateMinions } = await import('./js/minions.js');
+  const { updateMachines } = await import('./js/machines.js');
+  const w = spawnMinion('worker', 'me', 1, 34, 34);
+  const e3 = spawnEnemy(fsMock, 'minion', 40, 32, { id: 3 });
+  setEnemyState(e3, 'chase');
+  const e3hp = e3.hp;
+  for (let i = 0; i < 200 && e3.hp === e3hp; i++) { updateMinions(0.05); updateMachines(0.05); }
+  assert(w.workPost, 'worker claimed by turret: ' + JSON.stringify(w.workPost));
+  assert(e3.hp < e3hp, 'manned turret fires: enemy ' + e3hp + ' → ' + e3.hp);
+
+  document.title = out.some(l => l.startsWith('FAIL') || l.startsWith('ERROR')) ? 'FAILED' : 'PASSED';
+} catch (e) {
+  log('ERROR ' + (e.stack || e.message));
+  document.title = 'FAILED';
+}
+</script>
+</body>
+</html>

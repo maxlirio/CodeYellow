@@ -12,7 +12,7 @@ import { spawnLootsForFloor, updateLoot, applyTakenSilently, dropItemLoot } from
 import { updateProjectiles, clearProjectiles } from './projectiles.js';
 import { castSpell, updateSpells, updateBeams, resetCooldowns, cooldowns, dealSpells, rerollSpell } from './spells.js';
 import { giveStartingGear, equipItem, salvageItem, rollTrinket, rollWeapon, rollOffhand, addToBag, rarityOf } from './items.js';
-import { SPELLS, SHOP_TABLES } from './config.js';
+import { SPELLS, SHOP_TABLES, ENEMIES } from './config.js';
 import { generateTownData, generateArenaData, spawnTownNpcs, updateTownNpcs } from './town.js';
 import { initViewmodel, updateViewmodel } from './viewmodel.js';
 import { updateWalls, clearWalls } from './walls.js';
@@ -21,6 +21,8 @@ import { buildRopesForFloor, updateRopes } from './ropes.js';
 import { updateMinions, clearMinions, moveMinionsToFloor, refreshMinionVisibility } from './minions.js';
 import { horde, startHorde, stopHorde, updateHorde, tryHireMerc } from './horde.js';
 import { toggleBuildMode, cycleBuildPiece, updateBuildGhost, placeCurrentBuild, buildState, clearBuilds } from './builds.js';
+import { toggleMachineMode, cycleMachine, updateMachineGhost, placeCurrentMachine, machineState, updateMachines, clearMachines, refreshMachineVisibility } from './machines.js';
+import { initCommander, openCommandMap, closeCommandMap, commander } from './commander.js';
 import { themeFor } from './dungeon.js';
 import { setMusicBase, setBossMusic, musicCtxFor, toggleMusic, updateMusic } from './music.js';
 import { fetchPublicGames, publishGame, unpublishGame } from './board.js';
@@ -28,7 +30,7 @@ import {
   createPlayer, resetPlayerForFloor, updatePlayer, updateRemotes, tryAttack, tryDodge, tryInteract,
   drinkPotion, onMouseMove, damageLocalPlayer, sendPos, effectiveMaxHp, effectiveDamage,
   effectiveSpeed, effectiveCrit, effectiveArmor, effectiveManaRegen, refreshEquipVisuals,
-  refreshRemoteVisibility,
+  refreshRemoteVisibility, effectiveAttackTime, weaponHitEffects,
 } from './player.js';
 import {
   show, hide, setHidden, addMsg, refreshHud, updateMinimap, updateDodgeCooldown,
@@ -242,10 +244,14 @@ function setupMenu() {
 
   // shop overlay
   $('btnCloseShop').onclick = () => { hide('merchant'); G.mode = 'playing'; lockPointer(); };
+  $('btnCloseCodex').onclick = () => { hide('codexDialog'); G.mode = 'playing'; lockPointer(); };
   $('btnCloseStash').onclick = () => { hide('stash'); G.mode = 'playing'; lockPointer(); };
   $('btnHireSword').onclick = () => { hide('hireDialog'); tryHireMerc('sword'); lockPointer(); };
   $('btnHireBow').onclick = () => { hide('hireDialog'); tryHireMerc('bow'); lockPointer(); };
+  $('btnHireWorker').onclick = () => { hide('hireDialog'); tryHireMerc('worker'); lockPointer(); };
   $('btnHireCancel').onclick = () => { hide('hireDialog'); lockPointer(); };
+  $('btnCloseCmd').onclick = () => { closeCommandMap(); G.mode = 'playing'; lockPointer(); };
+  initCommander();
   $('btnFloorCancel').onclick = () => { hide('floorSelect'); G.mode = 'playing'; lockPointer(); };
   $('btnCloseInv').onclick = () => toggleInventory(false);
 
@@ -302,6 +308,7 @@ function startRun(seed, mode = 'campaign') {
   clearWalls();
   clearMinions();
   clearBuilds();
+  clearMachines();
   G.run.arrows = 40;
 
   const classId = getClass();
@@ -376,6 +383,7 @@ function setLocalFloor(n) {
   resetPlayerForFloor();
   refreshRemoteVisibility();
   refreshMinionVisibility();
+  refreshMachineVisibility();
   if (G.net.role !== 'guest') moveMinionsToFloor(myId(), n);
   refreshBossBarForFloor();
   refreshHud();
@@ -504,10 +512,11 @@ function openStash() {
   show('stash');
 }
 
-// choose which mercenary to hire
+// choose which mercenary to hire (workers only muster for the Last Stand)
 function openHireDialog() {
   if (!G.player || G.player.dead) return;
   document.exitPointerLock?.();
+  setHidden('btnHireWorker', !horde.active);
   show('hireDialog');
 }
 
@@ -529,8 +538,159 @@ function openFloorSelect() {
   show('floorSelect');
 }
 
+// ---- the training corner: exact numbers straight out of the combat code ----
+const pct = (x) => Math.round(x * 100) + '%';
+const statLine = (k, v) => `<b>${k}:</b> ${v}<br>`;
+
+function spellDetail(sp, dmg, p) {
+  const sd = Math.round(dmg * (sp.dmgMult || 1));
+  const bits = [];
+  switch (sp.type) {
+    case 'proj': {
+      bits.push(`${sp.count || 1} projectile${(sp.count || 1) > 1 ? 's' : ''} × <b>${sd}</b> dmg, speed ${sp.speed}`);
+      if (sp.aoe) bits.push(`${sp.aoe}u blast on impact`);
+      if (sp.pierce) bits.push('pierces through enemies');
+      if (sp.bounce) bits.push(`bounces ${sp.bounce} times`);
+      if (sp.poison) bits.push(`poisons: <b>${Math.round(sd * sp.poison.mult)}</b>/s for ${sp.poison.dur}s`);
+      if (sp.slow) bits.push(`chills: foes move at ${pct(sp.slow.mult)} for ${sp.slow.dur}s`);
+      break;
+    }
+    case 'cone': bits.push(`<b>${sd}</b> dmg in a ${sp.range}u cone, knockback ${sp.knockback}, stun ${sp.stun}s`); break;
+    case 'heal': bits.push(`heals <b>${Math.round(p.maxHp * sp.frac)}</b> HP (${pct(sp.frac)} of max) to allies within ${sp.radius}u`); break;
+    case 'targetaoe': {
+      bits.push(`<b>${sd}</b> dmg in ${sp.radius}u, aimed up to ${sp.range}u away, lands after ${sp.delay}s`);
+      if (sp.burn) bits.push(`burns: <b>${Math.max(2, Math.round(sd * sp.burn.mult))}</b>/s for ${sp.burn.dur}s`);
+      break;
+    }
+    case 'aoe': {
+      if (sd > 0) bits.push(`<b>${sd}</b> dmg in ${sp.radius}u around you`);
+      else bits.push(`no damage, ${sp.radius}u around you`);
+      if (sp.stun) bits.push(`stuns ${sp.stun}s`);
+      if (sp.slowAll) bits.push(`chills all: ${pct(sp.slowAll.mult)} speed for ${sp.slowAll.dur}s`);
+      if (sp.burn) bits.push(`burns: <b>${Math.max(2, Math.round(sd * sp.burn.mult))}</b>/s for ${sp.burn.dur}s`);
+      if (sp.selfIframes) bits.push(`you are untouchable for ${sp.selfIframes}s`);
+      break;
+    }
+    case 'buff': {
+      if ((sp.dmgMult || 1) > 1) bits.push(`+${Math.round((sp.dmgMult - 1) * 100)}% damage`);
+      if ((sp.speedMult || 1) > 1) bits.push(`+${Math.round((sp.speedMult - 1) * 100)}% speed`);
+      if (sp.armorAdd) bits.push(`+${pct(sp.armorAdd)} damage reduction`);
+      if (sp.lifesteal) bits.push(`heal ${pct(sp.lifesteal)} of damage dealt`);
+      bits.push(`for ${sp.dur}s`);
+      break;
+    }
+    case 'blink': {
+      bits.push(`teleports you ${sp.dist}u forward`);
+      if (sp.landAoe) bits.push(`landing: <b>${Math.round(dmg * sp.landAoe.dmgMult)}</b> dmg in ${sp.landAoe.radius}u, stun ${sp.landAoe.stun}s`);
+      break;
+    }
+    case 'chain': bits.push(`<b>${sd}</b> dmg, jumps to ${sp.jumps} more foes, ×${sp.falloff} per jump`); break;
+    case 'mark': bits.push(`marked foe (up to ${sp.range}u) takes ×${sp.vuln} damage for ${sp.dur}s`); break;
+    case 'phantoms': bits.push(`${sp.count} spectral copies of you fight for ${sp.dur}s, hitting for <b>${Math.max(3, Math.round(dmg * sp.dmgMult))}</b>`); break;
+    case 'lightning': bits.push(`<b>${sd}</b> dmg bolt (${sp.range}u), forks to ${sp.forks} foes within ${sp.forkRange}u for <b>${Math.round(sd * sp.forkMult)}</b>, stuns ${sp.stun}s`); break;
+    case 'vortex': bits.push(`drags every foe within ${sp.radius}u to its heart for ${sp.dur}s; <b>${sd}</b> dmg at the core`); break;
+    case 'ward': bits.push(`heals <b>${Math.max(2, Math.round(p.maxHp * sp.frac))}</b> HP every ${sp.tick}s for ${sp.dur}s, within ${sp.radius}u`); break;
+    case 'wall': bits.push(`raises a bone wall for ${sp.dur}s, up to ${sp.range}u away`); break;
+  }
+  return bits.join(' · ');
+}
+
+function openCodex() {
+  const p = G.player;
+  if (!p) return;
+  G.mode = 'merchant';
+  document.exitPointerLock?.();
+  const cls = p.cls;
+  const dmg = effectiveDamage();
+  const atkTime = effectiveAttackTime();
+  const critCh = effectiveCrit();
+  const wfx = weaponHitEffects(dmg);
+  const w = G.inv.weapon;
+  const rangedAtk = cls.ranged || w?.ranged;
+  let html = '';
+  let atk = statLine('Damage per hit', `<b>${dmg}</b>`);
+  atk += statLine('Crit', `${pct(critCh)} chance → <b>${Math.round(dmg * 1.8)}</b> dmg (×1.8)`);
+  atk += statLine('Attack speed', `${(1 / atkTime).toFixed(2)}/s (one swing every ${atkTime.toFixed(2)}s)`);
+  if (!rangedAtk) {
+    atk += statLine('Reach', `${cls.attackRange}u, ${Math.round(cls.attackArc * 2 * 180 / Math.PI)}° arc — hits EVERY enemy inside it`);
+  } else if (w?.ranged || cls.name === 'Ranger') {
+    atk += statLine('Projectile', `arrow, speed 28u/s, costs 1 arrow (you have ${G.run.arrows || 0})`);
+  } else if (cls.manaAttack) {
+    const full = Math.ceil(p.maxMana * cls.manaAttack);
+    atk += statLine('Projectile', `bolt, speed 20u/s`);
+    atk += statLine('Mana', `a full-power bolt burns <b>${full}</b> mana; with an empty pool it fires at 25% power (<b>${Math.max(1, Math.round(dmg * 0.25))}</b> dmg)`);
+  }
+  if (wfx.poison) atk += statLine('Weapon burn', `<b>${wfx.poison.dps}</b>/s for ${wfx.poison.dur}s on every hit`);
+  if (wfx.slow) atk += statLine('Weapon chill', `foes move at ${pct(wfx.slow.mult)} for ${wfx.slow.dur}s`);
+  if (wfx.lifesteal) atk += statLine('Lifesteal', `heals ${pct(wfx.lifesteal)} of damage dealt`);
+  html += `<div class="codex-entry"><h3>${cls.icon} Basic attack — ${w ? w.name : cls.name + "'s starting arms"}</h3><div class="codex-stats">${atk}</div></div>`;
+
+  const spells = (G.run.spells && G.run.spells.length ? G.run.spells : cls.spellPool);
+  for (const id of spells) {
+    const sp = SPELLS[id];
+    if (!sp) continue;
+    html += `<div class="codex-entry"><h3>${sp.icon} ${sp.name}</h3><div class="codex-stats">`
+      + statLine('Cost', `${sp.mana} mana · ${sp.cd}s cooldown`)
+      + statLine('Effect', spellDetail(sp, dmg, p))
+      + '</div></div>';
+  }
+  $('codexTitle').textContent = '⚔ Drillmaster Otho';
+  $('codexSub').textContent = '“No rumors here. These are your numbers, exactly as they land.”';
+  $('codexBody').innerHTML = html;
+  show('codexDialog');
+}
+
+const MONSTER_NAMES = {
+  minion: 'Skeleton Minion', rogue: 'Skeleton Rogue', warrior: 'Skeleton Warrior', mage: 'Skeleton Mage',
+  bomber: 'Bomber', frostmage: 'Frost Mage', ghost: 'Ghost', shade: 'Shade', necromancer: 'Necromancer',
+  berserker: 'Berserker', juggernaut: 'Juggernaut', plaguebearer: 'Plaguebearer', sniper: 'Sniper',
+  brute: 'Brute', goblin: 'Goblin', orcwar: 'Orc Warrior', ogre: 'Ogre', imp: 'Imp',
+  slime: 'Slime', slimelet: 'Slimelet', glub: 'Glub', drake: 'Drake',
+};
+
+function monsterTraits(e) {
+  const t = [];
+  if (e.explode) t.push(`charges you and EXPLODES: <b>${e.dmg}</b> dmg within ${e.explode}u — that blast is its only attack`);
+  else if (e.ranged) t.push(`shoots from up to ${e.range}u, one bolt every ${e.attackTime}s for <b>${e.dmg}</b>`);
+  else t.push(`melee, ${e.range}u reach, one hit every ${e.attackTime}s for <b>${e.dmg}</b>`);
+  if (e.slowBolt) t.push('its bolts chill you to 50% speed for 2.5s');
+  if (e.ghost) t.push('spectral — drifts through walls and always sees you');
+  if (e.summons) t.push(`raises a ${MONSTER_NAMES[e.summonType] || e.summonType} every ${e.summonEvery}s`);
+  if (e.enrage) t.push('fights faster as it bleeds — up to +90% speed near death');
+  if (e.stalwart) t.push('too massive to stun or knock back');
+  if (e.plague) t.push(`hits infect you: ${e.plague.dps}/s poison for ${e.plague.dur}s (stronger on deep floors)`);
+  if (e.deathCloud) t.push(`bursts into a ${e.deathCloud}u poison cloud when slain — stand back`);
+  if (e.kbHit) t.push('its blows hurl you backwards');
+  if (e.splitInto) t.push(`splits into two ${MONSTER_NAMES[e.splitInto] || e.splitInto}s when slain`);
+  if (e.trio) t.push('hunts in packs of three');
+  if (e.fly) t.push('airborne');
+  return t;
+}
+
+function openBestiary() {
+  if (!G.player) return;
+  G.mode = 'merchant';
+  document.exitPointerLock?.();
+  let html = `<div class="codex-note">Base numbers shown. Every floor deeper multiplies HP by +22% and damage by +13% of base
+    (floor 3: HP ×${(1 + 0.22 * 2).toFixed(2)}, dmg ×${(1 + 0.13 * 2).toFixed(2)}).
+    Gold-glowing ELITES: ×2.4 HP, ×1.5 damage, ×2 gold. Bosses? “Some things you meet unspoiled.”</div>`;
+  for (const [id, e] of Object.entries(ENEMIES)) {
+    if (e.boss) continue;
+    html += `<div class="codex-entry"><h3>${MONSTER_NAMES[id] || id}</h3><div class="codex-stats">`
+      + statLine('Stats', `<b>${e.hp}</b> HP · speed ${e.speed} · notices you at ${e.aggro}u · ${e.xp} XP · ${e.gold[0]}–${e.gold[1]}g`)
+      + statLine('Behavior', monsterTraits(e).join(' · '))
+      + '</div></div>';
+  }
+  $('codexTitle').textContent = '🏹 Maren the Hunter';
+  $('codexSub').textContent = '“Know a beast and it is already half dead.”';
+  $('codexBody').innerHTML = html;
+  show('codexDialog');
+}
+
 function onShopOpened(type) {
   if (type === 'board') { document.exitPointerLock?.(); window.openTavernBoard(); return; }
+  if (type === 'codex') { openCodex(); return; }
+  if (type === 'bestiary') { openBestiary(); return; }
   const table = SHOP_TABLES[type];
   if (!table) return;
   G.mode = 'merchant';
@@ -693,12 +853,14 @@ function setupInput() {
     if (G.mode === 'playing' && !invOpen) {
       resumeAudio();
       if (!document.pointerLockElement) { lockPointer(); return; }
-      if (buildState.on) { placeCurrentBuild(); return; } // build mode: click places
+      if (machineState.on) { placeCurrentMachine(); return; } // machine mode: click places
+      if (buildState.on) { placeCurrentBuild(); return; }     // build mode: click places
       tryAttack();
     }
   });
   addEventListener('wheel', (e) => {
-    if (buildState.on && G.mode === 'playing') cycleBuildPiece(e.deltaY > 0 ? 1 : -1);
+    if (machineState.on && G.mode === 'playing') cycleMachine(e.deltaY > 0 ? 1 : -1);
+    else if (buildState.on && G.mode === 'playing') cycleBuildPiece(e.deltaY > 0 ? 1 : -1);
   }, { passive: true });
   document.addEventListener('pointerlockchange', () => {
     G.mouse.locked = document.pointerLockElement === canvas;
@@ -714,14 +876,20 @@ function setupInput() {
     if (e.code === 'KeyF') tryAttack();
     if (e.code === 'KeyE') tryInteract(onStairsUsed, onShopOpened, onHomeDoor);
     if (e.code === 'KeyQ') drinkPotion();
-    if (e.code === 'KeyB' && (horde.active || G.runMode === 'duel')) toggleBuildMode();
+    if (e.code === 'KeyB' && (horde.active || G.runMode === 'duel')) { toggleMachineMode(false); toggleBuildMode(); }
+    if (e.code === 'KeyV' && (horde.active || G.runMode === 'duel')) { toggleBuildMode(false); toggleMachineMode(); }
     if (e.code === 'KeyH' && horde.active) openHireDialog();
-    if (e.code === 'KeyM') addMsg(toggleMusic() ? '🎵 Music on' : '🔇 Music off');
+    if (e.code === 'KeyM') {
+      // commander view between waves & in duels; music toggle everywhere else
+      if (commander.open) { closeCommandMap(); G.mode = 'playing'; lockPointer(); }
+      else if ((horde.active && horde.phase === 'build') || G.runMode === 'duel') openCommandMap();
+      else addMsg(toggleMusic() ? '🎵 Music on' : '🔇 Music off');
+    }
+    if (e.code === 'KeyN') { const m = toggleMute(); addMsg(m ? 'Muted 🔇' : 'Sound on 🔊'); }
     if (e.code === 'KeyP' && (horde.active || G.runMode === 'duel')) buyItem('arrows', 20);
     if (e.code === 'Digit1') castSpell(0, effectiveDamage);
     if (e.code === 'Digit2') castSpell(1, effectiveDamage);
     if (e.code === 'Digit3') castSpell(2, effectiveDamage);
-    if (e.code === 'KeyM') { const m = toggleMute(); addMsg(m ? 'Muted 🔇' : 'Sound on 🔊'); }
     if (e.code === 'Escape' && G.mode === 'playing') {
       G.mode = 'paused';
       G.paused = true;
@@ -811,8 +979,10 @@ function loop(t) {
     updateRopes(dt);
     updateTownNpcs(dt);
     updateMinions(dt);
+    updateMachines(dt);
     updateHorde(dt);
     updateBuildGhost();
+    updateMachineGhost();
     if (G.runMode === 'duel' && G.mode === 'playing') {
       duelGoldT += dt;
       if (duelGoldT > 5) {

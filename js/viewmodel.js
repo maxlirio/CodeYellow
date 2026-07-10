@@ -124,27 +124,37 @@ export function updateViewmodel(dt) {
     const k = Math.min(1, anim.t / anim.dur);
     switch (anim.kind) {
       case 'slash': {
-        // wind up briefly, then sweep flat across the view
-        const wind = Math.min(1, k / 0.25);
-        const sweep = k < 0.25 ? 0 : (k - 0.25) / 0.75;
-        const arc = Math.sin(sweep * Math.PI);
-        ry = anim.dir * (0.55 * wind - sweep * 2.0 * 0.9);
-        rz = anim.dir * arc * 0.25;
-        rx = -arc * 0.35;
-        px += anim.dir * (0.18 * wind - sweep * 0.5);
-        pz -= arc * 0.28;
+        // three beats: cock back & up → fast diagonal cut across the view →
+        // follow-through that eases back to rest (never snaps home)
+        const d = anim.dir;
+        const easeOut = (t) => 1 - (1 - t) ** 3;
+        const easeInOut = (t) => t * t * (3 - 2 * t);
+        // pose A: wound up high on one side; pose B: swung through low on the other
+        const A = { rx: 0.30, ry: 0.85 * d, rz: -0.45 * d, x: 0.22 * d, y: 0.10, z: 0.10 };
+        const B = { rx: -0.50, ry: -1.05 * d, rz: 0.40 * d, x: -0.30 * d, y: -0.16, z: -0.34 };
+        let t, from = null, to = A;
+        if (k < 0.22) { t = easeOut(k / 0.22); }
+        else if (k < 0.48) { t = easeInOut((k - 0.22) / 0.26); from = A; to = B; }
+        else { t = easeInOut((k - 0.48) / 0.52); from = B; to = null; }
+        const mix = (a, b) => (a ?? 0) + ((b ?? 0) - (a ?? 0)) * t;
+        rx = mix(from?.rx, to?.rx); ry = mix(from?.ry, to?.ry); rz = mix(from?.rz, to?.rz);
+        px += mix(from?.x, to?.x); py += mix(from?.y, to?.y); pz += mix(from?.z, to?.z);
+        // extra forward reach right through the middle of the cut
+        if (k >= 0.22 && k < 0.48) pz -= Math.sin(((k - 0.22) / 0.26) * Math.PI) * 0.18;
         break;
       }
       case 'cleave': {
-        // raise high overhead, then slam straight down
-        const raise = Math.min(1, k / 0.35);
-        const slam = k < 0.35 ? 0 : Math.min(1, (k - 0.35) / 0.4);
-        rx = raise * 1.1 - slam * 2.3;
-        py += raise * 0.28 - slam * 0.5;
-        pz -= slam * 0.25;
-        if (k > 0.72) { // impact judder
-          px += Math.sin(k * 90) * 0.012;
-          py += Math.sin(k * 70) * 0.01;
+        // raise high overhead, slam straight down, then recover to rest
+        const raise = Math.min(1, k / 0.3);
+        const slam = k < 0.3 ? 0 : Math.min(1, (k - 0.3) / 0.32);
+        const rec = k < 0.62 ? 0 : (k - 0.62) / 0.38;
+        const w = 1 - rec * rec * (3 - 2 * rec); // ease the recovery
+        rx = (raise * 1.1 - slam * 2.3) * w;
+        py += (raise * 0.28 - slam * 0.5) * w;
+        pz -= slam * 0.25 * w;
+        if (k > 0.55 && k < 0.75) { // impact judder
+          px += Math.sin(k * 90) * 0.012 * w;
+          py += Math.sin(k * 70) * 0.01 * w;
         }
         break;
       }

@@ -60,6 +60,8 @@ export const sfx = {
   trap() { if (!ctx) return; const t = ctx.currentTime; noise(t, 0.08, 0.25, 4000, 'highpass'); osc('sawtooth', 130, t, 0.15, 0.2, 60); },
   death() { if (!ctx) return; const t = ctx.currentTime; [300, 230, 170, 110, 70].forEach((f, i) => osc('sawtooth', f, t + i * 0.16, 0.26, 0.14)); },
   bossroar() { if (!ctx) return; const t = ctx.currentTime; osc('sawtooth', 70, t, 0.9, 0.3, 45); noise(t, 0.7, 0.2, 250); },
+  rumble() { if (!ctx) return; const t = ctx.currentTime; osc('sawtooth', 42, t, 1.1, 0.3, 26); noise(t, 1.2, 0.32, 130, 'lowpass'); for (let i = 0; i < 6; i++) noise(t + i * 0.13, 0.09, 0.18, 320 + i * 70); },
+  cannon() { if (!ctx) return; const t = ctx.currentTime; noise(t, 0.3, 0.35, 500, 'lowpass'); osc('sawtooth', 90, t, 0.35, 0.25, 35); },
   victory() { if (!ctx) return; const t = ctx.currentTime; [523, 659, 784, 1046, 784, 1046, 1318].forEach((f, i) => osc('triangle', f, t + i * 0.14, 0.3, 0.15)); },
   dodge() { if (!ctx) return; const t = ctx.currentTime; noise(t, 0.12, 0.1, 1800, 'bandpass', 1.5); },
 };

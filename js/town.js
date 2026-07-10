@@ -5,7 +5,7 @@
 import * as THREE from 'three';
 import { G } from './state.js';
 import { CELL, PLATFORM_H } from './config.js';
-import { makeCharacter, applyLook } from './assets.js';
+import { makeCharacter, applyLook, pieceColliders } from './assets.js';
 import { makeBlobShadow } from './fx.js';
 import { sfx } from './audio.js';
 import { spawnBurst } from './fx.js';
@@ -31,15 +31,13 @@ const SHOPS = [
 ];
 
 const HOMES = [
-  { piece: 'town_home_red', at: [11, 4], scale: 7, yaw: Math.PI, door: [11, 6], hx: 3.2, hz: 3.4 },
-  { piece: 'town_home_blue', at: [19, 4], scale: 7, yaw: Math.PI, door: [19, 6], hx: 3.2, hz: 3.4 },
-  { piece: 'town_home_green', at: [4, 14], scale: 7, yaw: Math.PI / 2, door: [6, 14], hx: 3.4, hz: 3.2 },
-  { piece: 'town_home_yellow', at: [25, 14], scale: 7, yaw: -Math.PI / 2, door: [23, 14], hx: 3.4, hz: 3.2 },
-  { piece: 'town_home_blue', at: [12, 24], scale: 7, yaw: 0, door: [12, 22], hx: 3.2, hz: 3.4 },
-  { piece: 'town_home_red', at: [18, 24], scale: 7, yaw: 0, door: [18, 22], hx: 3.2, hz: 3.4 },
+  { piece: 'town_home_red', at: [11, 4], scale: 7, yaw: Math.PI, door: [11, 6] },
+  { piece: 'town_home_blue', at: [19, 4], scale: 7, yaw: Math.PI, door: [19, 6] },
+  { piece: 'town_home_green', at: [4, 14], scale: 7, yaw: Math.PI / 2, door: [6, 14] },
+  { piece: 'town_home_yellow', at: [25, 14], scale: 7, yaw: -Math.PI / 2, door: [23, 14] },
+  { piece: 'town_home_blue', at: [12, 24], scale: 7, yaw: 0, door: [12, 22] },
+  { piece: 'town_home_red', at: [18, 24], scale: 7, yaw: 0, door: [18, 22] },
 ];
-// building-shaped box colliders (half-extents), replacing fat cell stamps
-const SHOP_BOX = { blacksmith: [5.6, 5.4], tavern: [5.1, 5.8], alchemist: [3.4, 3.6], arcanum: [4.6, 4.2] };
 
 const TREES = [[4, 4], [26, 8], [3, 9], [10, 8], [20, 8], [4, 20], [26, 22], [10, 19], [20, 19], [25, 25], [3, 25]];
 
@@ -65,13 +63,11 @@ export function generateTownData() {
   // village square
   for (let y = 12; y <= 16; y++) for (let x = 13; x <= 17; x++) addPath(x, y);
 
-  // buildings collide as boxes shaped like the model, not fat cell stamps
-  for (const s of SHOPS) {
-    const [hx, hz] = SHOP_BOX[s.type] || [4, 4];
-    colliders.push({ x: s.at[0] * CELL, z: s.at[1] * CELL, hx, hz });
-  }
-  for (const b of HOMES) colliders.push({ x: b.at[0] * CELL, z: b.at[1] * CELL, hx: b.hx, hz: b.hz });
-  colliders.push({ x: 26 * CELL, z: 4 * CELL, hx: 3.4, hz: 2.6 }); // windmill
+  // buildings collide exactly as the model is shaped (walls, roof, chimney each
+  // get their measured box) — and every top is standable if you find a path up
+  for (const s of SHOPS) colliders.push(...pieceColliders(s.piece, { x: s.at[0] * CELL, z: s.at[1] * CELL, scale: s.scale }));
+  for (const b of HOMES) colliders.push(...pieceColliders(b.piece, { x: b.at[0] * CELL, z: b.at[1] * CELL, yaw: b.yaw, scale: b.scale }));
+  colliders.push(...pieceColliders('town_windmill', { x: 26 * CELL, z: 4 * CELL, yaw: Math.PI, scale: 8 }));
 
   // dungeon portal in the north wall
   const portal = { x: 15, y: 2, dx: 0, dy: -1 };
@@ -149,20 +145,23 @@ export function generateTownData() {
   }
   place('town_windmill', 26 * CELL, 0, 4 * CELL, Math.PI, 8);
   place('town_well', 15 * CELL, 0, 14 * CELL, 0, 6);
-  colliders.push({ x: 15 * CELL, z: 14 * CELL, r: 2.6 });
+  colliders.push(...pieceColliders('town_well', { x: 15 * CELL, z: 14 * CELL, scale: 6 }));
   place('town_market', 12 * CELL, 0, 16 * CELL, Math.PI, 4.5);
-  colliders.push({ x: 12 * CELL, z: 16 * CELL, r: 2.6 });
+  colliders.push(...pieceColliders('town_market', { x: 12 * CELL, z: 16 * CELL, yaw: Math.PI, scale: 4.5 }));
   place('town_market', 18 * CELL, 0, 16 * CELL, Math.PI, 4.5);
-  colliders.push({ x: 18 * CELL, z: 16 * CELL, r: 2.6 });
-  // grain garden with a wooden fence
+  colliders.push(...pieceColliders('town_market', { x: 18 * CELL, z: 16 * CELL, yaw: Math.PI, scale: 4.5 }));
+  // grain garden with a wooden fence — the grain is hay-soft, so it never collides
   place('town_grain', 4.5 * CELL, 0.05, 24 * CELL, 0, 6);
   for (let i = 0; i < 4; i++) {
     place('town_fence', (3 + i * 1) * CELL, 0, 22.4 * CELL, Math.PI / 2, 3.5);
+    colliders.push(...pieceColliders('town_fence', { x: (3 + i * 1) * CELL, z: 22.4 * CELL, yaw: Math.PI / 2, scale: 3.5 }));
   }
   for (const [tx, ty] of TREES) {
     const big = rand() < 0.35;
-    place(big ? 'town_trees' : 'town_tree', tx * CELL + rand() * 1.6 - 0.8, 0, ty * CELL + rand() * 1.6 - 0.8, rand() * Math.PI * 2, big ? 4.5 : 5.5);
-    colliders.push({ x: tx * CELL, z: ty * CELL, r: big ? 1.4 : 0.7 });
+    const wx = tx * CELL + rand() * 1.6 - 0.8, wz = ty * CELL + rand() * 1.6 - 0.8;
+    const yaw = rand() * Math.PI * 2;
+    place(big ? 'town_trees' : 'town_tree', wx, 0, wz, yaw, big ? 4.5 : 5.5);
+    colliders.push(...pieceColliders(big ? 'town_trees' : 'town_tree', { x: wx, z: wz, yaw, scale: big ? 4.5 : 5.5 }));
   }
 
   // ---- furnish the interiors ----
@@ -179,13 +178,13 @@ export function generateTownData() {
     if (shop.type === 'tavern') {
       place('barrel_large', (x0 + 4.2) * CELL, 0, 35.8 * CELL);
       place('bottle_A_brown', (x0 + 3.4) * CELL, 1.05, 33.7 * CELL, 1);
-      colliders.push({ x: (x0 + 4.2) * CELL, z: 35.8 * CELL, r: 0.9 });
+      colliders.push(...pieceColliders('barrel_large', { x: (x0 + 4.2) * CELL, z: 35.8 * CELL }));
       // the public-games notice board hangs by the door
       npcs.push({ model: null, noModel: true, name: 'Notice Board', shop: 'board', label: '📜 Public Games board', x: (x0 + 4) * CELL, z: 36 * CELL });
       place('banner_patternA_blue', (x0 + 4) * CELL, 3.0, 36.4 * CELL, Math.PI);
     }
-    colliders.push({ x: (x0 + 0.6) * CELL, z: 33.4 * CELL, r: 1.1 });
-    colliders.push({ x: (x0 + 3.4) * CELL, z: 33.6 * CELL, r: 1.2 });
+    colliders.push(...pieceColliders('town_cabinet', { x: (x0 + 0.6) * CELL, z: 33.4 * CELL, yaw: Math.PI / 2, scale: 2.6 }));
+    colliders.push(...pieceColliders('table_medium', { x: (x0 + 3.4) * CELL, z: 33.6 * CELL }));
     // interior lighting
     torches.push({ x: cx, y: 3.4, z: 33.5 * CELL });
 
@@ -199,6 +198,22 @@ export function generateTownData() {
     const outX = shop.door[0] * CELL, outZ = shop.door[1] * CELL;
     doors.push({ x: outX, z: outZ - 1.5, label: shop.label, tx: cx, tz: 35.5 * CELL, tyaw: Math.PI });
     doors.push({ x: cx, z: 36.5 * CELL, label: '🚪 Leave the shop', tx: outX, tz: outZ + 2, tyaw: Math.PI });
+  });
+
+  // the training corner by the square: exact numbers, no rumors
+  npcs.push({
+    model: 'Knight', name: 'Drillmaster Otho', shop: 'codex',
+    label: '⚔ Talk to Drillmaster Otho — your EXACT attack numbers',
+    show: ['1H_Sword'], look: { helmet: true, cape: true, capeColor: 0 },
+    tints: [['Body', 0x7a3030], ['Leg', 0x40282a]],
+    x: 13 * CELL, z: 12.2 * CELL,
+  });
+  npcs.push({
+    model: 'Rogue_Hooded', name: 'Maren the Hunter', shop: 'bestiary',
+    label: '🏹 Talk to Maren the Hunter — know every monster',
+    show: ['2H_Crossbow'], look: { helmet: true, cape: true, capeColor: 2 },
+    tints: [['Body', 0x3a4a2f], ['Hood', 0x2c3a28], ['Cape', 0x2c3a28]],
+    x: 17 * CELL, z: 12.2 * CELL,
   });
 
   const homeDoors = HOMES.map((b, i) => ({ idx: i, x: b.door[0] * CELL, z: b.door[1] * CELL }));
