@@ -235,6 +235,7 @@ function setupMenu() {
     descendTo(G.floor + 1);
   };
   $('btnResume').onclick = () => { hide('pause'); G.mode = 'playing'; G.paused = false; lockPointer(); };
+  $('btnPauseMode').onclick = () => { hide('pause'); G.paused = false; openModeDialog(); };
   $('btnQuit').onclick = () => location.reload();
 
   // stairs choice (dungeon floors)
@@ -253,11 +254,16 @@ function setupMenu() {
   $('btnCloseCmd').onclick = () => { closeCommandMap(); G.mode = 'playing'; lockPointer(); };
   initCommander();
   $('btnFloorCancel').onclick = () => { hide('floorSelect'); G.mode = 'playing'; lockPointer(); };
+  $('btnModeCampaign').onclick = () => switchMode('campaign');
+  $('btnModeHorde').onclick = () => switchMode('horde');
+  $('btnModeDuel').onclick = () => switchMode('duel');
+  $('btnModeCancel').onclick = () => { hide('modeDialog'); G.mode = 'playing'; lockPointer(); };
   $('btnCloseInv').onclick = () => toggleInventory(false);
 
   setNetCallbacks({
     onLobbyUpdate: renderLobby,
     onStart: (seed, mode) => startRun(seed, mode),
+    onModeSwitch: (mode) => { applyModeSwitch(mode); },
     onGameOver: () => gameOver(true),
     onVictory: () => victory(true),
     onHostGone: () => { shutdownNet(); hide('lobby'); show('menu'); },
@@ -298,7 +304,7 @@ function startRun(seed, mode = 'campaign') {
   G.run = { gold: mode === 'horde' ? 60 : 0, potions: 1, keys: 0, atkBonus: 0, hpBonus: 0, speedBonus: 0, speedBuys: 0, level: 1, xp: 0, kills: 0, chests: 0, startTime: performance.now(), buys: {}, deepest: 0 };
   resetCooldowns();
   stopHorde();
-  hide('menu'); hide('lobby'); hide('merchant'); hide('dead'); hide('victory'); hide('inventory'); hide('stairsDialog'); hide('tavernBoard');
+  hide('menu'); hide('lobby'); hide('merchant'); hide('dead'); hide('victory'); hide('inventory'); hide('stairsDialog'); hide('tavernBoard'); hide('modeDialog');
   invOpen = false;
   setHidden('hud', false);
 
@@ -687,8 +693,48 @@ function openBestiary() {
   show('codexDialog');
 }
 
+// ---- the wayfarer post: change ventures, keep your character ----
+function openModeDialog() {
+  if (G.net.role === 'guest') { addMsg('Only the host can change the venture.', 'bad'); return; }
+  G.mode = 'merchant';
+  document.exitPointerLock?.();
+  show('modeDialog');
+}
+
+function switchMode(mode) {
+  hide('modeDialog');
+  if (mode === G.runMode) { G.mode = 'playing'; lockPointer(); return; }
+  if (G.net.role === 'host') netSend({ t: 'modeswitch', mode });
+  applyModeSwitch(mode);
+  lockPointer();
+}
+
+// rebuild the world for the new mode, but the character travels:
+// gold, gear, bag, potions, keys, levels, spells, campaign progress
+function applyModeSwitch(mode) {
+  const keep = { ...G.run };
+  const inv = { weapon: G.inv.weapon, offhand: G.inv.offhand, trinket: G.inv.trinket, bag: [...G.inv.bag] };
+  startRun(G.seed, mode);
+  Object.assign(G.run, {
+    gold: keep.gold, potions: keep.potions, keys: keep.keys,
+    arrows: mode === 'campaign' ? keep.arrows : Math.max(keep.arrows || 0, 40),
+    level: keep.level, xp: keep.xp, kills: keep.kills, chests: keep.chests,
+    atkBonus: keep.atkBonus, hpBonus: keep.hpBonus, speedBonus: keep.speedBonus,
+    speedBuys: keep.speedBuys, buys: keep.buys, deepest: keep.deepest,
+    spells: keep.spells,
+  });
+  G.inv.weapon = inv.weapon; G.inv.offhand = inv.offhand; G.inv.trinket = inv.trinket; G.inv.bag = inv.bag;
+  refreshEquipVisuals();
+  G.player.maxHp = effectiveMaxHp();
+  G.player.hp = G.player.maxHp;
+  updateSpellBar(cooldowns);
+  refreshHud();
+  addMsg('⚔ Venture changed — your gold, gear and levels travelled with you.', 'gold');
+}
+
 function onShopOpened(type) {
   if (type === 'board') { document.exitPointerLock?.(); window.openTavernBoard(); return; }
+  if (type === 'mode') { openModeDialog(); return; }
   if (type === 'codex') { openCodex(); return; }
   if (type === 'bestiary') { openBestiary(); return; }
   const table = SHOP_TABLES[type];

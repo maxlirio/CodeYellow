@@ -181,6 +181,8 @@ export function generateTownData() {
       colliders.push(...pieceColliders('barrel_large', { x: (x0 + 4.2) * CELL, z: 35.8 * CELL }));
       // the public-games notice board hangs by the door
       npcs.push({ model: null, noModel: true, name: 'Notice Board', shop: 'board', label: '📜 Public Games board', x: (x0 + 4) * CELL, z: 36 * CELL });
+      // the wayfarer post: change ventures without losing your character
+      npcs.push({ model: null, noModel: true, name: 'Wayfarer Post', shop: 'mode', label: '⚔ Change Venture', x: (x0 + 1.4) * CELL, z: 36 * CELL });
       place('banner_patternA_blue', (x0 + 4) * CELL, 3.0, 36.4 * CELL, Math.PI);
     }
     colliders.push(...pieceColliders('town_cabinet', { x: (x0 + 0.6) * CELL, z: 33.4 * CELL, yaw: Math.PI / 2, scale: 2.6 }));

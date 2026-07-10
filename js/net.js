@@ -301,6 +301,9 @@ function handleAsGuest(m) {
     case 'fstate':
       callbacks.onFstate?.(m);
       break;
+    case 'modeswitch':
+      callbacks.onModeSwitch?.(m.mode);
+      break;
     case 'bolt':
     case 'ebolt':
       if (m.f === G.floor) H?.proj.spawnBolt(m.b);
