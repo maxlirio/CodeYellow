@@ -242,6 +242,10 @@ export function joinGame(code, name, classId) {
 }
 
 function handleAsGuest(m) {
+  // messages the host authored itself arrive without a pid (relayed guest
+  // messages get one stamped) — attribute them to 'host' so pos/pfloor/equip
+  // from the host's own player actually apply
+  if (m.pid === undefined) m.pid = 'host';
   switch (m.t) {
     case 'full':
       addMsg('That room is full or already playing.', 'bad');

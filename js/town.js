@@ -419,18 +419,26 @@ export function spawnTownNpcs(fs) {
 export function updateTownNpcs(dt) {
   const fs = G.floors.get(G.floor);
   if (!fs?.npcObjs) return;
+  // keepers greet the NEAREST adventurer (local or remote) — every client
+  // computes the same nearest from synced positions, so all players see the
+  // keeper facing the same way
+  const folks = [];
+  if (G.player && !G.player.dead) folks.push(G.player.obj.position);
+  for (const r of G.remotes.values()) if (!r.dead && r.floor === G.floor) folks.push(r.obj.position);
   for (const n of fs.npcObjs) {
     if (!n.anim) continue;
     n.anim.update(dt);
-    if (G.player) {
-      const dx = G.player.obj.position.x - n.x, dz = G.player.obj.position.z - n.z;
-      if (Math.hypot(dx, dz) < 6) {
-        const target = Math.atan2(dx, dz);
-        let d = target - n.obj.rotation.y;
-        while (d > Math.PI) d -= Math.PI * 2;
-        while (d < -Math.PI) d += Math.PI * 2;
-        n.obj.rotation.y += d * Math.min(1, dt * 4);
-      }
+    let best = null, bd = 6;
+    for (const p of folks) {
+      const d = Math.hypot(p.x - n.x, p.z - n.z);
+      if (d < bd) { bd = d; best = p; }
+    }
+    if (best) {
+      const target = Math.atan2(best.x - n.x, best.z - n.z);
+      let d = target - n.obj.rotation.y;
+      while (d > Math.PI) d -= Math.PI * 2;
+      while (d < -Math.PI) d += Math.PI * 2;
+      n.obj.rotation.y += d * Math.min(1, dt * 4);
     }
   }
 }
