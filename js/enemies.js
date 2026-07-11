@@ -670,11 +670,10 @@ function simulateDragon(e, fs, players, dt, mine) {
     }
     case 'wake': {
       turnTo(target?.pos.x ?? pos.x, target?.pos.z ?? pos.z, 1.2);
-      if (d.t > 1.4) {
+      if (d.t > 2.2) {
         d.state = 'prowl';
         setEnemyState(e, 'chase');
-        if (mine) { sfx.bossroar(); addMsg('EMBERWING THE UNDYING has awoken!', 'bad'); }
-        hitPlayersWithin(8, 6, 12); // waking wing-snap shoves everyone back
+        if (mine) { sfx.bossroar(); addMsg('EMBERWING THE UNDYING has awoken!', 'bad'); G.shake = Math.max(G.shake || 0, 0.7); }
         netSend({ t: 'fx', f: e.floor, x: pos.x, y: 2, z: pos.z, color: 0xffcc88, big: 1 });
       }
       break;
@@ -697,7 +696,12 @@ function simulateDragon(e, fs, players, dt, mine) {
         if (pd < 9 && Math.abs(angleTo(p.pos.x, p.pos.z)) > 2.1) { rear = p; break; }
       }
       if (d.atkCd <= 0) {
-        if (rear && Math.random() < 0.7) {
+        // a real animal pauses to glare before it strikes
+        if (Math.random() < 0.3 && td > 6) {
+          d.state = 'menace'; d.t = 0;
+          setEnemyState(e, 'idle');
+          if (mine && Math.random() < 0.5) sfx.bones(); // a low rattle of scales
+        } else if (rear && Math.random() < 0.7) {
           // TAIL SWEEP: a spinning lash at everything close
           d.state = 'tailsweep'; d.t = 0;
           setEnemyState(e, 'attack');
@@ -711,29 +715,8 @@ function simulateDragon(e, fs, players, dt, mine) {
           d.state = 'lungewind'; d.t = 0;
           setEnemyState(e, 'idle');
           if (mine) addMsg('🐉 She coils to lunge—', 'bad');
-        } else if (td <= 26 && facing < 0.7) {
-          // spit fire while closing
-          const from = pos.clone().setY(pos.y + 4.5);
-          const to = new THREE.Vector3(target.pos.x, target.pos.y + 1.2, target.pos.z);
-          const dir = to.sub(from).normalize();
-          const bolt = { x: from.x + dir.x * 3, y: from.y, z: from.z + dir.z * 3, dirX: dir.x, dirY: dir.y, dirZ: dir.z, speed: 17, dmg: 18, owner: 'enemy', color: 0xff6622, vis: 'fireball', size: 1.5 };
-          if (mine) { spawnBolt(bolt); sfx.bolt(); }
-          netSend({ t: 'ebolt', f: e.floor, b: bolt });
-          setEnemyState(e, 'attack');
         }
-        d.atkCd = enraged ? 1.1 : 1.7;
-      }
-      // wing buffet when they crowd her chest
-      if (d.gustCd <= 0) {
-        let close = 0;
-        for (const p of players) if (!p.minion && Math.hypot(p.pos.x - pos.x, p.pos.z - pos.z) < 7) close++;
-        if (close >= 1 && Math.random() < 0.5) {
-          setEnemyState(e, 'attack');
-          if (mine) { spawnBurst(pos.clone().setY(3), 0xffcc88, 44, 11, 0.2, 0.6); sfx.bossroar(); addMsg('💨 Wing buffet!', 'bad'); }
-          netSend({ t: 'fx', f: e.floor, x: pos.x, y: 3, z: pos.z, color: 0xffcc88, big: 1 });
-          hitPlayersWithin(8.5, 13, 17);
-        }
-        d.gustCd = 5;
+        d.atkCd = enraged ? 1.8 : 2.6;
       }
       // grounded breath: rear up and RAKE the floor across her front
       if (d.breathCd <= 0 && td > 7 && td < 22 && facing < 0.6) {
@@ -743,16 +726,15 @@ function simulateDragon(e, fs, players, dt, mine) {
         netSend({ t: 'fx', f: e.floor, x: pos.x, y: 4, z: pos.z, color: 0xffaa00, big: 1 });
         d.breathCd = enraged ? 7 : 11;
       }
-      // takeoff decisions: health thresholds, or melee pressure gets unbearable
-      for (const th of [0.75, 0.45, 0.2]) {
+      // takeoff is RARE — twice a fight, or when melee truly savages her
+      for (const th of [0.62, 0.3]) {
         if (frac < th && !d.flew[th]) { d.flew[th] = true; d.state = 'takeoff'; d.t = 0; }
       }
-      if (d.pain > e.maxHp * 0.1 && d.t > 8) { d.state = 'takeoff'; d.t = 0; d.pain = 0; }
+      if (d.pain > e.maxHp * 0.18 && d.t > 12) { d.state = 'takeoff'; d.t = 0; d.pain = 0; }
       if (d.state === 'takeoff') {
         setEnemyState(e, 'chase');
-        if (mine) { sfx.bossroar(); addMsg('🐉 EMBERWING takes to the sky!', 'bad'); }
+        if (mine) { sfx.bossroar(); addMsg('🐉 EMBERWING takes to the sky!', 'bad'); G.shake = Math.max(G.shake || 0, 0.4); }
         hitPlayersWithin(9, 8, 15); // downdraft on liftoff
-        if (enraged) summonImps(e, fs, 2);
       }
       break;
     }
@@ -831,48 +813,31 @@ function simulateDragon(e, fs, players, dt, mine) {
       break;
     }
     case 'circle': {
-      d.orbitA += dt * 0.55;
-      const ox = d.home.x + Math.cos(d.orbitA) * 13;
-      const oz = d.home.z + Math.sin(d.orbitA) * 13;
-      flyToward(ox, 9 + Math.sin(d.t * 1.2), oz, 10);
+      // one wide, wing-thundering pass over the hall — then she comes back down
+      d.orbitA += dt * 0.5;
+      const ox = d.home.x + Math.cos(d.orbitA) * 14;
+      const oz = d.home.z + Math.sin(d.orbitA) * 14;
+      flyToward(ox, 9 + Math.sin(d.t * 1.2), oz, 11);
       if (target) turnTo(target.pos.x, target.pos.z, 4);
-      d.atkCd -= dt;
-      if (d.atkCd <= 0 && target) {
-        d.atkCd = 1.6;
-        d.volleys = (d.volleys || 0) + 1;
-        if (d.volleys === 3) {
-          // one strafing breath run across the floor
-          const dx = target.pos.x - pos.x, dz = target.pos.z - pos.z;
-          const dl = Math.hypot(dx, dz) || 1;
-          d.breath = { x0: pos.x, z0: pos.z, dx: dx / dl, dz: dz / dl, len: dl + 14, t: -0.9, tick: 0 };
-          setEnemyState(e, 'attack');
-          if (mine) { sfx.bossroar(); addMsg('🔥 She strafes the hall with fire!', 'bad'); }
-        } else if (d.volleys > 4 || (d.volleys > 3 && !enraged)) {
-          d.state = 'landing'; d.t = 0;
-          d.landAt = { x: target.pos.x + (Math.random() - 0.5) * 6, z: target.pos.z + (Math.random() - 0.5) * 6 };
-          if (mine) addMsg('🐉 She folds her wings and DROPS—', 'bad');
-        } else {
-          setEnemyState(e, 'attack');
-          for (let i = 0; i < (enraged ? 3 : 2); i++) {
-            const to = new THREE.Vector3(target.pos.x + (Math.random() - 0.5) * 3, target.pos.y + 1.2, target.pos.z + (Math.random() - 0.5) * 3);
-            const from = pos.clone();
-            const dir = to.sub(from).normalize();
-            const bolt = { x: from.x, y: from.y, z: from.z, dirX: dir.x, dirY: dir.y, dirZ: dir.z, speed: 17, dmg: 18, owner: 'enemy', color: 0xff6622, vis: 'fireball', size: 1.4 };
-            if (mine) { spawnBolt(bolt); sfx.bolt(); }
-            netSend({ t: 'ebolt', f: e.floor, b: bolt });
-          }
-          if (enraged) {
-            // meteors rain while she is angry and airborne
-            for (const p of players) {
-              if (p.minion) continue;
-              const bolt = { x: p.pos.x + (Math.random() - 0.5) * 5, y: 14, z: p.pos.z + (Math.random() - 0.5) * 5, dirX: 0, dirY: -1, dirZ: 0, speed: 11, dmg: 20, owner: 'enemy', color: 0xff6622, vis: 'fireball', size: 1.6 };
-              if (mine) spawnBolt(bolt);
-              netSend({ t: 'ebolt', f: e.floor, b: bolt });
-            }
-          }
-        }
+      if (!d.strafed && d.t > 2.5 && target) {
+        d.strafed = true;
+        const dx = target.pos.x - pos.x, dz = target.pos.z - pos.z;
+        const dl = Math.hypot(dx, dz) || 1;
+        d.breath = { x0: pos.x, z0: pos.z, dx: dx / dl, dz: dz / dl, len: dl + 14, t: -0.9, tick: 0 };
+        setEnemyState(e, 'attack');
+        if (mine) { sfx.bossroar(); addMsg('🔥 She strafes the hall with fire!', 'bad'); }
       }
-      if (d.t > 16) { d.state = 'landing'; d.landAt = { x: target?.pos.x ?? d.home.x, z: target?.pos.z ?? d.home.z }; d.t = 0; }
+      if (d.t > 8) {
+        d.state = 'landing'; d.t = 0; d.strafed = false;
+        d.landAt = { x: target?.pos.x ?? d.home.x, z: target?.pos.z ?? d.home.z };
+        if (mine) addMsg('🐉 She folds her wings and DROPS—', 'bad');
+      }
+      break;
+    }
+    case 'menace': {
+      // she stops. she looks at you. the hall goes quiet.
+      if (target) turnTo(target.pos.x, target.pos.z, 2.5);
+      if (d.t > 1.3) { d.state = 'prowl'; setEnemyState(e, 'chase'); }
       break;
     }
     case 'landing': {
@@ -881,19 +846,13 @@ function simulateDragon(e, fs, players, dt, mine) {
         pos.y = 0;
         d.state = 'prowl'; d.t = 0; d.pain = 0;
         setEnemyState(e, 'chase');
-        // LANDING SLAM
-        if (mine) { sfx.trap(); sfx.bossroar(); spawnBurst(pos.clone().setY(1), 0xccaa77, 40, 11, 0.2, 0.6); }
+        // LANDING SLAM — the whole hall shudders
+        if (mine) { sfx.trap(); sfx.bossroar(); spawnBurst(pos.clone().setY(1), 0xccaa77, 40, 11, 0.2, 0.6); G.shake = Math.max(G.shake || 0, 0.9); }
         netSend({ t: 'fx', f: e.floor, x: pos.x, y: 1, z: pos.z, color: 0xccaa77, big: 1 });
         hitPlayersWithin(8.5, 20, 16);
       }
       break;
     }
-  }
-
-  // phase-3 imps answer her call even while grounded
-  if (enraged && d.state !== 'sleep') {
-    d.summonT -= dt;
-    if (d.summonT <= 0) { d.summonT = 16; summonImps(e, fs, 2); }
   }
 
   // wings: lazy beats on the prowl, full power in the air

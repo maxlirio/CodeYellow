@@ -736,6 +736,13 @@ function updateCamera(dt, moving) {
   const cam = G.camera;
   const bob = moving && p.dodgeT <= 0 ? Math.sin(p.bobT) * 0.055 : 0;
   cam.position.set(p.obj.position.x, p.obj.position.y + EYE + bob, p.obj.position.z);
+  // earth-shaking moments (dragon roars, landings)
+  if (G.shake > 0.01) {
+    G.shake *= Math.pow(0.05, dt);
+    cam.position.x += (Math.random() - 0.5) * G.shake * 0.35;
+    cam.position.y += (Math.random() - 0.5) * G.shake * 0.3;
+    cam.position.z += (Math.random() - 0.5) * G.shake * 0.35;
+  }
   // Gravity Lash: your feet grip the wall — the whole world rolls so the
   // surface you're lashed to becomes your floor
   p.lashBlend = p.lashBlend ?? 0;
