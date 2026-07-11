@@ -778,8 +778,12 @@ function updateCamera(dt, moving) {
     const b = p.obj.position;
     _specMid.set((a.x + b.x) / 2, Math.max(a.y, b.y) * 0.5 + 4, (a.z + b.z) / 2);
     G.specT = (G.specT || 0) + dt * 0.1;
-    const r = 22;
-    cam.position.set(_specMid.x + Math.cos(G.specT) * r, _specMid.y + 8, _specMid.z + Math.sin(G.specT) * r);
+    // during slow-mo beats the camera DIVES IN like a cutscene
+    p.specZoom = p.specZoom ?? 0;
+    p.specZoom += ((G.slowmo > 0 ? 1 : 0) - p.specZoom) * Math.min(1, dt * 2.5);
+    const r = 22 - p.specZoom * 10;
+    const h = 8 - p.specZoom * 4;
+    cam.position.set(_specMid.x + Math.cos(G.specT) * r, _specMid.y + h, _specMid.z + Math.sin(G.specT) * r);
     if (G.shake > 0.01) {
       G.shake *= Math.pow(0.05, dt);
       cam.position.x += (Math.random() - 0.5) * G.shake * 0.5;
