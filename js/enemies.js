@@ -582,7 +582,7 @@ function simulateDragon(e, fs, players, dt, mine) {
       orbitA: Math.random() * 6.28, flew: { 0.75: false, 0.45: false, 0.2: false },
       pain: 0, summonT: 14, breath: null, sweep: null, lungeV: null,
     };
-    e.obj.position.y = 0;
+    // she sleeps where she was placed — coiled on her hoard, not the floor
   }
   const d = e.ds;
   d.t += dt;
@@ -740,8 +740,11 @@ function simulateDragon(e, fs, players, dt, mine) {
     case 'prowl': {
       if (!target) { setEnemyState(e, 'idle'); break; }
       const facing = turnTo(target.pos.x, target.pos.z, enraged ? 2.6 : 1.9);
-      // stalk forward when roughly facing the prey
-      if (facing < 1.0 && td > 7.5) groundMove(target.pos.x, target.pos.z, e.cfg.speed * spd);
+      // momentum: she builds to speed facing her prey, sheds it in the turn
+      d.spd = d.spd ?? 0;
+      const wantSpd = facing < 1.0 && td > 7.5 ? e.cfg.speed * spd : 0;
+      d.spd += (wantSpd - d.spd) * Math.min(1, dt * (wantSpd > d.spd ? 1.4 : 4));
+      if (d.spd > 0.3) groundMove(target.pos.x, target.pos.z, d.spd);
       pos.y += (groundHeightAt(pos.x, pos.z, pos.y, fs.grid) - pos.y) * Math.min(1, dt * 6);
 
       // someone carving up her flanks from behind? tail answer.
@@ -880,11 +883,13 @@ function simulateDragon(e, fs, players, dt, mine) {
       break;
     }
     case 'circle': {
-      // one wide, wing-thundering pass over the hall — then she comes back down
-      d.orbitA += dt * 0.5;
-      const ox = d.home.x + Math.cos(d.orbitA) * 14;
-      const oz = d.home.z + Math.sin(d.orbitA) * 14;
-      flyToward(ox, 9 + Math.sin(d.t * 1.2), oz, 11);
+      // wide wing-thundering circuits of the cavern — then a strafing pass,
+      // then either a crash landing or a ROOST on her tower
+      d.orbitA += dt * 0.45;
+      const cr = fs.grid.lair ? 22 : 14;
+      const ox = d.home.x + Math.cos(d.orbitA) * cr;
+      const oz = d.home.z + Math.sin(d.orbitA) * cr;
+      flyToward(ox, (fs.grid.lair ? 12 : 9) + Math.sin(d.t * 1.2), oz, 11);
       if (target) turnTo(target.pos.x, target.pos.z, 4);
       if (!d.strafed && d.t > 2.5 && target) {
         d.strafed = true;
@@ -895,18 +900,52 @@ function simulateDragon(e, fs, players, dt, mine) {
         if (mine) { sfx.bossroar(); addMsg('🔥 She strafes the hall with fire!', 'bad'); }
       }
       if (d.t > 8) {
-        d.state = 'landing'; d.t = 0; d.strafed = false;
-        d.landAt = { x: target?.pos.x ?? d.home.x, z: target?.pos.z ?? d.home.z };
-        if (mine) addMsg('🐉 She folds her wings and DROPS—', 'bad');
-        // scorch-ring telegraph where she will crash
-        const ring = new THREE.Mesh(
-          new THREE.RingGeometry(6.5, 8, 36),
-          new THREE.MeshBasicMaterial({ color: 0xff5522, transparent: true, opacity: 0.5, side: THREE.DoubleSide, depthWrite: false })
-        );
-        ring.rotation.x = -Math.PI / 2;
-        ring.position.set(d.landAt.x, groundHeightAt(d.landAt.x, d.landAt.z, 0, fs.grid) + 0.1, d.landAt.z);
-        G.scene.add(ring);
-        d.landRing = ring;
+        if (fs.grid.dragonPerch && Math.random() < 0.5 && !enraged) {
+          d.state = 'roostfly'; d.t = 0; d.strafed = false;
+          if (mine) addMsg('🐉 She wheels toward her tower—', 'bad');
+        } else {
+          d.state = 'landing'; d.t = 0; d.strafed = false;
+          d.landAt = { x: target?.pos.x ?? d.home.x, z: target?.pos.z ?? d.home.z };
+          if (mine) addMsg('🐉 She folds her wings and DROPS—', 'bad');
+          // scorch-ring telegraph where she will crash
+          const ring = new THREE.Mesh(
+            new THREE.RingGeometry(6.5, 8, 36),
+            new THREE.MeshBasicMaterial({ color: 0xff5522, transparent: true, opacity: 0.5, side: THREE.DoubleSide, depthWrite: false })
+          );
+          ring.rotation.x = -Math.PI / 2;
+          ring.position.set(d.landAt.x, groundHeightAt(d.landAt.x, d.landAt.z, 0, fs.grid) + 0.1, d.landAt.z);
+          G.scene.add(ring);
+          d.landRing = ring;
+        }
+      }
+      break;
+    }
+    case 'roostfly': {
+      const pr = fs.grid.dragonPerch;
+      flyToward(pr.x, pr.y + 0.5, pr.z, 12);
+      if (target) turnTo(target.pos.x, target.pos.z, 3);
+      if (Math.hypot(pr.x - pos.x, pr.z - pos.z) < 1.6 && Math.abs(pos.y - pr.y - 0.5) < 1) {
+        pos.x = pr.x; pos.y = pr.y + 0.5; pos.z = pr.z;
+        d.state = 'roost'; d.t = 0; d.roostCd = 1.2;
+        setEnemyState(e, 'idle');
+        if (mine) { sfx.bossroar(); addMsg('🐉 She ROOSTS on the tower, wings mantled.', 'bad'); }
+      }
+      if (d.t > 7) { d.state = 'circle'; d.t = 0; }
+      break;
+    }
+    case 'roost': {
+      // mantled on her tower, raking fire down into the court
+      if (target) turnTo(target.pos.x, target.pos.z, 2.2);
+      d.roostCd -= dt;
+      if (d.roostCd <= 0 && target) {
+        d.roostCd = 2.4;
+        setEnemyState(e, 'attack');
+        d.sweep = { a0: angleTo(target.pos.x, target.pos.z) - 0.5, a1: angleTo(target.pos.x, target.pos.z) + 0.5, t: 0, tick: 0 };
+        if (mine) sfx.bossroar();
+      }
+      if (d.t > 7 || d.pain > e.maxHp * 0.05) {
+        d.state = 'takeoff'; d.t = 0; d.pain = 0;
+        setEnemyState(e, 'chase');
       }
       break;
     }
@@ -917,10 +956,11 @@ function simulateDragon(e, fs, players, dt, mine) {
       break;
     }
     case 'landing': {
-      flyToward(d.landAt.x, 0.2, d.landAt.z, 15);
+      const lg = groundHeightAt(d.landAt.x, d.landAt.z, 0, fs.grid);
+      flyToward(d.landAt.x, lg + 0.2, d.landAt.z, 15);
       if (d.landRing) d.landRing.material.opacity = 0.3 + Math.sin(d.t * 12) * 0.25;
-      if (pos.y < 0.6) {
-        pos.y = 0;
+      if (pos.y < lg + 0.6) {
+        pos.y = lg;
         if (d.landRing) { G.scene.remove(d.landRing); d.landRing.geometry.dispose(); d.landRing.material.dispose(); d.landRing = null; }
         d.state = 'prowl'; d.t = 0; d.pain = 0;
         setEnemyState(e, 'chase');

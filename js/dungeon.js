@@ -179,7 +179,158 @@ function planPlatform(rng, room, at, inb) {
 }
 
 // ---------------- main generator ----------------
+// ================= THE DRAGON'S LAIR (floor 9, 18, ...) =================
+// Not a corridor floor: one colossal cavern holding a ruined underground
+// castle — two walkable tiers, crenellated walls, corner towers the dragon
+// perches on, and her hoard glittering at the heart of it.
+export function generateDragonLair(seedStr, floor) {
+  const rng = makeRng(`${seedStr}:lair:${floor}`);
+  const w = 46, h = 46;
+  const cells = new Uint8Array(w * h); // 0 = SOLID
+  const elev = new Uint8Array(w * h);
+  const ramps = new Map();
+  const colliders = [];
+  const idxOf = (x, y) => y * w + x;
+  // the cavern: open floor with a rough gnawed border
+  for (let y = 2; y < h - 2; y++) {
+    for (let x = 2; x < w - 2; x++) cells[idxOf(x, y)] = FLOOR;
+  }
+  for (let i = 0; i < 90; i++) {
+    // bites out of the walls so the cave reads organic
+    const side = rng.int(0, 3);
+    const t = rng.int(4, w - 5);
+    const d = rng.int(0, 2);
+    for (let k = 0; k <= d; k++) {
+      if (side === 0) cells[idxOf(t, 2 + k)] = 0;
+      else if (side === 1) cells[idxOf(t, h - 3 - k)] = 0;
+      else if (side === 2) cells[idxOf(2 + k, t)] = 0;
+      else cells[idxOf(w - 3 - k, t)] = 0;
+    }
+  }
+
+  const placements = [];
+  const M = new THREE.Matrix4(), Q = new THREE.Quaternion(), V = new THREE.Vector3(), S = new THREE.Vector3();
+  const place = (piece, x, y, z, yaw = 0, scale = 1) => {
+    Q.setFromAxisAngle(V.set(0, 1, 0), yaw);
+    const sv = Array.isArray(scale) ? S.set(scale[0], scale[1], scale[2]) : S.setScalar(scale);
+    M.compose(new THREE.Vector3(x, y, z), Q.clone(), sv.clone());
+    placements.push({ piece, matrix: M.clone() });
+  };
+  const torches = [];
+
+  // cavern floor scatter + wall shell
+  const wallDirs = [
+    { dx: 1, dy: 0, yaw: Math.PI / 2 }, { dx: -1, dy: 0, yaw: Math.PI / 2 },
+    { dx: 0, dy: 1, yaw: 0 }, { dx: 0, dy: -1, yaw: 0 },
+  ];
+  for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) {
+    if (cells[idxOf(x, y)] === 0) continue;
+    const wx = x * CELL, wz = y * CELL;
+    if (rng.chance(0.16)) place(rng.pick(['floor_tile_grate', 'floor_tile_small_weeds_A', 'floor_dirt_small_A']), wx, 0.01, wz, rng.int(0, 3) * Math.PI / 2);
+    for (const d of wallDirs) {
+      const nx = x + d.dx, ny = y + d.dy;
+      if (nx >= 0 && ny >= 0 && nx < w && ny < h && cells[idxOf(nx, ny)] !== 0) continue;
+      const ex = wx + d.dx * CELL / 2, ez = wz + d.dy * CELL / 2;
+      place('wall', ex, 0, ez, d.yaw);
+      place('wall', ex, 4, ez, d.yaw);
+      place('wall', ex, 8, ez, d.yaw); // the cavern rises THREE walls tall
+      if ((x + y * 5) % 7 === 0) {
+        place('torch_mounted', ex - d.dx * 0.1, 2.3, ez - d.dy * 0.1, Math.atan2(-d.dx, -d.dy));
+        torches.push({ x: ex - d.dx * 0.5, y: 3.15, z: ez - d.dy * 0.5 });
+      }
+    }
+  }
+
+  // ---- the ruined keep: tier 1 on the elevation grid ----
+  const K0 = 17, K1 = 28; // tier-1 span in cells
+  for (let y = 16; y <= 27; y++) for (let x = K0; x <= K1; x++) elev[idxOf(x, y)] = 1;
+  // grand staircases: south (main), east and west (flanks)
+  for (const sx of [21, 22, 23]) { cells[idxOf(sx, 28)] = RAMP; ramps.set(idxOf(sx, 28), { dx: 0, dy: -1 }); }
+  for (const sy of [20, 21]) {
+    cells[idxOf(K0 - 1, sy)] = RAMP; ramps.set(idxOf(K0 - 1, sy), { dx: 1, dy: 0 });
+    cells[idxOf(K1 + 1, sy)] = RAMP; ramps.set(idxOf(K1 + 1, sy), { dx: -1, dy: 0 });
+  }
+  // tier-1 surface + crenellated parapet (gaps at the stairs)
+  for (let y = 16; y <= 27; y++) for (let x = K0; x <= K1; x++) {
+    place('floor_tile_large', x * CELL, PLATFORM_H, y * CELL);
+    const edgeS = y === 27 && (x < 21 || x > 23);
+    const edgeN = y === 16;
+    const edgeW = x === K0 && (y < 20 || y > 21);
+    const edgeE = x === K1 && (y < 20 || y > 21);
+    if (edgeS) place('barrier', x * CELL, PLATFORM_H, y * CELL + CELL / 2, 0);
+    if (edgeN) place('barrier', x * CELL, PLATFORM_H, y * CELL - CELL / 2, 0);
+    if (edgeW) place('barrier', x * CELL - CELL / 2, PLATFORM_H, y * CELL, Math.PI / 2);
+    if (edgeE) place('barrier', x * CELL + CELL / 2, PLATFORM_H, y * CELL, Math.PI / 2);
+  }
+  place('stairs', 22 * CELL, 0, 28 * CELL - CELL / 2, 0, [2.4, PLATFORM_H / 5.1, 1]);
+
+  // ---- tier 2: the high court, standing on measured colliders ----
+  const T2 = PLATFORM_H + 3.6;
+  for (let y = 17; y <= 20; y++) for (let x = 20; x <= 25; x++) {
+    place('floor_tile_large', x * CELL, T2, y * CELL);
+    colliders.push({ x: x * CELL, z: y * CELL, hx: 2, hz: 2, y0: T2 - 0.35, h: T2 });
+    place('pillar', x * CELL, PLATFORM_H, y * CELL, 0, [1, (T2 - PLATFORM_H) / 4, 1]); // supports
+  }
+  // steps up to the high court (south face): four rising slabs
+  for (let s = 0; s < 4; s++) {
+    const hgt = PLATFORM_H + (s + 1) * 0.9;
+    const z = (21.6 - s * 0.35) * CELL;
+    place('floor_tile_small', 22.5 * CELL, hgt - 0.15, z, 0, [1.4, 1, 0.9]);
+    colliders.push({ x: 22.5 * CELL, z, hx: 2.6, hz: 0.75, y0: hgt - 0.5, h: hgt });
+  }
+  // ---- four watch towers; the north-east one is HER perch ----
+  const towers = [[18, 17], [27, 17], [18, 26], [27, 26]];
+  let perch = null;
+  for (const [tx, ty] of towers) {
+    const px = tx * CELL, pz = ty * CELL;
+    place('pillar_decorated', px, PLATFORM_H, pz, 0, [1.8, 2.6, 1.8]);
+    const top = PLATFORM_H + 10.4;
+    colliders.push({ x: px, z: pz, hx: 1.6, hz: 1.6, y0: PLATFORM_H, h: top });
+    if (tx === 27 && ty === 17) perch = { x: px, y: top, z: pz };
+  }
+
+  // ---- the hoard: she sleeps on a bed of stolen gold ----
+  const lootSpawns = [];
+  const hoard = { x: 22.5 * CELL, z: 18 * CELL };
+  for (let i = 0; i < 14; i++) {
+    const a = rng.next() * Math.PI * 2, r = 1 + rng.next() * 5;
+    place(rng.pick(['coin_stack_large', 'coin_stack_medium', 'coin_stack_small']), hoard.x + Math.cos(a) * r, T2 + 0.02, hoard.z + Math.sin(a) * r, rng.next() * Math.PI * 2, 1.4);
+  }
+  lootSpawns.push({ kind: 'goldchest', x: hoard.x - 3, z: hoard.z, y: T2, yaw: Math.PI / 3 });
+  lootSpawns.push({ kind: 'key', x: 8 * CELL, z: 8 * CELL, y: 0 });
+  for (let i = 0; i < 6; i++) {
+    lootSpawns.push({ kind: 'coinstack', x: rng.int(5, 40) * CELL, z: rng.int(30, 42) * CELL, y: 0 });
+  }
+  lootSpawns.push({ kind: 'chest', x: 38 * CELL, z: 38 * CELL, y: 0, yaw: rng.next() * Math.PI * 2 });
+
+  // candles strewn among the gold + braziers on the parapets
+  for (let i = 0; i < 8; i++) {
+    place(rng.pick(['candle_lit', 'candle_triple']), hoard.x + (rng.next() - 0.5) * 8, T2 + 0.02, hoard.z + (rng.next() - 0.5) * 6, rng.next() * Math.PI * 2);
+  }
+  torches.push({ x: 20 * CELL, y: T2 + 1, z: 17 * CELL }, { x: 25 * CELL, y: T2 + 1, z: 17 * CELL });
+
+  const enemySpawns = [{ type: 'dragon', x: hoard.x, z: hoard.z, y: T2 }];
+
+  const grid = {
+    w, h, cells, elev, ramps, colliders,
+    rooms: [{ x: 3, y: 3, w: w - 6, h: h - 6, cx: 22, cy: 22 }],
+    spawn: { x: 22 * CELL, z: 42 * CELL }, spawnYaw: 0,
+    stairs: { x: -999, z: -999, cx: -99, cy: -99 },
+    stairsLocked: false,
+    portal: { dx: 0, dy: -1, yaw: 0 },
+    dragonPerch: perch,
+    lair: true,
+  };
+  return {
+    grid, torches, traps: [], ropes: [], placements, enemySpawns, lootSpawns,
+    explored: new Uint8Array(w * h), hadBoss: true,
+    theme: { id: 'lair', name: "THE DRAGON'S VAULT", fog: 0x1a0d08, density: 0.008, hemi: 0x9a7358, amb: 0x53392a, torch: 0xffa055, tiles: [], props: [], banners: [], bias: [] },
+    mutator: null, layoutId: 'lair',
+  };
+}
+
 export function generateFloorData(seedStr, floor) {
+  if (floor > 0 && floor % 9 === 0) return generateDragonLair(seedStr, floor);
   const rng = makeRng(`${seedStr}:floor:${floor}`);
   const size = Math.min(34 + floor * 2, 46);
   const w = size, h = size;
