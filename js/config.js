@@ -89,7 +89,7 @@ export const SPELLS = {
   sunderstomp: { name: 'Sunder Stomp', icon: '🦶', mana: 24, cd: 9, type: 'aoe', dmgMult: 0.9, radius: 5.5, vulnAll: 4, slowAll: { mult: 0.6, dur: 2.5 }, phys: true },
   chainhook:   { name: 'Chain Hook', icon: '⛓', mana: 21, cd: 8, type: 'hook', range: 16, dmgMult: 0.8, stun: 0.6, phys: true },
   // ---- exotic effect spells ----
-  gravitylash: { name: 'Gravity Lash', icon: '🧲', mana: 27, cd: 12, type: 'lash', range: 22, dur: 7 },
+  gravitylash: { name: 'Gravity Lash', icon: '🧲', mana: 27, cd: 0, type: 'lash', range: 22 },
   beartrap:    { name: 'Steel Trap', icon: '🪤', mana: 15, cd: 6, type: 'trap', dmgMult: 1.2, root: 2.5, max: 3 },
   chronobubble:{ name: 'Chrono Bubble', icon: '⏳', mana: 33, cd: 16, type: 'freeze', radius: 6, range: 20, dur: 3.5 },
   shadowswap:  { name: 'Shadow Swap', icon: '🌑', mana: 21, cd: 9, type: 'swap', range: 18, critDur: 3 },
