@@ -397,6 +397,22 @@ function simulateEnemy(e, fs, players, dt, mine) {
       if (e.cfg.explode && t.dist < e.cfg.range && dy3 < 2) { bomberExplode(e); break; }
       const canSee = e.ghost || hasLineOfSight(e.obj.position.x, e.obj.position.z, t.pos.x, t.pos.z, grid);
       const inRange = t.dist < e.cfg.range && (e.cfg.ranged ? true : dy3 < 1.8);
+      // a wall-crawler dangling overhead: melee can't reach — so POUND the
+      // surface and try to hammer them off it
+      if (!e.cfg.ranged && !e.cfg.fly && dy3 >= 2.5 && t.dist < 4.5 && t.pos.y > e.obj.position.y) {
+        e.slamCd = (e.slamCd ?? 0) - dt;
+        if (e.slamCd <= 0) {
+          e.slamCd = 2.6;
+          setEnemyState(e, 'attack');
+          e.attackFired = true; // the blow lands on stone, not flesh
+          if (onMyFloor(e)) { sfx.trap(); spawnBurst(e.obj.position.clone().setY(e.obj.position.y + 1.5), 0xccaa88, 10, 5, 0.13, 0.4); }
+          const fx = { shake: 0.45, lashbreak: Math.random() < 0.35 };
+          if (t.minion) damageMinion(t.minion, 2);
+          else if (t.id === 'me') damageLocalPlayer(3, fx);
+          else netSend({ t: 'phit', target: t.id, dmg: 3, fx });
+        }
+        break;
+      }
       if (inRange && canSee && !e.siegeTarget) {
         setEnemyState(e, 'attack');
         e.attackFired = false;

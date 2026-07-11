@@ -242,6 +242,11 @@ export function damageLocalPlayer(amount, effects = null) {
   if (effects?.slow) p.slowT = Math.max(p.slowT, effects.slow.dur);
   if (effects?.poison) { p.poisonT = effects.poison.dur; p.poisonDps = effects.poison.dps; addMsg('You are poisoned!', 'bad'); }
   if (effects?.kb) { p.kbX += effects.kb.x; p.kbZ += effects.kb.z; }
+  if (effects?.shake) G.shake = Math.max(G.shake || 0, effects.shake);
+  if (effects?.lashbreak && p.lash) {
+    releaseLash(p);
+    addMsg('💥 The blow hammers you off the wall!', 'bad');
+  }
   sfx.hurt();
   flashVignette();
   if (p.hp <= 0) {
@@ -519,8 +524,18 @@ export function updatePlayer(dt) {
             p.bobT += dt * sp * 1.35;
           }
         }
-        // stay pressed against the surface
-        moveWithCollision(pos, g.x * 1.2 * dt, g.z * 1.2 * dt, 0.55, { y: pos.y });
+        // is the surface still under your feet? probe along gravity: open
+        // space means the wall ENDED — you fall anew toward the next one
+        const px2 = pos.x, pz2 = pos.z;
+        moveWithCollision(pos, g.x * 0.6, g.z * 0.6, 0.55, { y: pos.y });
+        const gap = Math.hypot(pos.x - px2, pos.z - pz2);
+        if (gap > 0.35) {
+          p.lash.grounded = false;
+          p.lash.vel = 3;
+          addMsg('The surface ends — you fall onward.');
+        } else {
+          pos.x = px2; pos.z = pz2;
+        }
       }
       if (p.attacking) {
         p.attackT += dt;
