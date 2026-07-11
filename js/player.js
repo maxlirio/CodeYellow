@@ -526,7 +526,8 @@ function doAttackHit() {
   const dmg = effectiveDamage();
   const dir = aimDir();
   const wfx = weaponHitEffects(dmg);
-  const rangedAtk = cls.ranged || G.inv.weapon?.ranged;
+  // arrows fly only from a bow/crossbow in hand; the mage's bolt is innate mana
+  const rangedAtk = G.inv.weapon?.ranged || !!cls.manaAttack;
   if (rangedAtk) {
     if (G.inv.weapon?.ranged) {
       if ((G.run.arrows || 0) <= 0) return;

@@ -161,6 +161,14 @@ function handleAsHost(conn, m) {
       relay(conn, { ...m, pid });
       break;
     }
+    case 'szone':
+      H?.spells.applyRemoteZone(m);
+      relay(conn, { ...m, pid });
+      break;
+    case 'szoneend':
+      H?.spells.endRemoteZone(m.id);
+      relay(conn, { ...m, pid });
+      break;
     case 'beam':
       if (m.f === G.floor) H?.spells.remoteBeam(m.a, m.b);
       relay(conn, { ...m, pid });
@@ -325,6 +333,12 @@ function handleAsGuest(m) {
       if (e2) H.enemies.applyEnemyVfx(e2, m.kind, m.dur);
       break;
     }
+    case 'szone':
+      H?.spells.applyRemoteZone(m);
+      break;
+    case 'szoneend':
+      H?.spells.endRemoteZone(m.id);
+      break;
     case 'beam':
       if (m.f === G.floor) H?.spells.remoteBeam(m.a, m.b);
       break;

@@ -651,7 +651,7 @@ function openCodex() {
   const critCh = effectiveCrit();
   const wfx = weaponHitEffects(dmg) || {}; // null when the weapon carries no effects
   const w = G.inv.weapon;
-  const rangedAtk = cls.ranged || w?.ranged;
+  const rangedAtk = w?.ranged || !!cls.manaAttack;
   let html = '';
   let atk = statLine('Damage per hit', `<b>${dmg}</b>`);
   atk += statLine('Crit', `${pct(critCh)} chance → <b>${Math.round(dmg * 1.8)}</b> dmg (×1.8)`);

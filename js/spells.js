@@ -45,6 +45,8 @@ export function resetCooldowns() {
   spikes.length = 0;
   G.sanctuaries = [];
   G.banners = [];
+  for (const z2 of remoteZones) disposeVfx(z2);
+  remoteZones.length = 0;
 }
 
 function disposeVfx(v) {
@@ -143,6 +145,16 @@ export function updateSpells(dt) {
       if (w.f === G.floor) spawnBurst(new THREE.Vector3(w.x, w.y + 0.8, w.z), 0x66ffbb, 16, 4, 0.13, 0.5);
     }
   }
+  // teammates' zone visuals: spin, bob, fade, expire
+  for (let i = remoteZones.length - 1; i >= 0; i--) {
+    const z2 = remoteZones[i];
+    z2.t -= dt;
+    z2.obj.visible = z2.f === G.floor;
+    if (z2.kind === 'vortex') z2.obj.rotation.y += dt * 5;
+    if (z2.kind === 'banner') z2.obj.rotation.y += dt * 0.8;
+    if (z2.kind === 'ward') z2.obj.position.y = Math.sin(z2.t * 3) * 0.15;
+    if (z2.t <= 0) { disposeVfx(z2); remoteZones.splice(i, 1); }
+  }
   // steel traps: snap shut on the first leg that steps in
   for (let i = sTraps.length - 1; i >= 0; i--) {
     const tr = sTraps[i];
@@ -157,6 +169,7 @@ export function updateSpells(dt) {
       spawnBurst(new THREE.Vector3(tr.x, 0.5, tr.z), 0xcccccc, 14, 5, 0.13, 0.4);
       netSend({ t: 'fx', f: tr.f, x: tr.x, y: 0.5, z: tr.z, color: 0xcccccc });
       damageEnemy(bit, tr.dmg, false, false, 'local', { slow: { mult: 0.02, dur: tr.root }, stun: 0.4 });
+      if (tr.zid) netSend({ t: 'szoneend', id: tr.zid });
       disposeVfx(tr);
       sTraps.splice(i, 1);
     }
@@ -550,6 +563,7 @@ export function castSpell(slot, effectiveDamage) {
       obj.position.set(hit.x, hit.y + 1.1, hit.z);
       G.scene.add(obj);
       vortices.push({ x: hit.x, y: hit.y, z: hit.z, f: G.floor, t: sp.dur, tick: 0, radius: sp.radius, dmg, obj });
+      announceZone('vortex', hit.x, hit.y, hit.z, 0, sp.dur);
       netSend({ t: 'fx', f: G.floor, x: hit.x, y: hit.y + 1, z: hit.z, color: 0xbb66ff, big: 1 });
       break;
     }
@@ -571,6 +585,7 @@ export function castSpell(slot, effectiveDamage) {
         x: origin.x, y: gy, z: origin.z, f: G.floor, t: sp.dur, tick: 0.2, rate: sp.tick,
         radius: sp.radius, amt: Math.max(2, Math.round(p.maxHp * sp.frac)), obj,
       });
+      announceZone('ward', origin.x, gy, origin.z, 0, sp.dur);
       addMsg('A ward of life takes root.', 'gold');
       break;
     }
@@ -622,6 +637,7 @@ export function castSpell(slot, effectiveDamage) {
       G.banners = G.banners || [];
       G.banners.push(zone);
       banners.push({ t: sp.dur, obj, zone });
+      announceZone('banner', origin.x, gy, origin.z, 0, sp.dur);
       addMsg('🚩 The banner is planted — fight beside it!', 'gold');
       netSend({ t: 'fx', f: G.floor, x: origin.x, y: 1.5, z: origin.z, color: 0xff6644 });
       break;
@@ -673,6 +689,7 @@ export function castSpell(slot, effectiveDamage) {
       const mine = sTraps.filter(t2 => t2.f === G.floor);
       if (mine.length >= (sp.max || 3)) {
         const oldT = mine[0];
+        if (oldT.zid) netSend({ t: 'szoneend', id: oldT.zid });
         disposeVfx(oldT);
         sTraps.splice(sTraps.indexOf(oldT), 1);
       }
@@ -689,7 +706,8 @@ export function castSpell(slot, effectiveDamage) {
       const gy = groundHeightAt(origin.x, origin.z, origin.y);
       obj.position.set(origin.x + dir.x * 1.2, gy, origin.z + dir.z * 1.2);
       G.scene.add(obj);
-      sTraps.push({ x: obj.position.x, z: obj.position.z, f: G.floor, dmg, root: sp.root, obj });
+      const zid = announceZone('trap', obj.position.x, 0, obj.position.z, 0, 120);
+      sTraps.push({ x: obj.position.x, z: obj.position.z, f: G.floor, dmg, root: sp.root, obj, zid });
       addMsg('🪤 Trap set.');
       break;
     }
@@ -705,6 +723,7 @@ export function castSpell(slot, effectiveDamage) {
       dome.position.set(hit.x, hit.y + 0.5, hit.z);
       G.scene.add(dome);
       domes.push({ t: sp.dur, obj: dome });
+      announceZone('dome', hit.x, hit.y, hit.z, sp.radius, sp.dur, 0x88ccff);
       netSend({ t: 'fx', f: G.floor, x: hit.x, y: hit.y + 1, z: hit.z, color: 0x88ccff, big: 1 });
       for (const e of G.enemies) {
         if (e.state === 'dead' || e.state === 'inactive' || e.boss) continue;
@@ -810,6 +829,7 @@ export function castSpell(slot, effectiveDamage) {
       G.sanctuaries = G.sanctuaries || [];
       G.sanctuaries.push(zone);
       domes.push({ t: sp.dur, obj: dome, sanctuary: true, zone });
+      announceZone('sanctuary', origin.x, gy, origin.z, sp.radius, sp.dur, 0xffe9a0);
       netSend({ t: 'fx', f: G.floor, x: origin.x, y: gy + 1, z: origin.z, color: 0xffe9a0, big: 1 });
       addMsg('🛡 No arrow nor bolt may enter.', 'gold');
       break;
@@ -911,6 +931,7 @@ export function castSignature(effectiveDamage) {
       obj.position.set(hit.x, hit.y + 1.1, hit.z);
       G.scene.add(obj);
       vortices.push({ x: hit.x, y: hit.y, z: hit.z, f: G.floor, t: 2.4, tick: 0, radius: 6, dmg: Math.round(dmg * 1.5), obj });
+      announceZone('vortex', hit.x, hit.y, hit.z, 0, 2.4);
       break;
     }
     case 'lifedrain': {
@@ -1009,6 +1030,80 @@ export function castSignature(effectiveDamage) {
     }
   }
   refreshHud();
+}
+
+// ---- spell zone visuals every client must see ----
+// The caster runs the real effect; everyone else builds the same OBJECT from
+// an 'szone' message and expires it on schedule.
+const remoteZones = [];
+let zoneIdCounter = 1;
+
+function buildZoneVisual(kind, m) {
+  const g = new THREE.Group();
+  if (kind === 'trap') {
+    const base = new THREE.Mesh(new THREE.CylinderGeometry(0.55, 0.6, 0.08, 10), new THREE.MeshStandardMaterial({ color: 0x555c66, metalness: 0.4, roughness: 0.5 }));
+    base.position.y = 0.04;
+    g.add(base);
+    for (let i = 0; i < 8; i++) {
+      const a = (i / 8) * Math.PI * 2;
+      const tooth = new THREE.Mesh(new THREE.ConeGeometry(0.06, 0.28, 4), new THREE.MeshStandardMaterial({ color: 0x8a939e, metalness: 0.5 }));
+      tooth.position.set(Math.cos(a) * 0.45, 0.2, Math.sin(a) * 0.45);
+      g.add(tooth);
+    }
+  } else if (kind === 'dome' || kind === 'sanctuary') {
+    const dome = new THREE.Mesh(
+      new THREE.SphereGeometry(m.r || 5, 18, 12),
+      new THREE.MeshBasicMaterial({ color: m.color || 0x88ccff, transparent: true, opacity: 0.24, depthWrite: false, side: THREE.DoubleSide })
+    );
+    dome.position.y = 0.5;
+    g.add(dome);
+  } else if (kind === 'ward') {
+    const crystal = new THREE.Mesh(new THREE.OctahedronGeometry(0.42, 0), new THREE.MeshStandardMaterial({ color: 0x116644, emissive: 0x44ffaa, emissiveIntensity: 1.3 }));
+    crystal.scale.y = 1.9;
+    crystal.position.y = 0.7;
+    g.add(crystal);
+    const gl = makeGlowSprite(0x66ffbb, 2.0);
+    gl.position.y = 0.7;
+    g.add(gl);
+  } else if (kind === 'banner') {
+    const pole = new THREE.Mesh(new THREE.CylinderGeometry(0.04, 0.05, 2.4, 6), new THREE.MeshStandardMaterial({ color: 0x6b4a2a }));
+    pole.position.y = 1.2;
+    g.add(pole);
+    const flag = new THREE.Mesh(new THREE.PlaneGeometry(0.9, 0.6), new THREE.MeshStandardMaterial({ color: 0xcc2222, side: THREE.DoubleSide }));
+    flag.position.set(0.45, 2.0, 0);
+    g.add(flag);
+    g.add(makeGlowSprite(0xff6644, 1.6));
+  } else if (kind === 'vortex') {
+    const core = new THREE.Mesh(
+      new THREE.SphereGeometry(0.55, 12, 10),
+      new THREE.MeshStandardMaterial({ color: 0x220033, emissive: 0xbb66ff, emissiveIntensity: 1.4, transparent: true, opacity: 0.85 })
+    );
+    g.add(core);
+    g.add(makeGlowSprite(0xbb66ff, 2.6));
+    const ring = new THREE.Mesh(new THREE.TorusGeometry(1.3, 0.07, 6, 24), new THREE.MeshStandardMaterial({ color: 0x8844cc, emissive: 0x9955ee, emissiveIntensity: 1.1 }));
+    ring.rotation.x = Math.PI / 2;
+    g.add(ring);
+    g.position.y = 1.1;
+  }
+  return g;
+}
+
+// broadcast a zone so teammates see the object too; returns its id
+function announceZone(kind, x, y, z, r, dur, color) {
+  const id = 'z' + (zoneIdCounter++) + '-' + Math.floor(Math.random() * 1e6);
+  netSend({ t: 'szone', id, kind, f: G.floor, x, y, z, r, dur, color });
+  return id;
+}
+export function endRemoteZone(id) {
+  const i = remoteZones.findIndex(z2 => z2.id === id);
+  if (i >= 0) { disposeVfx(remoteZones[i]); remoteZones.splice(i, 1); }
+}
+export function applyRemoteZone(m) {
+  const obj = buildZoneVisual(m.kind, m);
+  obj.position.x = m.x; obj.position.z = m.z;
+  obj.position.y += m.y || 0;
+  G.scene.add(obj);
+  remoteZones.push({ id: m.id, kind: m.kind, f: m.f, t: m.dur, obj });
 }
 
 // ember-trail hook used by player.js without an import cycle

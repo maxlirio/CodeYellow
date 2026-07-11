@@ -150,13 +150,13 @@ export const WEAPON_TYPES = {
     { id: 'scythe', noun: 'Reaper Scythe', mesh: [], held: 'Scythe', model: 'Scythe', verb: 'sweep', dmgBonus: 1.15, arcAdd: 0.5, rangeAdd: 0.6, sigPool: ['lifedrain', 'dragonsbreath'], minRarity: 1 },
     { id: 'boneaxe', noun: 'Bone Cleaver', mesh: [], held: 'Skeleton_Axe', model: 'Skeleton_Axe', verb: 'cleave', dmgBonus: 1.1, lifestealAdd: 0.05, sigPool: ['lifedrain', 'firenova'] },
   ],
+  // rogues are blade-work only — bows and arrows belong to the ranger
   rogue: [
     { id: 'daggers', noun: 'Daggers', mesh: ['Knife', 'Knife_Offhand'], model: 'dagger', verb: 'stab', sigPool: ['shadowflurry', 'frostwave'] },
-    { id: 'crossbow', noun: 'Crossbow', mesh: ['2H_Crossbow'], model: 'crossbow_2handed', verb: 'shoot', dmgBonus: 1.1, ranged: true, atkTime: 0.85, sigPool: ['arrowstorm', 'shadowflurry'] },
     { id: 'fangs', noun: 'Twin Fangs', mesh: [], held: 'Dagger', held2: true, model: 'Dagger', verb: 'stab', dmgBonus: 0.9, atkTime: 0.4, critAdd: 0.07, sigPool: ['shadowflurry', 'dragonsbreath'] },
     { id: 'shadowfangs', noun: 'Shadow Fangs', mesh: [], held: 'Dagger_2', held2: true, model: 'Dagger_2', verb: 'stab', dmgBonus: 1.05, atkTime: 0.45, critAdd: 0.1, minRarity: 2, sigPool: ['shadowflurry', 'lifedrain'] },
     { id: 'boneblade', noun: 'Bone Shiv', mesh: [], held: 'Skeleton_Blade', model: 'Skeleton_Blade', verb: 'slash', dmgBonus: 1.0, lifestealAdd: 0.06, sigPool: ['lifedrain', 'shadowflurry'] },
-    { id: 'bonecrossbow', noun: 'Grave Crossbow', mesh: [], held: 'Skeleton_Crossbow', model: 'Skeleton_Crossbow', verb: 'shoot', dmgBonus: 1.2, ranged: true, atkTime: 1.0, sigPool: ['arrowstorm', 'lifedrain'] },
+    { id: 'goldfang', noun: 'Gilded Fang', mesh: [], held: 'Dagger_Golden', model: 'Dagger_Golden', verb: 'slash', dmgBonus: 1.15, critAdd: 0.06, minRarity: 2, sigPool: ['shadowflurry', 'radiantbeam'] },
   ],
   mage: [
     { id: 'staff', noun: 'Staff', mesh: ['2H_Staff'], model: 'staff', verb: 'cast', sigPool: ['voidrip', 'frostwave'] },

@@ -35,7 +35,7 @@ const STYLES = {
   _smash: { rot: [-0.45, Math.PI + 0.4, 0.22], scale: 0.62, attack: 'smash' },
   _sweep: { rot: [-0.4, Math.PI + 0.55, 0.25], scale: 0.6, attack: 'sweep' },
   _shoot: { rot: [-0.12, Math.PI, 0], scale: 0.55, attack: 'shoot', bolt: true, pos: [0.3, -0.3, -0.58] },
-  _bowshoot: { rot: [0, 0, 0.12], scale: 0.62, attack: 'bowshoot', pos: [0.3, -0.28, -0.6] },
+  _bowshoot: { rot: [0, Math.PI / 2 + 0.12, 0], scale: 0.62, attack: 'bowshoot', bow: true, packBow: true, pos: [0.3, -0.28, -0.6] },
   _cast: { rot: [-0.35, Math.PI + 0.25, 0.3], scale: 0.55, attack: 'cast' },
 };
 
@@ -87,7 +87,7 @@ export function setViewmodelWeapon(modelName, wtype = 'sword1h', verb = null, si
     boltObj.traverse((n) => { if (n.isMesh) n.frustumCulled = false; });
     boltObj.rotation.set(-Math.PI / 2, 0, 0); // tip points forward (-z)
     boltObj.scale.setScalar(0.55);
-    boltObj.position.set(0, 0, 0.08);
+    boltObj.position.set(0, style.packBow ? 0.6 : 0, 0.08); // pack bows grip at their base
     weaponObj.add(boltObj);
   }
   // crossbows carry a visible bolt that fires and reloads
