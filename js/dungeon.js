@@ -324,7 +324,7 @@ export function generateDragonLair(seedStr, floor) {
   return {
     grid, torches, traps: [], ropes: [], placements, enemySpawns, lootSpawns,
     explored: new Uint8Array(w * h), hadBoss: true,
-    theme: { id: 'lair', name: "THE DRAGON'S VAULT", fog: 0x1a0d08, density: 0.008, hemi: 0x9a7358, amb: 0x53392a, torch: 0xffa055, tiles: [], props: [], banners: [], bias: [] },
+    theme: { id: 'lair', name: "THE DRAGON'S VAULT", fog: 0x2b1a10, density: 0.0045, hemi: 0xe0bb96, amb: 0x96755c, torch: 0xffa055, tiles: [], props: [], banners: [], bias: [] },
     mutator: null, layoutId: 'lair',
   };
 }
