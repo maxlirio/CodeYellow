@@ -136,6 +136,7 @@ function updateSigGlow(dt) {
 }
 
 export function updateViewmodel(dt) {
+  if (rig) rig.visible = !G.spectate;
   updateSigGlow(dt);
   if (!rig) return;
   const p = G.player;

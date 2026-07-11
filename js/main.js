@@ -122,6 +122,16 @@ async function boot() {
       refreshHud();
       addMsg(`⚔ Playtest kit: Lv10, ${w.name}`, 'gold');
       setTimeout(() => descendTo(9), 800);
+      if (params.get('spectate')) {
+        G.spectate = true;
+        const placeChampion = setInterval(() => {
+          const d = G.enemies.find(en => en.cfg?.dragon);
+          if (!d || G.floor !== 9) return;
+          clearInterval(placeChampion);
+          G.player.obj.position.set(d.obj.position.x, 0, d.obj.position.z + 14);
+          addMsg('🎬 Spectating: the Champion duels EMBERWING', 'gold');
+        }, 500);
+      }
     }
   } else if (params.get('join')) {
     history.replaceState(null, '', location.pathname);

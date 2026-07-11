@@ -330,6 +330,41 @@ function findOpenGround(x, z) {
   return null;
 }
 
+// ---- spectator show: the player body is driven by a duelist AI ----
+function spectateBot(p, dt) {
+  const d = G.enemies.find(e => e.cfg.dragon && e.state !== 'dead');
+  for (const k of ['KeyW', 'KeyA', 'KeyS', 'KeyD']) G.keys[k] = false;
+  if (!d) return;
+  const dp = d.obj.position, pp = p.obj.position;
+  const dist = Math.hypot(dp.x - pp.x, dp.z - pp.z);
+  // always face the beast
+  p.camYaw = Math.atan2(dp.x - pp.x, dp.z - pp.z) + Math.PI;
+  p.camPitch = Math.max(-0.4, Math.min(1.2, Math.atan2((dp.y + 2.5) - (pp.y + 1.6), Math.max(1, dist))));
+  // pick a footwork plan every second or so
+  p.botT = (p.botT || 0) - dt;
+  const danger = d.ds?.sweep || d.ds?.breath || d.ds?.state === 'lunge' || d.ds?.state === 'lungewind';
+  if (danger) { p.botMode = 'flee'; p.botT = 0.5; }
+  else if (p.botT <= 0) {
+    p.botT = 0.7 + Math.random() * 0.9;
+    p.botMode = dist > 8 ? 'close' : Math.random() < 0.5 ? 'strafeL' : 'strafeR';
+    if (dist < 4) p.botMode = 'back';
+    if (Math.random() < 0.2) tryDodge(); // the occasional showy hop
+  }
+  if (p.botMode === 'close') G.keys['KeyW'] = true;
+  else if (p.botMode === 'strafeL') { G.keys['KeyA'] = true; if (dist > 7) G.keys['KeyW'] = true; }
+  else if (p.botMode === 'strafeR') { G.keys['KeyD'] = true; if (dist > 7) G.keys['KeyW'] = true; }
+  else if (p.botMode === 'back') G.keys['KeyS'] = true;
+  else if (p.botMode === 'flee') { G.keys['KeyS'] = true; G.keys[Math.sin(G.time) > 0 ? 'KeyA' : 'KeyD'] = true; }
+  // swing when the beast is in reach (and grounded enough to hit)
+  if (dist < effectiveAttackRange() + (d.cfg.bodyR || 0) + 1.2 && dp.y < 4) tryAttack();
+  // the show must go on
+  if (G.run.potions > 0 && p.hp < p.maxHp * 0.5) { G.run.potions--; p.hp = Math.min(p.maxHp, p.hp + Math.round(p.maxHp * 0.5)); }
+  if (p.hp < p.maxHp * 0.25) {
+    p.hp = p.maxHp;
+    spawnDamageNumber(pp.clone().setY(pp.y + 2.4), 'SECOND WIND', '#66ff88', true);
+  }
+}
+
 export function updatePlayer(dt) {
   const p = G.player;
   if (!p) return;
@@ -380,6 +415,7 @@ export function updatePlayer(dt) {
 
   p.mana = Math.min(p.maxMana, p.mana + effectiveManaRegen() * dt);
   p.aiming = !!(G.keys['ShiftLeft'] || G.keys['ShiftRight']);
+  if (G.spectate) { spectateBot(p, dt); p.obj.visible = true; p.anim.update(dt); }
 
   // swinging on a rope replaces normal movement
   if (p.rope) {
@@ -726,6 +762,7 @@ export function tryInteract(onStairs, onShop, onHome) {
 }
 
 // ---------- first-person camera ----------
+const _specMid = new THREE.Vector3();
 const _qFrame = new THREE.Quaternion();
 const _qLook = new THREE.Quaternion();
 const _eul = new THREE.Euler();
@@ -734,6 +771,23 @@ const _vUp = new THREE.Vector3();
 function updateCamera(dt, moving) {
   const p = G.player;
   const cam = G.camera;
+  // spectator: a slow orbit around the duel
+  if (G.spectate) {
+    const d = G.enemies.find(e => e.cfg.dragon && e.state !== 'dead');
+    const a = d ? d.obj.position : p.obj.position;
+    const b = p.obj.position;
+    _specMid.set((a.x + b.x) / 2, Math.max(a.y, b.y) * 0.5 + 4, (a.z + b.z) / 2);
+    G.specT = (G.specT || 0) + dt * 0.1;
+    const r = 22;
+    cam.position.set(_specMid.x + Math.cos(G.specT) * r, _specMid.y + 8, _specMid.z + Math.sin(G.specT) * r);
+    if (G.shake > 0.01) {
+      G.shake *= Math.pow(0.05, dt);
+      cam.position.x += (Math.random() - 0.5) * G.shake * 0.5;
+      cam.position.y += (Math.random() - 0.5) * G.shake * 0.4;
+    }
+    cam.lookAt(_specMid);
+    return;
+  }
   const bob = moving && p.dodgeT <= 0 ? Math.sin(p.bobT) * 0.055 : 0;
   cam.position.set(p.obj.position.x, p.obj.position.y + EYE + bob, p.obj.position.z);
   // earth-shaking moments (dragon roars, landings)
