@@ -283,3 +283,11 @@ button.orange-btn:hover { filter: brightness(1.15); }
 #bossCard.show { opacity: 1; }
 #bossCard .bc-name { font-size: 64px; letter-spacing: 14px; color: #ffb347; text-shadow: 0 0 24px rgba(255, 80, 20, 0.8), 0 4px 12px #000; font-weight: bold; }
 #bossCard .bc-sub { font-size: 20px; letter-spacing: 10px; color: #d8c9a8; margin-top: 4px; text-shadow: 0 2px 8px #000; }
+
+/* ---- spell loadout picker ---- */
+#spellPick { margin: 10px 0 4px; text-align: left; }
+#spellPick .sp-head { font-size: 13px; color: #cfc4ae; margin-bottom: 6px; }
+#spellChips { display: flex; flex-wrap: wrap; gap: 6px; }
+.chip { background: #16121e; border: 1px solid var(--border); border-radius: 14px; color: #cfc4ae; padding: 4px 10px; font-size: 12.5px; cursor: pointer; }
+.chip:hover { border-color: var(--orange); }
+.chip.sel { border-color: var(--orange); color: #ffd9a0; background: #241a12; }

@@ -178,7 +178,8 @@ function playerName() {
 }
 
 function setupMenu() {
-  getClass = buildClassCards(() => rebuildPreview());
+  getClass = buildClassCards(() => { rebuildPreview(); renderSpellPicker(); });
+  renderSpellPicker();
   buildLookControls(() => rebuildPreview());
   $('nameInput').value = localStorage.getItem('codeorange_name') || '';
   $('nameInput').addEventListener('change', () => localStorage.setItem('codeorange_name', $('nameInput').value));
@@ -327,6 +328,44 @@ function renderLobby() {
 }
 
 // ---------------- run flow ----------------
+// ---- pre-run spell loadout: chosen chips, or fate's random deal ----
+function spellChoiceKey(classId) { return 'codeorange_spells_' + classId; }
+function loadSpellChoice(classId) {
+  try {
+    const pool = CLASSES[classId].spellPool;
+    const arr = JSON.parse(localStorage.getItem(spellChoiceKey(classId)) || 'null');
+    if (Array.isArray(arr) && arr.length === 3 && arr.every(s => pool.includes(s))) return arr;
+  } catch {}
+  return null;
+}
+function renderSpellPicker() {
+  const classId = getClass();
+  const cls = CLASSES[classId];
+  const wrap = $('spellChips');
+  if (!wrap) return;
+  $('spKitWord').textContent = cls.physical ? 'abilities' : 'spells';
+  const chosen = new Set(loadSpellChoice(classId) || []);
+  wrap.innerHTML = '';
+  $('spRandom').classList.toggle('sel', chosen.size === 0);
+  $('spRandom').onclick = () => { localStorage.removeItem(spellChoiceKey(classId)); renderSpellPicker(); };
+  for (const id of cls.spellPool) {
+    const sp = SPELLS[id];
+    const b = document.createElement('button');
+    b.className = 'chip' + (chosen.has(id) ? ' sel' : '');
+    b.textContent = `${sp.icon} ${sp.name}`;
+    b.title = `${sp.mana} mana · ${sp.cd}s cooldown`;
+    b.onclick = () => {
+      if (chosen.has(id)) chosen.delete(id);
+      else if (chosen.size < 3) chosen.add(id);
+      else return;
+      if (chosen.size === 3) localStorage.setItem(spellChoiceKey(classId), JSON.stringify([...chosen]));
+      else localStorage.setItem(spellChoiceKey(classId), JSON.stringify([...chosen])); // partial saved; only 3 counts at start
+      renderSpellPicker();
+    };
+    wrap.appendChild(b);
+  }
+}
+
 function startRun(seed, mode = 'campaign') {
   G.seed = seed || randomSeed();
   runMode = mode;
@@ -355,9 +394,16 @@ function startRun(seed, mode = 'campaign') {
   createPlayer(classId, playerName());
   G.player.maxHp = effectiveMaxHp();
   G.player.hp = G.player.maxHp;
-  const spells = dealSpells(classId);
+  const chosen = loadSpellChoice(classId);
+  let spells;
+  if (chosen) {
+    G.run.spells = [...chosen];
+    spells = G.run.spells;
+  } else {
+    spells = dealSpells(classId);
+  }
   const kitWord = CLASSES[classId].physical ? 'abilities' : 'spells';
-  addMsg(`Your ${kitWord} this run: ${spells.map(s => `${SPELLS[s].icon} ${SPELLS[s].name}`).join(' · ')}`, 'gold');
+  addMsg(`Your ${kitWord} this run: ${spells.map(s => `${SPELLS[s].icon} ${SPELLS[s].name}`).join(' · ')}${chosen ? '' : ' (random — pick your own in the menu)'}`, 'gold');
 
   if (mode === 'horde') {
     setLocalFloor(1);
