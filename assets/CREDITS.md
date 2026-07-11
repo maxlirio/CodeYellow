@@ -7,3 +7,5 @@ All 3D models and animations are by **Kay Lousberg (KayKit)** — https://kaylou
 - `enemies/` — [KayKit Skeletons Character Pack 1.0](https://github.com/KayKit-Game-Assets/KayKit-Character-Pack-Skeletons-1.0)
 
 All sound effects are procedurally generated at runtime with the Web Audio API — no audio assets.
+
+- **Black Dragon** (Emberwing boss model) — by 3DHaupt / Dennis Haupt (free3d.com, personal/non-commercial use). This game is free and non-commercial.

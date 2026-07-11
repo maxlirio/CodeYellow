@@ -428,7 +428,9 @@ function applyThemeAtmosphere(fs) {
   const th = fs.theme;
   if (!th) return;
   G.scene.fog.color.setHex(th.fog);
-  G.scene.fog.density = th.density * (fs.mutator?.torchMult ? 1.25 : 1);
+  // the dragon's lair burns clearer — you must SEE her across the hall
+  const lairMult = fs.n > 0 && fs.n % 9 === 0 ? 0.55 : 1;
+  G.scene.fog.density = th.density * (fs.mutator?.torchMult ? 1.25 : 1) * lairMult;
   G.scene.background.setHex(th.fog);
   G.lights.hemi.color.setHex(th.hemi);
   G.lights.amb.color.setHex(th.amb);

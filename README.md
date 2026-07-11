@@ -73,6 +73,7 @@ Debug hooks: `?auto=1&seed=myseed` auto-starts a solo run with a fixed dungeon s
 
 - **Models & animations:** [KayKit](https://kaylousberg.com) — Dungeon Remastered, Adventurers, and Skeletons packs (CC0)
 - **Monsters & dragon:** [Quaternius](https://quaternius.com) — Ultimate Monsters pack (CC0)
+- **Emberwing (boss dragon):** Black Dragon by [3DHaupt / Dennis Haupt](https://free3d.com/3d-model/black-dragon-rigged-and-game-ready-92023.html) (personal/non-commercial use)
 - **Weapons:** [Quaternius](https://quaternius.com) — RPG Items & Medieval Weapons packs (CC0)
 - **Music:** "Woodland Fantasy", "Dark Descent" & "Heroic Demise" by [Matthew Pablo](http://www.matthewpablo.com) (CC-BY 3.0, via OpenGameArt); "Crystal Cave" & "Battle Theme A" by [cynicmusic](https://cynicmusic.com) (CC0, via OpenGameArt)
 - **Engine:** [three.js](https://threejs.org) · **Networking:** [PeerJS](https://peerjs.com)

@@ -39,10 +39,16 @@ export function spawnEnemy(fs, type, x, z, { y = 0, elite = false, id = null } =
   if (cfg.ghost) tintCharacter(obj, 0xcfe8ff, { ghost: true });
   if (elite) tintCharacter(obj, 0xffcc66, { emissive: 0x662200 });
   if (cfg.dragon) {
-    // ember-lit so the boss reads in a dark lair; it carries its own firelight
-    tintCharacter(obj, 0, { emissive: 0x581400 });
-    const glow = new THREE.PointLight(0xff7733, 1.6, 26);
-    glow.position.set(0, 0.8, 0);
+    // a black dragon in a dark lair needs help to read: smoldering ember
+    // sheen on her scales plus a strong carried firelight
+    obj.traverse((n) => {
+      if (!n.isMesh && !n.isSkinnedMesh) return;
+      if (n.material.isMeshBasicMaterial) return;
+      n.material = n.material.clone();
+      if (n.material.emissive) { n.material.emissive.setHex(0x461303); n.material.emissiveIntensity = 0.5; }
+    });
+    const glow = new THREE.PointLight(0xff7733, 3.2, 44);
+    glow.position.set(0, 5, 0);
     obj.add(glow);
   }
   // snipers visibly carry their crossbow
@@ -78,7 +84,8 @@ export function spawnEnemy(fs, type, x, z, { y = 0, elite = false, id = null } =
   };
   obj.rotation.y = e.yaw;
   const m0 = amap(e);
-  if (m0) anim.play(m0.idle);
+  if (cfg.singleClip) anim.play(cfg.singleClip);
+  else if (m0) anim.play(m0.idle);
   else anim.play(anim.has('Skeleton_Inactive_Standing_Pose') ? 'Skeleton_Inactive_Standing_Pose' : 'Idle');
   fs.enemies.push(e);
   return e;
@@ -937,6 +944,11 @@ export function setEnemyState(e, s, fromNet = false) {
   e.state = s;
   e.stateT = 0;
   const a = e.anim;
+  if (e.cfg.singleClip) {
+    // one organic loop; the body does the acting — but guests still need the state
+    if (isAuthority() && !fromNet) netSend({ t: 'estate', f: e.floor, id: e.id, s });
+    return;
+  }
   const m = amap(e);
   switch (s) {
     case 'awaken':
