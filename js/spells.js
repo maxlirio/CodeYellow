@@ -669,6 +669,15 @@ export function castSpell(slot, effectiveDamage) {
       // GRAVITY LASH: turn gravity toward whatever you pointed at.
       // No teleport — you FALL onto the surface and the world rolls with you.
       const from = origin.clone().setY(origin.y + 1.5);
+      // aiming at the vault overhead: gravity fully inverts
+      if (dir.y > 0.55) {
+        sfx.dodge(); sfx.bolt();
+        p.lash = { up: true, g: { x: 0, z: 0 }, vel: 0, grounded: false };
+        p.vy = 0;
+        drawLightning(from, from.clone().add(new THREE.Vector3(0, 6, 0)));
+        addMsg('🧲 GRAVITY INVERTS — you fall into the sky. Mana burns until you release (SPACE).', 'gold');
+        break;
+      }
       let blocked = false;
       for (let d = 2; d < sp.range; d += 0.5) {
         const px = from.x + dir.x * d, pz = from.z + dir.z * d;

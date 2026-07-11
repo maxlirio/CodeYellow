@@ -442,17 +442,53 @@ export function updatePlayer(dt) {
     if (p.mana <= 0) { p.mana = 0; releaseLash(p); }
     if (p.lash) {
       if (!p.lash.grounded) {
-        // falling ALONG the new gravity
         p.lash.vel = Math.min(18, (p.lash.vel || 0) + 24 * dt);
         const step = p.lash.vel * dt;
-        const bx = pos.x, bz = pos.z;
-        moveWithCollision(pos, g.x * step, g.z * step, 0.55, { y: pos.y });
-        if (Math.hypot(pos.x - bx, pos.z - bz) < step * 0.4) {
-          p.lash.grounded = true;
-          p.lash.vel = 0;
-          sfx.hit();
-          addMsg('🧲 You land on the surface — WASD walks it, SPACE lets go.');
+        if (p.lash.up) {
+          // falling UPWARD to the vault of the room
+          pos.y += step;
+          if (pos.y >= LASH_CEIL) {
+            pos.y = LASH_CEIL;
+            p.lash.grounded = true;
+            p.lash.vel = 0;
+            sfx.hit();
+            addMsg('🧲 You stand on the sky — WASD walks the vault, SPACE lets go.');
+          }
+        } else {
+          // falling ALONG the new gravity
+          const bx = pos.x, bz = pos.z;
+          moveWithCollision(pos, g.x * step, g.z * step, 0.55, { y: pos.y });
+          if (Math.hypot(pos.x - bx, pos.z - bz) < step * 0.4) {
+            p.lash.grounded = true;
+            p.lash.vel = 0;
+            sfx.hit();
+            addMsg('🧲 You land on the surface — WASD walks it, SPACE lets go.');
+          }
         }
+      } else if (p.lash.up) {
+        // inverted stroll across the ceiling: free x/z, held to the vault
+        const k = G.keys;
+        let ix = 0, iz = 0;
+        if (k['KeyW']) iz -= 1;
+        if (k['KeyS']) iz += 1;
+        if (k['KeyA']) ix -= 1;
+        if (k['KeyD']) ix += 1;
+        if (ix || iz) {
+          G.camera.getWorldDirection(_lashFwd);
+          _lashFwd.y = 0;
+          if (_lashFwd.lengthSq() > 0.01) {
+            _lashFwd.normalize();
+            _lashRight.set(-_lashFwd.z, 0, _lashFwd.x);
+            _lashMove.copy(_lashFwd).multiplyScalar(-iz).addScaledVector(_lashRight, -ix);
+            if (_lashMove.lengthSq() > 0.001) {
+              _lashMove.normalize();
+              const sp = effectiveSpeed() * 0.8;
+              moveWithCollision(pos, _lashMove.x * sp * dt, _lashMove.z * sp * dt, 0.55, { y: pos.y });
+              p.bobT += dt * sp * 1.35;
+            }
+          }
+        }
+        pos.y = LASH_CEIL;
       } else {
         // walking the wall face: camera-look projected onto the surface plane
         const k = G.keys;
@@ -820,6 +856,8 @@ const _lashUp = new THREE.Vector3();
 const _lashRight = new THREE.Vector3();
 const _lashMove = new THREE.Vector3();
 
+const LASH_CEIL = 8; // the height of the unseen vault you can stand on
+
 export function releaseLash(p) {
   if (!p.lash) return;
   p.lash = null;
@@ -867,16 +905,25 @@ function updateCamera(dt, moving) {
     cam.position.y += (Math.random() - 0.5) * G.shake * 0.3;
     cam.position.z += (Math.random() - 0.5) * G.shake * 0.35;
   }
-  // Gravity Lash: your feet grip the wall — the whole world rolls so the
-  // surface you're lashed to becomes your floor
+  // Gravity Lash: the body itself is TURNED — the eye extends along the new
+  // "up" (out from the wall / down from the ceiling), and the world rolls.
   p.lashBlend = p.lashBlend ?? 0;
-  const lashN = p.lash ? { x: -p.lash.g.x, z: -p.lash.g.z } : null;
+  const lashN = p.lash ? (p.lash.up ? { x: 0, y: -1, z: 0 } : { x: -p.lash.g.x, y: 0, z: -p.lash.g.z }) : null;
   const wantBlend = lashN ? 1 : 0;
   p.lashBlend += (wantBlend - p.lashBlend) * Math.min(1, dt * 3.5);
   if (p.lashBlend > 0.01 && (lashN || p.lastLashN)) {
     const n = lashN || p.lastLashN;
     if (lashN) p.lastLashN = n;
-    _vUp.set(n.x, 0, n.z).normalize();
+    // the eye sits 1.6u along the TURNED up — out from the wall, not skyward
+    const bl = p.lashBlend;
+    cam.position.set(
+      p.obj.position.x + (n.x || 0) * EYE * bl,
+      p.obj.position.y + (EYE + bob) * (1 - bl) + (n.y || 0) * EYE * bl,
+      p.obj.position.z + (n.z || 0) * EYE * bl
+    );
+    _vUp.set(n.x, n.y || 0, n.z);
+    if (_vUp.lengthSq() < 0.01) _vUp.set(0, 1, 0);
+    _vUp.normalize();
     _qFrame.setFromUnitVectors(new THREE.Vector3(0, 1, 0), _vUp);
     _qFrame.slerp(new THREE.Quaternion(), 1 - p.lashBlend); // identity when not lashed
     _eul.set(p.camPitch, p.camYaw, 0, 'YXZ');

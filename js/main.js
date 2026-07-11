@@ -338,15 +338,25 @@ function loadSpellChoice(classId) {
   } catch {}
   return null;
 }
+function readSpellDraft(classId) {
+  // the picker shows work-in-progress picks of ANY length; only exactly 3
+  // (via loadSpellChoice) counts when a run starts
+  try {
+    const pool = CLASSES[classId].spellPool;
+    const arr = JSON.parse(localStorage.getItem(spellChoiceKey(classId)) || 'null');
+    if (Array.isArray(arr)) return arr.filter(s => pool.includes(s));
+  } catch {}
+  return [];
+}
 function renderSpellPicker() {
   const classId = getClass();
   const cls = CLASSES[classId];
   const wrap = $('spellChips');
   if (!wrap) return;
   $('spKitWord').textContent = cls.physical ? 'abilities' : 'spells';
-  const chosen = new Set(loadSpellChoice(classId) || []);
+  const chosen = new Set(readSpellDraft(classId));
   wrap.innerHTML = '';
-  $('spRandom').classList.toggle('sel', chosen.size === 0);
+  $('spRandom').classList.toggle('sel', chosen.size !== 3);
   $('spRandom').onclick = () => { localStorage.removeItem(spellChoiceKey(classId)); renderSpellPicker(); };
   for (const id of cls.spellPool) {
     const sp = SPELLS[id];
@@ -357,9 +367,8 @@ function renderSpellPicker() {
     b.onclick = () => {
       if (chosen.has(id)) chosen.delete(id);
       else if (chosen.size < 3) chosen.add(id);
-      else return;
-      if (chosen.size === 3) localStorage.setItem(spellChoiceKey(classId), JSON.stringify([...chosen]));
-      else localStorage.setItem(spellChoiceKey(classId), JSON.stringify([...chosen])); // partial saved; only 3 counts at start
+      else return; // already three — unpick one first
+      localStorage.setItem(spellChoiceKey(classId), JSON.stringify([...chosen]));
       renderSpellPicker();
     };
     wrap.appendChild(b);
