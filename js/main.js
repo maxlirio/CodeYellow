@@ -1073,8 +1073,13 @@ function updateDeath(dt) {
 let last = 0, minimapT = 0, duelGoldT = 0;
 function loop(t) {
   requestAnimationFrame(loop);
-  const dt = Math.min(0.05, (t - last) / 1000 || 0.016);
+  let dt = Math.min(0.05, (t - last) / 1000 || 0.016);
   last = t;
+  // cinematic slow-motion beats (solo only — netplay stays realtime)
+  if (G.slowmo > 0 && G.net.role === 'solo') {
+    G.slowmo -= dt;
+    dt *= 0.35;
+  }
   G.time = t / 1000;
 
   // CodeBlue lesson: in co-op the world NEVER pauses for one player's overlays —

@@ -204,6 +204,16 @@ export function updateBossBar(frac) {
 }
 export function hideBossBar() { setBossMusic(false); setHidden('bossbarWrap', true); }
 
+// cinematic name card: huge letters that linger, then fade
+export function showBossCard(name, sub) {
+  const el = document.getElementById('bossCard');
+  if (!el) return;
+  el.querySelector('.bc-name').textContent = name;
+  el.querySelector('.bc-sub').textContent = sub || '';
+  el.classList.add('show');
+  setTimeout(() => el.classList.remove('show'), 3600);
+}
+
 // ---------- party bar (co-op) ----------
 export function updatePartyBar() {
   const bar = $('partyBar');

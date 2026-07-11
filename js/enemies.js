@@ -5,12 +5,12 @@ import * as THREE from 'three';
 import { G, floorState } from './state.js';
 import { ENEMIES, scaleHp, scaleDmg, ANIM_GROUND, ANIM_CRITTER, ANIM_FLYER } from './config.js';
 import { makeCharacter, tintCharacter, makeWeaponModel } from './assets.js';
-import { makeBlobShadow, spawnDamageNumber, spawnBurst } from './fx.js';
+import { makeBlobShadow, spawnDamageNumber, spawnBurst, makeGlowSprite } from './fx.js';
 import { sfx } from './audio.js';
 import { moveWithCollision, hasLineOfSight, groundHeightAt } from './dungeon.js';
 import { spawnBolt } from './projectiles.js';
 import { netSend, isAuthority } from './net.js';
-import { addMsg, showBossBar, updateBossBar, hideBossBar } from './ui.js';
+import { addMsg, showBossBar, updateBossBar, hideBossBar, showBossCard } from './ui.js';
 import { damageLocalPlayer, gainXp, notifyHit } from './player.js';
 import { rollAnyItem } from './items.js';
 import { dropItemLoot } from './loot.js';
@@ -48,7 +48,7 @@ export function spawnEnemy(fs, type, x, z, { y = 0, elite = false, id = null } =
       if (n.material?.name === 'BURST' || n.material?.name === 'burst_new') { n.visible = false; return; }
       if (n.material.isMeshBasicMaterial) return;
       n.material = n.material.clone();
-      if (n.material.emissive) { n.material.emissive.setHex(0x3a0a03); n.material.emissiveIntensity = 0.45; }
+      if (n.material.emissive) { n.material.emissive.setHex(0x1c0402); n.material.emissiveIntensity = 0.18; }
     });
     const glow = new THREE.PointLight(0xff7733, 2.6, 40);
     glow.position.set(0, 4, 0);
@@ -249,6 +249,44 @@ function tacticalGoal(e, fs, t, dt) {
 }
 
 const ATTACK_ANIMS = ['Unarmed_Melee_Attack_Punch_A', 'Unarmed_Melee_Attack_Punch_B'];
+
+// ---- dragonfire that STAYS: burning ground left by her breath ----
+const dragonFlames = []; // {x, z, f, t, obj, tick}
+function igniteGround(f, x, z) {
+  const obj = new THREE.Group();
+  const g1 = makeGlowSprite(0xff6622, 2.4);
+  g1.position.y = 0.5;
+  obj.add(g1);
+  const g2 = makeGlowSprite(0xffbb44, 1.1);
+  g2.position.y = 0.9;
+  obj.add(g2);
+  obj.position.set(x, 0, z);
+  obj.visible = f === G.floor;
+  G.scene.add(obj);
+  dragonFlames.push({ x, z, f, t: 2.8, tick: Math.random() * 0.4, obj });
+}
+function updateDragonFlames(dt) {
+  for (let i = dragonFlames.length - 1; i >= 0; i--) {
+    const fl = dragonFlames[i];
+    fl.t -= dt;
+    fl.obj.visible = fl.f === G.floor;
+    fl.obj.children[0].material.opacity = Math.min(0.8, fl.t * 0.6);
+    fl.obj.children[1].position.y = 0.9 + Math.sin(fl.t * 9) * 0.2;
+    fl.tick -= dt;
+    if (fl.tick <= 0 && isAuthority()) {
+      fl.tick = 0.5;
+      const pl = G.player;
+      if (pl && !pl.dead && G.floor === fl.f && Math.hypot(pl.obj.position.x - fl.x, pl.obj.position.z - fl.z) < 1.7 && pl.obj.position.y < 2) {
+        damageLocalPlayer(6, { poison: { dps: 3, dur: 1.5 } });
+      }
+      for (const [pid, r] of G.remotes) {
+        if (r.dead || r.floor !== fl.f) continue;
+        if (Math.hypot(r.obj.position.x - fl.x, r.obj.position.z - fl.z) < 1.7) netSend({ t: 'phit', target: pid, dmg: 6, fx: { poison: { dps: 3, dur: 1.5 } } });
+      }
+    }
+    if (fl.t <= 0) { G.scene.remove(fl.obj); dragonFlames.splice(i, 1); }
+  }
+}
 const ANIM_MAPS = { ground: ANIM_GROUND, critter: ANIM_CRITTER, flyer: ANIM_FLYER };
 const amap = (e) => e.cfg.animMap ? ANIM_MAPS[e.cfg.animMap] : null;
 const onMyFloor = (e) => e.floor === G.floor;
@@ -274,6 +312,7 @@ function bomberExplode(e) {
 }
 
 export function updateEnemies(dt) {
+  updateDragonFlames(dt);
   const authority = isAuthority();
   for (const fs of G.floors.values()) {
     if (!fs.spawned) continue;
@@ -619,10 +658,9 @@ function simulateDragon(e, fs, players, dt, mine) {
         s.tick = 0.11;
         const prog = s.t / 1.6;
         const a = s.a0 + (s.a1 - s.a0) * prog; // sweeps across her front
-        for (let r = 5; r <= 16; r += 3.2) {
+        for (let r = 6; r <= 16; r += 4.5) {
           const fx2 = pos.x + Math.sin(e.yaw + a) * r, fz2 = pos.z + Math.cos(e.yaw + a) * r;
-          if (mine) spawnBurst(new THREE.Vector3(fx2, 0.8, fz2), 0xff5511, 8, 4, 0.14, 0.45);
-          if (Math.random() < 0.4) netSend({ t: 'fx', f: e.floor, x: fx2, y: 0.8, z: fz2, color: 0xff5511 });
+          igniteGround(e.floor, fx2, fz2); // the floor itself catches fire
           for (const p of players) {
             if (Math.hypot(p.pos.x - fx2, p.pos.z - fz2) < 2.4 && p.pos.y < 3) {
               if (p.minion) damageMinion(p.minion, 8);
@@ -644,8 +682,8 @@ function simulateDragon(e, fs, players, dt, mine) {
         b.tick = 0.14;
         const prog = b.t / 1.4;
         const fx2 = b.x0 + b.dx * prog * b.len, fz2 = b.z0 + b.dz * prog * b.len;
-        if (mine) spawnBurst(new THREE.Vector3(fx2, 0.8, fz2), 0xff5511, 14, 5, 0.16, 0.5);
-        netSend({ t: 'fx', f: e.floor, x: fx2, y: 0.8, z: fz2, color: 0xff5511, big: 1 });
+        igniteGround(e.floor, fx2, fz2);
+        if (Math.random() < 0.35) netSend({ t: 'fx', f: e.floor, x: fx2, y: 0.8, z: fz2, color: 0xff5511 });
         for (const p of players) {
           if (Math.hypot(p.pos.x - fx2, p.pos.z - fz2) < 2.4 && p.pos.y < 3) {
             if (p.minion) damageMinion(p.minion, 16);
@@ -673,7 +711,12 @@ function simulateDragon(e, fs, players, dt, mine) {
       if (d.t > 2.2) {
         d.state = 'prowl';
         setEnemyState(e, 'chase');
-        if (mine) { sfx.bossroar(); addMsg('EMBERWING THE UNDYING has awoken!', 'bad'); G.shake = Math.max(G.shake || 0, 0.7); }
+        if (mine) {
+          sfx.bossroar(); addMsg('EMBERWING THE UNDYING has awoken!', 'bad');
+          G.shake = Math.max(G.shake || 0, 0.7);
+          showBossCard('EMBERWING', 'THE UNDYING');
+          if (G.net.role === 'solo') G.slowmo = 1.6;
+        }
         netSend({ t: 'fx', f: e.floor, x: pos.x, y: 2, z: pos.z, color: 0xffcc88, big: 1 });
       }
       break;
@@ -726,11 +769,19 @@ function simulateDragon(e, fs, players, dt, mine) {
         netSend({ t: 'fx', f: e.floor, x: pos.x, y: 4, z: pos.z, color: 0xffaa00, big: 1 });
         d.breathCd = enraged ? 7 : 11;
       }
-      // takeoff is RARE — twice a fight, or when melee truly savages her
-      for (const th of [0.62, 0.3]) {
-        if (frac < th && !d.flew[th]) { d.flew[th] = true; d.state = 'takeoff'; d.t = 0; }
+      // takeoff is RARE — twice a fight, or when melee truly savages her.
+      // Below 18% she CAN'T fly anymore: a wounded animal's last stand.
+      if (frac > 0.18) {
+        for (const th of [0.62, 0.3]) {
+          if (frac < th && !d.flew[th]) { d.flew[th] = true; d.state = 'takeoff'; d.t = 0; }
+        }
+        if (d.pain > e.maxHp * 0.18 && d.t > 12) { d.state = 'takeoff'; d.t = 0; d.pain = 0; }
+      } else if (!d.finalStand) {
+        d.finalStand = true;
+        if (mine) { sfx.bossroar(); addMsg('🐉 Wounded and wingless — her FINAL STAND!', 'bad'); G.shake = Math.max(G.shake || 0, 0.8); }
+        if (G.net.role === 'solo') G.slowmo = 1.4;
+        e.dmg = Math.round(e.dmg * 1.35); // desperate strikes hit harder
       }
-      if (d.pain > e.maxHp * 0.18 && d.t > 12) { d.state = 'takeoff'; d.t = 0; d.pain = 0; }
       if (d.state === 'takeoff') {
         setEnemyState(e, 'chase');
         if (mine) { sfx.bossroar(); addMsg('🐉 EMBERWING takes to the sky!', 'bad'); G.shake = Math.max(G.shake || 0, 0.4); }
@@ -831,6 +882,15 @@ function simulateDragon(e, fs, players, dt, mine) {
         d.state = 'landing'; d.t = 0; d.strafed = false;
         d.landAt = { x: target?.pos.x ?? d.home.x, z: target?.pos.z ?? d.home.z };
         if (mine) addMsg('🐉 She folds her wings and DROPS—', 'bad');
+        // scorch-ring telegraph where she will crash
+        const ring = new THREE.Mesh(
+          new THREE.RingGeometry(6.5, 8, 36),
+          new THREE.MeshBasicMaterial({ color: 0xff5522, transparent: true, opacity: 0.5, side: THREE.DoubleSide, depthWrite: false })
+        );
+        ring.rotation.x = -Math.PI / 2;
+        ring.position.set(d.landAt.x, groundHeightAt(d.landAt.x, d.landAt.z, 0, fs.grid) + 0.1, d.landAt.z);
+        G.scene.add(ring);
+        d.landRing = ring;
       }
       break;
     }
@@ -842,8 +902,10 @@ function simulateDragon(e, fs, players, dt, mine) {
     }
     case 'landing': {
       flyToward(d.landAt.x, 0.2, d.landAt.z, 15);
+      if (d.landRing) d.landRing.material.opacity = 0.3 + Math.sin(d.t * 12) * 0.25;
       if (pos.y < 0.6) {
         pos.y = 0;
+        if (d.landRing) { G.scene.remove(d.landRing); d.landRing.geometry.dispose(); d.landRing.material.dispose(); d.landRing = null; }
         d.state = 'prowl'; d.t = 0; d.pain = 0;
         setEnemyState(e, 'chase');
         // LANDING SLAM — the whole hall shudders
@@ -1002,6 +1064,11 @@ export function killEnemy(e, source = 'local', fromNet = false) {
   }
   if (G.net.role === 'host' && !fromNet) netSend({ t: 'edie', f: e.floor, id: e.id, by: source === 'local' ? 'host' : source });
 
+  // the dragon's death is an EVENT
+  if (e.cfg.dragon && onMyFloor(e)) {
+    G.shake = Math.max(G.shake || 0, 1.2);
+    if (G.net.role === 'solo') G.slowmo = 2.2;
+  }
   // slimes split apart when killed
   if (e.cfg.splitInto && isAuthority() && !fromNet && source !== 'none') {
     const fs2 = floorState(e.floor);

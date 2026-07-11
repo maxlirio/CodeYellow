@@ -277,3 +277,9 @@ button.orange-btn:hover { filter: brightness(1.15); }
 #sigSlot .icon { position: relative; }
 #sigSlot.charged { border-color: #ffcc44; box-shadow: 0 0 12px rgba(255,204,68,0.7); animation: sigpulse 0.9s infinite alternate; }
 @keyframes sigpulse { from { box-shadow: 0 0 6px rgba(255,204,68,0.4); } to { box-shadow: 0 0 16px rgba(255,204,68,0.9); } }
+
+/* ---- boss title card ---- */
+#bossCard { position: fixed; top: 26%; left: 0; right: 0; text-align: center; pointer-events: none; opacity: 0; transition: opacity 1.2s; z-index: 60; }
+#bossCard.show { opacity: 1; }
+#bossCard .bc-name { font-size: 64px; letter-spacing: 14px; color: #ffb347; text-shadow: 0 0 24px rgba(255, 80, 20, 0.8), 0 4px 12px #000; font-weight: bold; }
+#bossCard .bc-sub { font-size: 20px; letter-spacing: 10px; color: #d8c9a8; margin-top: 4px; text-shadow: 0 2px 8px #000; }
