@@ -647,7 +647,7 @@ function openCodex() {
   const dmg = effectiveDamage();
   const atkTime = effectiveAttackTime();
   const critCh = effectiveCrit();
-  const wfx = weaponHitEffects(dmg);
+  const wfx = weaponHitEffects(dmg) || {}; // null when the weapon carries no effects
   const w = G.inv.weapon;
   const rangedAtk = cls.ranged || w?.ranged;
   let html = '';
@@ -941,9 +941,21 @@ function setupInput() {
       tryAttack();
     }
   });
+  // trackpads fire dozens of tiny wheel events per swipe — accumulate and
+  // only step the selector once per real notch of scrolling
+  let wheelAccum = 0, wheelLastT = 0;
   addEventListener('wheel', (e) => {
-    if (machineState.on && G.mode === 'playing') cycleMachine(e.deltaY > 0 ? 1 : -1);
-    else if (buildState.on && G.mode === 'playing') cycleBuildPiece(e.deltaY > 0 ? 1 : -1);
+    if (G.mode !== 'playing' || (!machineState.on && !buildState.on)) { wheelAccum = 0; return; }
+    const now = performance.now();
+    if (now - wheelLastT > 250) wheelAccum = 0; // a new gesture starts clean
+    wheelLastT = now;
+    wheelAccum += e.deltaY;
+    while (Math.abs(wheelAccum) >= 90) {
+      const dir = wheelAccum > 0 ? 1 : -1;
+      if (machineState.on) cycleMachine(dir);
+      else cycleBuildPiece(dir);
+      wheelAccum -= dir * 90;
+    }
   }, { passive: true });
   document.addEventListener('pointerlockchange', () => {
     G.mouse.locked = document.pointerLockElement === canvas;

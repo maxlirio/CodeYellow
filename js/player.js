@@ -66,6 +66,7 @@ function attachHeldWeapon(obj, held, held2) {
     const m = makeWeaponModel(held);
     m.userData.heldWeapon = true;
     m.rotation.x = Math.PI / 2; // grip points along the forearm
+    if (held === 'bow') m.scale.setScalar(1.5); // the procedural bow is viewmodel-sized
     bone.add(m);
   }
 }
@@ -74,15 +75,18 @@ export function refreshEquipVisuals() {
   const p = G.player;
   if (!p) return;
   const w = G.inv.weapon;
-  const meshes = w?.held ? [] : equippedMeshes(p.classId);
+  // no rig mesh AND no held model (e.g. the ranger's procedural bow):
+  // teammates would see empty hands — hold the drop model instead
+  const heldName = w ? (w.held || (!w.mesh?.length ? w.model : null)) : null;
+  const meshes = heldName ? [] : equippedMeshes(p.classId);
   setEquipMeshes(p.obj, meshes);
-  attachHeldWeapon(p.obj, w?.held, w?.held2);
+  attachHeldWeapon(p.obj, heldName, w?.held2);
   setViewmodelWeapon(w?.model || WEAPON_TYPES[p.classId][0].model, w?.wtype || WEAPON_TYPES[p.classId][0].id, w?.verb, w?.sig);
   p.sigCharge = 0;
   refreshSigSlot();
   p.maxHp = effectiveMaxHp();
   p.hp = Math.min(p.hp, p.maxHp);
-  netSend({ t: 'equip', meshes, held: w?.held || null, held2: !!w?.held2 });
+  netSend({ t: 'equip', meshes, held: heldName, held2: !!w?.held2 });
   refreshHud();
 }
 
