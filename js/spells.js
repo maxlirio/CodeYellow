@@ -666,7 +666,9 @@ export function castSpell(slot, effectiveDamage) {
       break;
     }
     case 'lash': {
-      // GRAVITY LASH: bind yourself to a distant surface and perch there
+      // GRAVITY LASH: bind yourself to a wall — it BECOMES your floor.
+      // March the aim ray to the wall, remember which way the wall faces,
+      // and perch just off its surface so you never sink into the stone.
       const from = origin.clone().setY(origin.y + 1.5);
       let hit = null, hy = 0;
       for (let d = 2; d < sp.range; d += 0.5) {
@@ -676,11 +678,18 @@ export function castSpell(slot, effectiveDamage) {
       }
       if (!hit) { addMsg('Nothing to lash to.', 'bad'); p.mana += sp.mana; cooldowns[spellId] = 0.4; break; }
       sfx.dodge(); sfx.bolt();
-      const perchY = Math.max(groundHeightAt(hit.x, hit.z, hy) + 0.2, Math.min(hy, 7));
-      p.perch = { x: hit.x, y: perchY, z: hit.z, t: sp.dur };
-      drawLightning(from, new THREE.Vector3(hit.x, perchY + 1, hit.z));
-      spawnBurst(new THREE.Vector3(hit.x, perchY + 1, hit.z), 0xbb88ff, 16, 4, 0.13, 0.5);
-      addMsg('🧲 Lashed! SPACE to let go.', 'gold');
+      // the wall normal points back along the aim ray (flattened) — the
+      // direction your body will stick OUT from the surface
+      const n = new THREE.Vector3(-dir.x, 0, -dir.z).normalize();
+      // back off the surface by a body's width, and again while still blocked
+      let px2 = hit.x + n.x * 0.7, pz2 = hit.z + n.z * 0.7;
+      for (let i = 0; i < 4 && posBlocked(px2, pz2, Math.min(hy, 7)); i++) { px2 += n.x * 0.4; pz2 += n.z * 0.4; }
+      const perchY = Math.max(groundHeightAt(px2, pz2, hy) + 0.2, Math.min(hy, 7));
+      p.perch = { x: px2, y: perchY, z: pz2, t: sp.dur, n: { x: n.x, z: n.z } };
+      p.camPitch = 1.25; // crane up your body axis = out over the world below
+      drawLightning(from, new THREE.Vector3(px2, perchY + 1, pz2));
+      spawnBurst(new THREE.Vector3(px2, perchY + 1, pz2), 0xbb88ff, 16, 4, 0.13, 0.5);
+      addMsg('🧲 LASHED — the wall is your floor. SPACE to let go.', 'gold');
       break;
     }
     case 'trap': {

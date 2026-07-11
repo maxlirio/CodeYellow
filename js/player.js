@@ -726,12 +726,34 @@ export function tryInteract(onStairs, onShop, onHome) {
 }
 
 // ---------- first-person camera ----------
+const _qFrame = new THREE.Quaternion();
+const _qLook = new THREE.Quaternion();
+const _eul = new THREE.Euler();
+const _vUp = new THREE.Vector3();
+
 function updateCamera(dt, moving) {
   const p = G.player;
   const cam = G.camera;
   const bob = moving && p.dodgeT <= 0 ? Math.sin(p.bobT) * 0.055 : 0;
   cam.position.set(p.obj.position.x, p.obj.position.y + EYE + bob, p.obj.position.z);
-  cam.rotation.set(p.camPitch, p.camYaw, 0, 'YXZ');
+  // Gravity Lash: your feet grip the wall — the whole world rolls so the
+  // surface you're lashed to becomes your floor
+  p.lashBlend = p.lashBlend ?? 0;
+  const wantBlend = p.perch?.n ? 1 : 0;
+  p.lashBlend += (wantBlend - p.lashBlend) * Math.min(1, dt * 5);
+  if (p.lashBlend > 0.01 && (p.perch?.n || p.lastLashN)) {
+    const n = p.perch?.n || p.lastLashN;
+    if (p.perch?.n) p.lastLashN = n;
+    _vUp.set(n.x, 0, n.z).normalize();
+    _qFrame.setFromUnitVectors(new THREE.Vector3(0, 1, 0), _vUp);
+    _qFrame.slerp(new THREE.Quaternion(), 1 - p.lashBlend); // identity when not lashed
+    _eul.set(p.camPitch, p.camYaw, 0, 'YXZ');
+    _qLook.setFromEuler(_eul);
+    cam.quaternion.copy(_qFrame).multiply(_qLook);
+  } else {
+    cam.rotation.set(p.camPitch, p.camYaw, 0, 'YXZ');
+    p.lastLashN = null;
+  }
   // aim zoom
   const targetFov = p.aiming ? AIM_FOV : BASE_FOV;
   if (Math.abs(cam.fov - targetFov) > 0.1) {
