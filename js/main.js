@@ -636,7 +636,7 @@ function spellDetail(sp, dmg, p) {
     case 'charge': bits.push(`dash ${sp.dist}u forward — <b>${sd}</b> dmg and knockback to everything in your path`); break;
     case 'banner': bits.push(`plant a banner: +${Math.round((sp.dmgAura - 1) * 100)}% damage within ${sp.radius}u for ${sp.dur}s`); break;
     case 'hook': bits.push(`yank a foe (up to ${sp.range}u) to your feet — <b>${sd}</b> dmg, stun ${sp.stun}s`); break;
-    case 'lash': bits.push(`lash yourself to a surface up to ${sp.range}u away and perch there ${sp.dur}s`); break;
+    case 'lash': bits.push(`turns YOUR gravity toward the aimed surface (${sp.range}u) — you fall onto it and walk it; no mana regen + 2/s upkeep until released`); break;
     case 'trap': bits.push(`set a steel trap (max ${sp.max}): <b>${sd}</b> dmg and roots ${sp.root}s`); break;
     case 'freeze': bits.push(`freezes every foe within ${sp.radius}u of the mark for ${sp.dur}s`); break;
     case 'swap': bits.push(`teleport behind your mark (${sp.range}u); next strike deals double`); break;

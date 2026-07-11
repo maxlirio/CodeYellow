@@ -666,30 +666,21 @@ export function castSpell(slot, effectiveDamage) {
       break;
     }
     case 'lash': {
-      // GRAVITY LASH: bind yourself to a wall — it BECOMES your floor.
-      // March the aim ray to the wall, remember which way the wall faces,
-      // and perch just off its surface so you never sink into the stone.
+      // GRAVITY LASH: turn gravity toward whatever you pointed at.
+      // No teleport — you FALL onto the surface and the world rolls with you.
       const from = origin.clone().setY(origin.y + 1.5);
-      let hit = null, hy = 0;
+      let blocked = false;
       for (let d = 2; d < sp.range; d += 0.5) {
-        const px = from.x + dir.x * d, py = from.y + dir.y * d, pz = from.z + dir.z * d;
-        if (!hasLineOfSight(from.x, from.z, px, pz)) break; // stopped by a wall: perch there
-        hit = { x: px, z: pz }; hy = py;
+        const px = from.x + dir.x * d, pz = from.z + dir.z * d;
+        if (!hasLineOfSight(from.x, from.z, px, pz)) { blocked = true; break; }
       }
-      if (!hit) { addMsg('Nothing to lash to.', 'bad'); p.mana += sp.mana; cooldowns[spellId] = 0.4; break; }
+      if (!blocked) { addMsg('Nothing to lash to.', 'bad'); p.mana += sp.mana; cooldowns[spellId] = 0.4; break; }
       sfx.dodge(); sfx.bolt();
-      // the wall normal points back along the aim ray (flattened) — the
-      // direction your body will stick OUT from the surface
-      const n = new THREE.Vector3(-dir.x, 0, -dir.z).normalize();
-      // back off the surface by a body's width, and again while still blocked
-      let px2 = hit.x + n.x * 0.7, pz2 = hit.z + n.z * 0.7;
-      for (let i = 0; i < 4 && posBlocked(px2, pz2, Math.min(hy, 7)); i++) { px2 += n.x * 0.4; pz2 += n.z * 0.4; }
-      const perchY = Math.max(groundHeightAt(px2, pz2, hy) + 0.2, Math.min(hy, 7));
-      p.perch = { x: px2, y: perchY, z: pz2, t: sp.dur, n: { x: n.x, z: n.z } };
-      p.camPitch = 1.25; // crane up your body axis = out over the world below
-      drawLightning(from, new THREE.Vector3(px2, perchY + 1, pz2));
-      spawnBurst(new THREE.Vector3(px2, perchY + 1, pz2), 0xbb88ff, 16, 4, 0.13, 0.5);
-      addMsg('🧲 LASHED — the wall is your floor. SPACE to let go.', 'gold');
+      const h = new THREE.Vector3(dir.x, 0, dir.z).normalize();
+      p.lash = { g: { x: h.x, z: h.z }, vel: 0, grounded: false };
+      p.vy = 0;
+      drawLightning(from, from.clone().add(h.clone().multiplyScalar(6)));
+      addMsg('🧲 GRAVITY TURNS — you fall toward it. Mana burns until you release (SPACE).', 'gold');
       break;
     }
     case 'trap': {

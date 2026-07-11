@@ -92,6 +92,7 @@ export function refreshEquipVisuals() {
 
 export function resetPlayerForFloor() {
   const p = G.player;
+  p.lash = null;
   p.obj.position.set(G.grid.spawn.x, 0, G.grid.spawn.z);
   p.obj.position.y = groundHeightAt(G.grid.spawn.x, G.grid.spawn.z, 0);
   // never spawn embedded in geometry
@@ -413,7 +414,7 @@ export function updatePlayer(dt) {
     return;
   }
 
-  p.mana = Math.min(p.maxMana, p.mana + effectiveManaRegen() * dt);
+  if (!p.lash) p.mana = Math.min(p.maxMana, p.mana + effectiveManaRegen() * dt);
   p.aiming = !!(G.keys['ShiftLeft'] || G.keys['ShiftRight']);
   if (G.spectate) { spectateBot(p, dt); p.obj.visible = true; p.anim.update(dt); }
 
@@ -431,23 +432,75 @@ export function updatePlayer(dt) {
     return;
   }
 
-  // Gravity Lash: perched on a distant surface — hold position, aim freely
-  if (p.perch) {
-    p.perch.t -= dt;
-    p.obj.position.set(p.perch.x, p.perch.y, p.perch.z);
-    if (p.attacking) {
-      p.attackT += dt;
-      const atkTime = effectiveAttackTime();
-      if (!p.attackFired && p.attackT >= atkTime * 0.45) { p.attackFired = true; doAttackHit(); }
-      if (p.attackT >= atkTime) p.attacking = false;
+  // GRAVITY LASH: gravity now points at the surface you marked. You FALL
+  // onto it, land, and walk its face — the world has turned, for you alone.
+  if (p.lash) {
+    const g = p.lash.g;
+    const pos = p.obj.position;
+    // the turned world burns mana: no regen, steady upkeep, ends when dry
+    p.mana -= 2 * dt;
+    if (p.mana <= 0) { p.mana = 0; releaseLash(p); }
+    if (p.lash) {
+      if (!p.lash.grounded) {
+        // falling ALONG the new gravity
+        p.lash.vel = Math.min(18, (p.lash.vel || 0) + 24 * dt);
+        const step = p.lash.vel * dt;
+        const bx = pos.x, bz = pos.z;
+        moveWithCollision(pos, g.x * step, g.z * step, 0.55, { y: pos.y });
+        if (Math.hypot(pos.x - bx, pos.z - bz) < step * 0.4) {
+          p.lash.grounded = true;
+          p.lash.vel = 0;
+          sfx.hit();
+          addMsg('🧲 You land on the surface — WASD walks it, SPACE lets go.');
+        }
+      } else {
+        // walking the wall face: camera-look projected onto the surface plane
+        const k = G.keys;
+        let ix = 0, iz = 0;
+        if (k['KeyW']) iz -= 1;
+        if (k['KeyS']) iz += 1;
+        if (k['KeyA']) ix -= 1;
+        if (k['KeyD']) ix += 1;
+        if (ix || iz) {
+          G.camera.getWorldDirection(_lashFwd);
+          _lashUp.set(-g.x, 0, -g.z);
+          _lashRight.crossVectors(_lashFwd, _lashUp).normalize();
+          _lashMove.copy(_lashFwd).multiplyScalar(-iz).addScaledVector(_lashRight, ix);
+          // strip the component INTO the wall, keep the surface-plane part
+          const into = _lashMove.x * g.x + _lashMove.z * g.z;
+          _lashMove.x -= g.x * into; _lashMove.z -= g.z * into;
+          if (_lashMove.lengthSq() > 0.001) {
+            _lashMove.normalize();
+            const sp = effectiveSpeed() * 0.8;
+            moveWithCollision(pos, _lashMove.x * sp * dt, _lashMove.z * sp * dt, 0.55, { y: pos.y });
+            const ny = Math.max(0.3, Math.min(11, pos.y + _lashMove.y * sp * dt));
+            // climb only while the wall is still there beside you
+            const wx = pos.x, wz = pos.z;
+            moveWithCollision(pos, g.x * 0.4, g.z * 0.4, 0.55, { y: ny });
+            const wallStillThere = Math.hypot(pos.x - wx, pos.z - wz) < 0.15;
+            pos.x = wx; pos.z = wz;
+            if (wallStillThere) pos.y = ny;
+            p.bobT += dt * sp * 1.35;
+          }
+        }
+        // stay pressed against the surface
+        moveWithCollision(pos, g.x * 1.2 * dt, g.z * 1.2 * dt, 0.55, { y: pos.y });
+      }
+      if (p.attacking) {
+        p.attackT += dt;
+        const atkTime = effectiveAttackTime();
+        if (!p.attackFired && p.attackT >= atkTime * 0.45) { p.attackFired = true; doAttackHit(); }
+        if (p.attackT >= atkTime) p.attacking = false;
+      }
+      showPrompt(`<b>SPACE</b> — Release (${Math.ceil(p.mana)} mana left)`);
+      p.yaw = p.camYaw + Math.PI;
+      p.obj.rotation.y = p.yaw;
+      updateCamera(dt, false);
+      updateCrosshairHover();
+      p.lastPosSend += dt;
+      if (p.lastPosSend > 0.09) sendPos();
+      return;
     }
-    showPrompt('<b>SPACE</b> — Let go');
-    if (p.perch.t <= 0) { p.perch = null; hidePrompt(); }
-    updateCamera(dt, false);
-    updateCrosshairHover();
-    p.lastPosSend += dt;
-    if (p.lastPosSend > 0.09) sendPos();
-    return;
   }
   if (p.swapCritT > 0) p.swapCritT -= dt;
   // Ember Trail: burning footprints
@@ -664,7 +717,7 @@ export function tryAttack() {
 export function tryDodge() {
   const p = G.player;
   if (!p || p.dead || G.mode !== 'playing') return;
-  if (p.perch) { p.perch = null; hidePrompt(); p.vy = 2; return; }
+  if (p.lash) { releaseLash(p); return; }
   if (p.rope) { releaseRope(1.3); return; }
   const ground = groundHeightAt(p.obj.position.x, p.obj.position.z, p.obj.position.y);
   if (p.obj.position.y <= ground + 0.08) {
@@ -762,6 +815,19 @@ export function tryInteract(onStairs, onShop, onHome) {
 }
 
 // ---------- first-person camera ----------
+const _lashFwd = new THREE.Vector3();
+const _lashUp = new THREE.Vector3();
+const _lashRight = new THREE.Vector3();
+const _lashMove = new THREE.Vector3();
+
+export function releaseLash(p) {
+  if (!p.lash) return;
+  p.lash = null;
+  p.vy = 0;
+  hidePrompt();
+  addMsg('The world rights itself.');
+}
+
 const _specMid = new THREE.Vector3();
 const _qFrame = new THREE.Quaternion();
 const _qLook = new THREE.Quaternion();
@@ -804,11 +870,12 @@ function updateCamera(dt, moving) {
   // Gravity Lash: your feet grip the wall — the whole world rolls so the
   // surface you're lashed to becomes your floor
   p.lashBlend = p.lashBlend ?? 0;
-  const wantBlend = p.perch?.n ? 1 : 0;
-  p.lashBlend += (wantBlend - p.lashBlend) * Math.min(1, dt * 5);
-  if (p.lashBlend > 0.01 && (p.perch?.n || p.lastLashN)) {
-    const n = p.perch?.n || p.lastLashN;
-    if (p.perch?.n) p.lastLashN = n;
+  const lashN = p.lash ? { x: -p.lash.g.x, z: -p.lash.g.z } : null;
+  const wantBlend = lashN ? 1 : 0;
+  p.lashBlend += (wantBlend - p.lashBlend) * Math.min(1, dt * 3.5);
+  if (p.lashBlend > 0.01 && (lashN || p.lastLashN)) {
+    const n = lashN || p.lastLashN;
+    if (lashN) p.lastLashN = n;
     _vUp.set(n.x, 0, n.z).normalize();
     _qFrame.setFromUnitVectors(new THREE.Vector3(0, 1, 0), _vUp);
     _qFrame.slerp(new THREE.Quaternion(), 1 - p.lashBlend); // identity when not lashed
