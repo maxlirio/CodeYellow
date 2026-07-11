@@ -9,7 +9,7 @@ import { WEAPON_MESHES, CAPE_COLORS } from './config.js';
 const CHAR_MODELS = ['Knight', 'Mage', 'Rogue', 'Rogue_Hooded', 'Barbarian'];
 const ENEMY_MODELS = ['Skeleton_Minion', 'Skeleton_Warrior', 'Skeleton_Rogue', 'Skeleton_Mage'];
 // Quaternius Ultimate Monsters (CC0) — same low-poly big-head style as KayKit
-const MONSTER_MODELS = ['Orc', 'Goblin', 'Ogre', 'Imp', 'MushroomKing', 'Slime', 'Glub', 'Drake', 'Dragon', 'Black_Dragon'];
+const MONSTER_MODELS = ['Orc', 'Goblin', 'Ogre', 'Imp', 'MushroomKing', 'Slime', 'Glub', 'Drake', 'Dragon', 'Red_Dragon'];
 const WEAPON2_MODELS = [
   'Sword', 'Sword_big', 'Sword_Golden', 'Sword_big_Golden', 'Sword_2', 'Claymore',
   'Axe', 'Axe_Double', 'Axe_small', 'Axe_Double_Golden', 'Hammer_Double', 'Hammer_Double_Golden', 'Hammer_Small',

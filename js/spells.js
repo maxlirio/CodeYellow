@@ -68,10 +68,10 @@ export function dealSpells(classId) {
 }
 
 // merchant's Spell Tome: swap a random slot for an unused spell from the pool
-export function rerollSpell() {
+export function rerollSpell(slot = null) {
   const pool = G.player.cls.spellPool.filter(s => !G.run.spells.includes(s));
   if (!pool.length) return null;
-  const slot = Math.floor(Math.random() * G.run.spells.length);
+  if (slot === null) slot = Math.floor(Math.random() * G.run.spells.length);
   const oldId = G.run.spells[slot];
   const newId = pool[Math.floor(Math.random() * pool.length)];
   G.run.spells[slot] = newId;

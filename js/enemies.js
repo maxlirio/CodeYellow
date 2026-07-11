@@ -35,20 +35,23 @@ export function spawnEnemy(fs, type, x, z, { y = 0, elite = false, id = null } =
   obj.position.set(x, y, z);
   const scale = cfg.scale * (elite ? 1.28 : 1);
   obj.scale.setScalar(scale);
+  // models whose pose dips below their origin get lifted clear of the floor
+  if (cfg.meshY) for (const c of [...obj.children]) c.position.y += cfg.meshY / scale; // meshY is world units
   if (cfg.tint) tintCharacter(obj, cfg.tint);
   if (cfg.ghost) tintCharacter(obj, 0xcfe8ff, { ghost: true });
   if (elite) tintCharacter(obj, 0xffcc66, { emissive: 0x662200 });
   if (cfg.dragon) {
-    // a black dragon in a dark lair needs help to read: smoldering ember
-    // sheen on her scales plus a strong carried firelight
+    // ember sheen + carried firelight so she reads in a dark lair; the
+    // model's baked flame-burst helper mesh stays hidden
     obj.traverse((n) => {
       if (!n.isMesh && !n.isSkinnedMesh) return;
+      if (n.material?.name === 'BURST' || n.material?.name === 'burst_new') { n.visible = false; return; }
       if (n.material.isMeshBasicMaterial) return;
       n.material = n.material.clone();
-      if (n.material.emissive) { n.material.emissive.setHex(0x461303); n.material.emissiveIntensity = 0.5; }
+      if (n.material.emissive) { n.material.emissive.setHex(0x3a0a03); n.material.emissiveIntensity = 0.45; }
     });
-    const glow = new THREE.PointLight(0xff7733, 3.2, 44);
-    glow.position.set(0, 5, 0);
+    const glow = new THREE.PointLight(0xff7733, 2.6, 40);
+    glow.position.set(0, 4, 0);
     obj.add(glow);
   }
   // snipers visibly carry their crossbow
@@ -893,6 +896,8 @@ function simulateDragon(e, fs, players, dt, mine) {
     if (d.summonT <= 0) { d.summonT = 16; summonImps(e, fs, 2); }
   }
 
+  // wings: lazy beats on the prowl, full power in the air
+  if (e.anim.current) e.anim.current.timeScale = pos.y > 2 ? 1.25 : d.state === 'sleep' ? 0.3 : 0.55;
   if (mine && d.state !== 'sleep') updateBossBar(e.hp / e.maxHp);
   let dyw = e.yaw - e.obj.rotation.y;
   while (dyw > Math.PI) dyw -= Math.PI * 2;

@@ -327,7 +327,7 @@ function startRun(seed, mode = 'campaign') {
   G.run = { gold: mode === 'horde' ? 60 : 0, potions: 1, keys: 0, atkBonus: 0, hpBonus: 0, speedBonus: 0, speedBuys: 0, level: 1, xp: 0, kills: 0, chests: 0, startTime: performance.now(), buys: {}, deepest: 0 };
   resetCooldowns();
   stopHorde();
-  hide('menu'); hide('lobby'); hide('merchant'); hide('dead'); hide('victory'); hide('inventory'); hide('stairsDialog'); hide('tavernBoard'); hide('modeDialog');
+  hide('menu'); hide('lobby'); hide('merchant'); hide('dead'); hide('victory'); hide('inventory'); hide('stairsDialog'); hide('tavernBoard'); hide('modeDialog'); hide('tomeDialog');
   invOpen = false;
   setHidden('hud', false);
 
@@ -799,13 +799,29 @@ function buyItem(id, price) {
     return;
   }
   if (id === 'tome') {
-    const r = rerollSpell();
-    if (!r) { addMsg('You already know every spell of your school.', 'bad'); return; }
-    G.run.gold -= price;
-    G.run.buys[id] = (G.run.buys[id] || 0) + 1;
-    addMsg(`The tome unbinds <b>${r.old}</b> and teaches you ${r.icon} <b>${r.now}</b>!`, 'gold');
-    sfx.levelup();
-    refreshHud();
+    const pool = G.player.cls.spellPool.filter(s => !G.run.spells.includes(s));
+    if (!pool.length) { addMsg('You already know every spell of your school.', 'bad'); return; }
+    // choose which spell the tome unbinds
+    hide('merchant');
+    (G.run.spells || []).forEach((sid, i) => {
+      const b = $(`btnTome${i}`);
+      if (!b) return;
+      const sp = SPELLS[sid];
+      b.textContent = `${sp.icon} ${sp.name} — unbind this`;
+      b.onclick = () => {
+        hide('tomeDialog');
+        const r = rerollSpell(i);
+        G.run.gold -= price;
+        G.run.buys[id] = (G.run.buys[id] || 0) + 1;
+        addMsg(`The tome unbinds <b>${r.old}</b> and teaches you ${r.icon} <b>${r.now}</b>!`, 'gold');
+        sfx.levelup();
+        refreshHud();
+        G.mode = 'playing';
+        lockPointer();
+      };
+    });
+    $('btnTomeCancel').onclick = () => { hide('tomeDialog'); G.mode = 'playing'; lockPointer(); };
+    show('tomeDialog');
     return;
   }
   if (id === 'reforge' || id === 'offhand') {
