@@ -437,9 +437,9 @@ export function updatePlayer(dt) {
   if (p.lash) {
     const g = p.lash.g;
     const pos = p.obj.position;
-    // the turned world burns mana: no regen, steady upkeep, ends when dry
-    p.mana -= 2 * dt;
-    if (p.mana <= 0) { p.mana = 0; releaseLash(p); }
+    // the turned world grants no mana: regen is paused, and if your
+    // casting drains the pool to nothing, gravity reclaims you
+    if (p.mana <= 0.01) releaseLash(p);
     if (p.lash) {
       if (!p.lash.grounded) {
         p.lash.vel = Math.min(18, (p.lash.vel || 0) + 24 * dt);
@@ -528,7 +528,7 @@ export function updatePlayer(dt) {
         if (!p.attackFired && p.attackT >= atkTime * 0.45) { p.attackFired = true; doAttackHit(); }
         if (p.attackT >= atkTime) p.attacking = false;
       }
-      showPrompt(`<b>SPACE</b> — Release (${Math.ceil(p.mana)} mana left)`);
+      showPrompt('<b>SPACE</b> — Release · no mana regen while the world is turned');
       p.yaw = p.camYaw + Math.PI;
       p.obj.rotation.y = p.yaw;
       updateCamera(dt, false);

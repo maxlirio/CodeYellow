@@ -291,7 +291,7 @@ export function castSpell(slot, effectiveDamage) {
   const spellId = (G.run.spells || [])[slot];
   const sp = SPELLS[spellId];
   if (!sp) return;
-  if (cooldowns[spellId] > 0) return;
+  if (cooldowns[spellId] > 0 && !(sp.type === 'lash' && p.lash)) return;
   if (p.mana < sp.mana) { addMsg('Not enough mana!', 'bad'); return; }
   if (sp.arrows && (G.run.arrows || 0) < sp.arrows) { addMsg(`Needs ${sp.arrows} arrows!`, 'bad'); return; }
   if (sp.arrows) { G.run.arrows -= sp.arrows; refreshHud(); }
@@ -678,18 +678,24 @@ export function castSpell(slot, effectiveDamage) {
         addMsg('🧲 GRAVITY INVERTS — you fall into the sky. Mana burns until you release (SPACE).', 'gold');
         break;
       }
+      // the ray sees BOTH dungeon walls and solid structures (houses, keeps)
       let blocked = false;
       for (let d = 2; d < sp.range; d += 0.5) {
         const px = from.x + dir.x * d, pz = from.z + dir.z * d;
-        if (!hasLineOfSight(from.x, from.z, px, pz)) { blocked = true; break; }
+        const py = Math.max(0.3, from.y + dir.y * d);
+        if (!hasLineOfSight(from.x, from.z, px, pz) || posBlocked(px, pz, py)) { blocked = true; break; }
       }
       if (!blocked) { addMsg('Nothing to lash to.', 'bad'); p.mana += sp.mana; cooldowns[spellId] = 0.4; break; }
       sfx.dodge(); sfx.bolt();
-      const h = new THREE.Vector3(dir.x, 0, dir.z).normalize();
-      p.lash = { g: { x: h.x, z: h.z }, vel: 0, grounded: false };
+      // walls are axis-aligned: snap gravity PERPENDICULAR to the face you hit,
+      // or an oblique aim would leave you sliding along the surface forever
+      const g2 = Math.abs(dir.x) > Math.abs(dir.z)
+        ? { x: Math.sign(dir.x), z: 0 }
+        : { x: 0, z: Math.sign(dir.z) };
+      p.lash = { g: g2, vel: 0, grounded: false };
       p.vy = 0;
-      drawLightning(from, from.clone().add(h.clone().multiplyScalar(6)));
-      addMsg('🧲 GRAVITY TURNS — you fall toward it. Mana burns until you release (SPACE).', 'gold');
+      drawLightning(from, from.clone().add(new THREE.Vector3(g2.x * 6, 0, g2.z * 6)));
+      addMsg('🧲 GRAVITY TURNS — you fall toward it. No mana returns until you do (SPACE).', 'gold');
       break;
     }
     case 'trap': {
