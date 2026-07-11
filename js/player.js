@@ -579,7 +579,7 @@ function doAttackHit() {
     const dx = e.obj.position.x - p.obj.position.x;
     const dz = e.obj.position.z - p.obj.position.z;
     const d = Math.hypot(dx, dz);
-    if (d > effectiveAttackRange() * (e.boss ? 1.4 : 1)) continue;
+    if (d - (e.cfg.bodyR || 0) > effectiveAttackRange() * (e.boss ? 1.4 : 1)) continue;
     if (Math.abs(e.obj.position.y - p.obj.position.y) > 2.2) continue;
     let ang = Math.atan2(dx, dz) - p.yaw;
     while (ang > Math.PI) ang -= Math.PI * 2;

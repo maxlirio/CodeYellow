@@ -477,7 +477,7 @@ export function generateFloorData(seedStr, floor) {
     }
   }
   if (isBossFloor) {
-    enemySpawns.push({ type: bossType, x: exitRoom.cx * CELL, z: exitRoom.cy * CELL, y: bossType === 'dragon' ? 6 : 0 });
+    enemySpawns.push({ type: bossType, x: exitRoom.cx * CELL, z: exitRoom.cy * CELL, y: 0 });
   }
   // goblins hunt in packs of three
   const packSpawns = [];

@@ -502,13 +502,22 @@ function simulateEnemy(e, fs, players, dt, mine) {
 }
 
 // ================= EMBERWING: the dragon boss =================
-// Not a chase-bot: it circles overhead, telegraphs breath runs, volleys fire,
-// dives to melee when it smells blood, blasts clustered players away with wing
-// gusts, and hunts whoever hurts it most. Three phases by health.
+// A D&D dragon, not a hover-bot. She fights ON THE GROUND — prowling with
+// real weight (turn-limited, so you can flank her), swiping with claws,
+// lunging to bite, sweeping her tail at anyone behind her, buffeting the
+// crowd with her wings, and raking the floor with a sweeping breath cone.
+// She takes wing only with purpose — at health thresholds or when melee
+// punishes her too hard — strafes with fire, then CRASHES back down.
+// She reads your position and answers it; nothing runs on a fixed script.
 function simulateDragon(e, fs, players, dt, mine) {
   if (!e.ds) {
-    e.ds = { state: 'sleep', t: 0, orbitA: Math.random() * 6.28, atkCd: 3, home: { x: e.obj.position.x, z: e.obj.position.z }, summonT: 12, breath: null, landT: 0 };
-    e.obj.position.y = 6;
+    e.ds = {
+      state: 'sleep', t: 0, atkCd: 2, breathCd: 6, gustCd: 4,
+      home: { x: e.obj.position.x, z: e.obj.position.z },
+      orbitA: Math.random() * 6.28, flew: { 0.75: false, 0.45: false, 0.2: false },
+      pain: 0, summonT: 14, breath: null, sweep: null, lungeV: null,
+    };
+    e.obj.position.y = 0;
   }
   const d = e.ds;
   d.t += dt;
@@ -521,32 +530,101 @@ function simulateDragon(e, fs, players, dt, mine) {
     if (e.poisonTick <= 0) {
       e.poisonTick = 0.5;
       damageEnemy(e, Math.max(1, Math.round(e.poisonDps * 0.5)), false, true, e.poisonBy);
-      if (mine) spawnBurst(e.obj.position.clone().setY(e.obj.position.y + 1.2), 0x66ff44, 4, 2, 0.08, 0.3);
+      if (mine) spawnBurst(e.obj.position.clone().setY(e.obj.position.y + 3), 0x66ff44, 4, 2, 0.08, 0.3);
       if (e.state === 'dead') return;
     }
   }
-  const phase = e.hp > e.maxHp * 0.66 ? 1 : e.hp > e.maxHp * 0.33 ? 2 : 3;
+  d.pain = Math.max(0, d.pain - dt * (e.maxHp * 0.02)); // melee pressure decays
+  const frac = e.hp / e.maxHp;
+  const enraged = frac < 0.25;
+  const pos = e.obj.position;
 
-  // pick the target it hates most (threat decays so it re-evaluates)
+  // hunt whoever it hates most (threat decays so it re-evaluates)
   if (e.threat) for (const k of Object.keys(e.threat)) e.threat[k] *= Math.pow(0.85, dt);
   let target = null, best = -1;
   for (const p of players) {
     if (p.minion) continue;
-    const th = (e.threat?.[p.id] || 0) + 1 / (1 + Math.hypot(p.pos.x - e.obj.position.x, p.pos.z - e.obj.position.z));
+    const th = (e.threat?.[p.id] || 0) + 1 / (1 + Math.hypot(p.pos.x - pos.x, p.pos.z - pos.z));
     if (th > best) { best = th; target = p; }
   }
   if (!target && players.length) target = players[0];
+  const td = target ? Math.hypot(target.pos.x - pos.x, target.pos.z - pos.z) : 999;
 
-  const pos = e.obj.position;
-  const faceTarget = () => { if (target) e.yaw = Math.atan2(target.pos.x - pos.x, target.pos.z - pos.z); };
-  const flyToward = (tx, ty, tz, sp) => {
-    const dx = tx - pos.x, dy = ty - pos.y, dz = tz - pos.z;
-    const dist = Math.hypot(dx, dy, dz) || 0.001;
-    const step = Math.min(dist, sp * dt);
-    pos.x += (dx / dist) * step; pos.y += (dy / dist) * step; pos.z += (dz / dist) * step;
+  // heavy body: she turns with weight — flanking is real counterplay
+  const turnTo = (tx, tz, rate) => {
+    const want = Math.atan2(tx - pos.x, tz - pos.z);
+    let dy = want - e.yaw;
+    while (dy > Math.PI) dy -= Math.PI * 2;
+    while (dy < -Math.PI) dy += Math.PI * 2;
+    const step = Math.min(Math.abs(dy), rate * dt);
+    e.yaw += Math.sign(dy) * step;
+    return Math.abs(dy);
   };
+  const angleTo = (px, pz) => {
+    let a = Math.atan2(px - pos.x, pz - pos.z) - e.yaw;
+    while (a > Math.PI) a -= Math.PI * 2;
+    while (a < -Math.PI) a += Math.PI * 2;
+    return a;
+  };
+  const groundMove = (tx, tz, sp) => {
+    const dx = tx - pos.x, dz = tz - pos.z;
+    const dist = Math.hypot(dx, dz) || 0.001;
+    const step = Math.min(dist, sp * e.slowMult * dt);
+    const nx = pos.x + (dx / dist) * step, nz = pos.z + (dz / dist) * step;
+    const cx = Math.round(nx / 4), cy = Math.round(nz / 4);
+    if (cx > 0 && cy > 0 && cx < fs.grid.w && cy < fs.grid.h && fs.grid.cells[cy * fs.grid.w + cx] !== 0) {
+      pos.x = nx; pos.z = nz;
+    }
+  };
+  const flyToward = (tx, ty, tz, sp) => {
+    const dx = tx - pos.x, dy2 = ty - pos.y, dz = tz - pos.z;
+    const dist = Math.hypot(dx, dy2, dz) || 0.001;
+    const step = Math.min(dist, sp * dt);
+    pos.x += (dx / dist) * step; pos.y += (dy2 / dist) * step; pos.z += (dz / dist) * step;
+  };
+  const hitPlayersWithin = (r, dmg2, kbF, fxExtra) => {
+    for (const p of players) {
+      const pd = Math.hypot(p.pos.x - pos.x, p.pos.z - pos.z);
+      if (pd > r || p.pos.y > 4) continue;
+      const kb = kbF ? { x: (p.pos.x - pos.x) / Math.max(0.1, pd) * kbF, z: (p.pos.z - pos.z) / Math.max(0.1, pd) * kbF } : null;
+      const fx = kb ? { kb, ...(fxExtra || {}) } : fxExtra || null;
+      if (p.minion) damageMinion(p.minion, dmg2);
+      else if (p.id === 'me') damageLocalPlayer(dmg2, fx);
+      else netSend({ t: 'phit', target: p.id, dmg: dmg2, fx });
+    }
+  };
+  // she wades through fortifications like they are furniture
+  if (d.state !== 'sleep' && Math.random() < dt * 2) {
+    const w = wallAt(e.floor, Math.round(pos.x / 4), Math.round(pos.z / 4));
+    if (w) damageWall(w, 60);
+  }
 
-  // active breath run: flames rake along the telegraphed line
+  // ---- active grounded breath sweep: a cone raking across her front arc ----
+  if (d.sweep) {
+    const s = d.sweep;
+    s.t += dt;
+    if (s.t >= 0 && s.t < 1.6) {
+      s.tick -= dt;
+      if (s.tick <= 0) {
+        s.tick = 0.11;
+        const prog = s.t / 1.6;
+        const a = s.a0 + (s.a1 - s.a0) * prog; // sweeps across her front
+        for (let r = 5; r <= 16; r += 3.2) {
+          const fx2 = pos.x + Math.sin(e.yaw + a) * r, fz2 = pos.z + Math.cos(e.yaw + a) * r;
+          if (mine) spawnBurst(new THREE.Vector3(fx2, 0.8, fz2), 0xff5511, 8, 4, 0.14, 0.45);
+          if (Math.random() < 0.4) netSend({ t: 'fx', f: e.floor, x: fx2, y: 0.8, z: fz2, color: 0xff5511 });
+          for (const p of players) {
+            if (Math.hypot(p.pos.x - fx2, p.pos.z - fz2) < 2.4 && p.pos.y < 3) {
+              if (p.minion) damageMinion(p.minion, 8);
+              else if (p.id === 'me') damageLocalPlayer(8, { poison: { dps: 4, dur: 2 } });
+              else netSend({ t: 'phit', target: p.id, dmg: 8, fx: { poison: { dps: 4, dur: 2 } } });
+            }
+          }
+        }
+      }
+    } else if (s.t >= 1.6) d.sweep = null;
+  }
+  // ---- flight breath run (line of fire along the strafe) ----
   if (d.breath) {
     const b = d.breath;
     b.t += dt;
@@ -559,170 +637,273 @@ function simulateDragon(e, fs, players, dt, mine) {
         if (mine) spawnBurst(new THREE.Vector3(fx2, 0.8, fz2), 0xff5511, 14, 5, 0.16, 0.5);
         netSend({ t: 'fx', f: e.floor, x: fx2, y: 0.8, z: fz2, color: 0xff5511, big: 1 });
         for (const p of players) {
-          if (Math.hypot(p.pos.x - fx2, p.pos.z - fz2) < 2.2 && p.pos.y < 2.5) {
-            if (p.minion) damageMinion(p.minion, Math.round(e.dmg * 0.7));
-            else if (p.id === 'me') damageLocalPlayer(Math.round(e.dmg * 0.7), { poison: { dps: 4, dur: 2 } });
-            else netSend({ t: 'phit', target: p.id, dmg: Math.round(e.dmg * 0.7), fx: { poison: { dps: 4, dur: 2 } } });
+          if (Math.hypot(p.pos.x - fx2, p.pos.z - fz2) < 2.4 && p.pos.y < 3) {
+            if (p.minion) damageMinion(p.minion, 16);
+            else if (p.id === 'me') damageLocalPlayer(16, { poison: { dps: 4, dur: 2 } });
+            else netSend({ t: 'phit', target: p.id, dmg: 16, fx: { poison: { dps: 4, dur: 2 } } });
           }
         }
       }
     } else if (b.t >= 1.4) d.breath = null;
   }
 
+  const spd = enraged ? 1.35 : 1;
   switch (d.state) {
     case 'sleep': {
-      if (target && Math.hypot(target.pos.x - pos.x, target.pos.z - pos.z) < e.cfg.aggro) {
-        d.state = 'circle';
-        setEnemyState(e, 'chase');
-        if (mine) { sfx.bossroar(); addMsg('EMBERWING THE UNDYING takes wing!', 'bad'); }
+      if (target && td < e.cfg.aggro) {
+        d.state = 'wake'; d.t = 0;
+        setEnemyState(e, 'idle');
+        if (mine) { sfx.bossroar(); addMsg('The mountain of scales STIRS…', 'bad'); }
         showBossBar(e.cfg.bossName);
       }
       break;
     }
+    case 'wake': {
+      turnTo(target?.pos.x ?? pos.x, target?.pos.z ?? pos.z, 1.2);
+      if (d.t > 1.4) {
+        d.state = 'prowl';
+        setEnemyState(e, 'chase');
+        if (mine) { sfx.bossroar(); addMsg('EMBERWING THE UNDYING has awoken!', 'bad'); }
+        hitPlayersWithin(8, 6, 12); // waking wing-snap shoves everyone back
+        netSend({ t: 'fx', f: e.floor, x: pos.x, y: 2, z: pos.z, color: 0xffcc88, big: 1 });
+      }
+      break;
+    }
+    case 'prowl': {
+      if (!target) { setEnemyState(e, 'idle'); break; }
+      const facing = turnTo(target.pos.x, target.pos.z, enraged ? 2.6 : 1.9);
+      // stalk forward when roughly facing the prey
+      if (facing < 1.0 && td > 7.5) groundMove(target.pos.x, target.pos.z, e.cfg.speed * spd);
+      pos.y += (groundHeightAt(pos.x, pos.z, pos.y, fs.grid) - pos.y) * Math.min(1, dt * 6);
+
+      // someone carving up her flanks from behind? tail answer.
+      d.atkCd -= dt * spd;
+      d.breathCd -= dt;
+      d.gustCd -= dt;
+      let rear = null;
+      for (const p of players) {
+        if (p.minion) continue;
+        const pd = Math.hypot(p.pos.x - pos.x, p.pos.z - pos.z);
+        if (pd < 9 && Math.abs(angleTo(p.pos.x, p.pos.z)) > 2.1) { rear = p; break; }
+      }
+      if (d.atkCd <= 0) {
+        if (rear && Math.random() < 0.7) {
+          // TAIL SWEEP: a spinning lash at everything close
+          d.state = 'tailsweep'; d.t = 0;
+          setEnemyState(e, 'attack');
+          if (mine) addMsg('🐉 Her tail whips around!', 'bad');
+        } else if (td < 8 + (e.cfg.bodyR || 0)) {
+          // CLAW SWIPE
+          d.state = 'claw'; d.t = 0;
+          setEnemyState(e, 'attack');
+        } else if (td < 18 && facing < 0.5) {
+          // LUNGING BITE: rear back, then explode forward
+          d.state = 'lungewind'; d.t = 0;
+          setEnemyState(e, 'idle');
+          if (mine) addMsg('🐉 She coils to lunge—', 'bad');
+        } else if (td <= 26 && facing < 0.7) {
+          // spit fire while closing
+          const from = pos.clone().setY(pos.y + 4.5);
+          const to = new THREE.Vector3(target.pos.x, target.pos.y + 1.2, target.pos.z);
+          const dir = to.sub(from).normalize();
+          const bolt = { x: from.x + dir.x * 3, y: from.y, z: from.z + dir.z * 3, dirX: dir.x, dirY: dir.y, dirZ: dir.z, speed: 17, dmg: 18, owner: 'enemy', color: 0xff6622, vis: 'fireball', size: 1.5 };
+          if (mine) { spawnBolt(bolt); sfx.bolt(); }
+          netSend({ t: 'ebolt', f: e.floor, b: bolt });
+          setEnemyState(e, 'attack');
+        }
+        d.atkCd = enraged ? 1.1 : 1.7;
+      }
+      // wing buffet when they crowd her chest
+      if (d.gustCd <= 0) {
+        let close = 0;
+        for (const p of players) if (!p.minion && Math.hypot(p.pos.x - pos.x, p.pos.z - pos.z) < 7) close++;
+        if (close >= 1 && Math.random() < 0.5) {
+          setEnemyState(e, 'attack');
+          if (mine) { spawnBurst(pos.clone().setY(3), 0xffcc88, 44, 11, 0.2, 0.6); sfx.bossroar(); addMsg('💨 Wing buffet!', 'bad'); }
+          netSend({ t: 'fx', f: e.floor, x: pos.x, y: 3, z: pos.z, color: 0xffcc88, big: 1 });
+          hitPlayersWithin(8.5, 13, 17);
+        }
+        d.gustCd = 5;
+      }
+      // grounded breath: rear up and RAKE the floor across her front
+      if (d.breathCd <= 0 && td > 7 && td < 22 && facing < 0.6) {
+        d.state = 'rearup'; d.t = 0;
+        setEnemyState(e, 'idle');
+        if (mine) { sfx.bossroar(); addMsg('🔥 She draws a deep breath…', 'bad'); }
+        netSend({ t: 'fx', f: e.floor, x: pos.x, y: 4, z: pos.z, color: 0xffaa00, big: 1 });
+        d.breathCd = enraged ? 7 : 11;
+      }
+      // takeoff decisions: health thresholds, or melee pressure gets unbearable
+      for (const th of [0.75, 0.45, 0.2]) {
+        if (frac < th && !d.flew[th]) { d.flew[th] = true; d.state = 'takeoff'; d.t = 0; }
+      }
+      if (d.pain > e.maxHp * 0.1 && d.t > 8) { d.state = 'takeoff'; d.t = 0; d.pain = 0; }
+      if (d.state === 'takeoff') {
+        setEnemyState(e, 'chase');
+        if (mine) { sfx.bossroar(); addMsg('🐉 EMBERWING takes to the sky!', 'bad'); }
+        hitPlayersWithin(9, 8, 15); // downdraft on liftoff
+        if (enraged) summonImps(e, fs, 2);
+      }
+      break;
+    }
+    case 'claw': {
+      if (d.t > 0.35 && !d.hitDone) {
+        d.hitDone = true;
+        // a wide arc in front of her forelimbs
+        for (const p of players) {
+          const pd = Math.hypot(p.pos.x - pos.x, p.pos.z - pos.z);
+          if (pd < 9.5 && Math.abs(angleTo(p.pos.x, p.pos.z)) < 1.2 && p.pos.y < 4) {
+            const kb = { x: (p.pos.x - pos.x) / pd * 11, z: (p.pos.z - pos.z) / pd * 11 };
+            if (p.minion) damageMinion(p.minion, e.dmg);
+            else if (p.id === 'me') damageLocalPlayer(e.dmg, { kb });
+            else netSend({ t: 'phit', target: p.id, dmg: e.dmg, fx: { kb } });
+          }
+        }
+        if (mine) { sfx.swing(); sfx.hit(); }
+      }
+      if (d.t > 0.7) { d.state = 'prowl'; d.hitDone = false; setEnemyState(e, 'chase'); }
+      break;
+    }
+    case 'tailsweep': {
+      e.yaw += dt * 7; // the whole body whips around
+      if (d.t > 0.3 && !d.hitDone) {
+        d.hitDone = true;
+        hitPlayersWithin(10, 16, 15);
+        if (mine) { sfx.swing(); spawnBurst(pos.clone().setY(1.2), 0xccaa88, 24, 9, 0.16, 0.5); }
+        netSend({ t: 'fx', f: e.floor, x: pos.x, y: 1.2, z: pos.z, color: 0xccaa88, big: 1 });
+      }
+      if (d.t > 0.8) { d.state = 'prowl'; d.hitDone = false; setEnemyState(e, 'chase'); }
+      break;
+    }
+    case 'lungewind': {
+      // rear back — your cue to sidestep
+      if (target) turnTo(target.pos.x, target.pos.z, 3);
+      if (d.t > 0.55) {
+        d.state = 'lunge'; d.t = 0;
+        setEnemyState(e, 'attack');
+        d.lungeV = { x: Math.sin(e.yaw), z: Math.cos(e.yaw) };
+        if (mine) sfx.bossroar();
+      }
+      break;
+    }
+    case 'lunge': {
+      groundMove(pos.x + d.lungeV.x * 30, pos.z + d.lungeV.z * 30, 26);
+      if (!d.hitDone) {
+        for (const p of players) {
+          const pd = Math.hypot(p.pos.x - pos.x, p.pos.z - pos.z);
+          if (pd < 7 && p.pos.y < 4) {
+            d.hitDone = true;
+            const kb = { x: d.lungeV.x * 14, z: d.lungeV.z * 14 };
+            const bite = Math.round(e.dmg * 1.35);
+            if (p.minion) damageMinion(p.minion, bite);
+            else if (p.id === 'me') damageLocalPlayer(bite, { kb });
+            else netSend({ t: 'phit', target: p.id, dmg: bite, fx: { kb } });
+          }
+        }
+      }
+      if (d.t > 0.55) { d.state = 'prowl'; d.hitDone = false; setEnemyState(e, 'chase'); }
+      break;
+    }
+    case 'rearup': {
+      if (target) turnTo(target.pos.x, target.pos.z, 1.4);
+      if (d.t > 0.9) {
+        d.state = 'prowl';
+        setEnemyState(e, 'attack');
+        // sweep across her front arc, biased toward the target's side
+        const bias = target ? Math.sign(angleTo(target.pos.x, target.pos.z) || 1) : 1;
+        d.sweep = { a0: -1.0 * bias, a1: 1.0 * bias, t: 0, tick: 0 };
+      }
+      break;
+    }
+    case 'takeoff': {
+      flyToward(pos.x, 9, pos.z, 7);
+      if (pos.y > 8.4) { d.state = 'circle'; d.t = 0; d.volleys = 0; setEnemyState(e, 'chase'); }
+      break;
+    }
     case 'circle': {
-      // orbit the lair at altitude, always watching its prey
-      d.orbitA += dt * 0.5;
-      const ox = d.home.x + Math.cos(d.orbitA) * 11;
-      const oz = d.home.z + Math.sin(d.orbitA) * 11;
-      flyToward(ox, 6.5 + Math.sin(d.t * 1.3) * 0.8, oz, e.cfg.speed);
-      faceTarget();
+      d.orbitA += dt * 0.55;
+      const ox = d.home.x + Math.cos(d.orbitA) * 13;
+      const oz = d.home.z + Math.sin(d.orbitA) * 13;
+      flyToward(ox, 9 + Math.sin(d.t * 1.2), oz, 10);
+      if (target) turnTo(target.pos.x, target.pos.z, 4);
       d.atkCd -= dt;
       if (d.atkCd <= 0 && target) {
-        const roll = Math.random();
-        if (phase >= 3 && roll < 0.3) {
-          d.state = 'meteor'; d.t = 0;
-        } else if (phase >= 2 && roll < 0.55) {
-          d.state = 'dive'; d.t = 0;
-        } else if (roll < 0.8) {
-          d.state = 'volley'; d.t = 0; d.shots = phase >= 3 ? 5 : 3; d.shotT = 0;
-        } else {
-          // BREATH RUN: telegraph a line of fire through the target
+        d.atkCd = 1.6;
+        d.volleys = (d.volleys || 0) + 1;
+        if (d.volleys === 3) {
+          // one strafing breath run across the floor
           const dx = target.pos.x - pos.x, dz = target.pos.z - pos.z;
           const dl = Math.hypot(dx, dz) || 1;
-          d.breath = { x0: pos.x, z0: pos.z, dx: dx / dl, dz: dz / dl, len: dl + 12, t: -1.0, tick: 0 };
+          d.breath = { x0: pos.x, z0: pos.z, dx: dx / dl, dz: dz / dl, len: dl + 14, t: -0.9, tick: 0 };
           setEnemyState(e, 'attack');
-          if (mine) { sfx.bossroar(); addMsg('🔥 Emberwing draws breath…', 'bad'); }
-          netSend({ t: 'fx', f: e.floor, x: target.pos.x, y: 0.5, z: target.pos.z, color: 0xffaa00, big: 1 });
-        }
-        d.atkCd = phase === 3 ? 3.2 : phase === 2 ? 4.2 : 5.2;
-      }
-      break;
-    }
-    case 'volley': {
-      faceTarget();
-      d.shotT -= dt;
-      if (d.shotT <= 0 && d.shots > 0 && target) {
-        d.shots--;
-        d.shotT = 0.45;
-        setEnemyState(e, 'attack');
-        const from = pos.clone();
-        const to = new THREE.Vector3(target.pos.x + (Math.random() - 0.5) * 2, target.pos.y + 1.2, target.pos.z + (Math.random() - 0.5) * 2);
-        const dir = to.sub(from).normalize();
-        const bolt = { x: from.x, y: from.y, z: from.z, dirX: dir.x, dirY: dir.y, dirZ: dir.z, speed: 16, dmg: e.dmg, owner: 'enemy', color: 0xff6622, vis: 'fireball', size: 1.3 };
-        if (mine) { spawnBolt(bolt); sfx.bolt(); }
-        netSend({ t: 'ebolt', f: e.floor, b: bolt });
-      }
-      if (d.shots <= 0) { d.state = 'circle'; setEnemyState(e, 'chase'); }
-      break;
-    }
-    case 'dive': {
-      // crash down beside its prey and maul whoever stands close
-      if (target) flyToward(target.pos.x, 0.5, target.pos.z, e.cfg.speed * 1.6);
-      faceTarget();
-      if (pos.y < 1.2) { d.state = 'maul'; d.t = 0; d.landT = 0; setEnemyState(e, 'idle'); if (mine) sfx.trap(); }
-      if (d.t > 4) d.state = 'circle';
-      break;
-    }
-    case 'maul': {
-      d.landT += dt;
-      faceTarget();
-      // wing gust hurls away anyone who crowds it
-      let close = 0;
-      for (const p of players) if (!p.minion && Math.hypot(p.pos.x - pos.x, p.pos.z - pos.z) < 5) close++;
-      d.atkCd -= dt;
-      if (d.atkCd <= 0) {
-        d.atkCd = 1.4;
-        if (close >= 1 && d.landT > 2.2 && Math.random() < 0.4) {
-          // WING GUST
+          if (mine) { sfx.bossroar(); addMsg('🔥 She strafes the hall with fire!', 'bad'); }
+        } else if (d.volleys > 4 || (d.volleys > 3 && !enraged)) {
+          d.state = 'landing'; d.t = 0;
+          d.landAt = { x: target.pos.x + (Math.random() - 0.5) * 6, z: target.pos.z + (Math.random() - 0.5) * 6 };
+          if (mine) addMsg('🐉 She folds her wings and DROPS—', 'bad');
+        } else {
           setEnemyState(e, 'attack');
-          if (mine) { spawnBurst(pos.clone().setY(1.5), 0xffcc88, 40, 10, 0.2, 0.6); sfx.bossroar(); addMsg('💨 Wing gust!', 'bad'); }
-          netSend({ t: 'fx', f: e.floor, x: pos.x, y: 1.5, z: pos.z, color: 0xffcc88, big: 1 });
-          for (const p of players) {
-            const pd = Math.hypot(p.pos.x - pos.x, p.pos.z - pos.z);
-            if (pd < 6.5) {
-              const kb = { x: (p.pos.x - pos.x) / pd * 16, z: (p.pos.z - pos.z) / pd * 16 };
-              if (p.minion) damageMinion(p.minion, Math.round(e.dmg * 0.6));
-              else if (p.id === 'me') damageLocalPlayer(Math.round(e.dmg * 0.6), { kb });
-              else netSend({ t: 'phit', target: p.id, dmg: Math.round(e.dmg * 0.6), fx: { kb } });
-            }
-          }
-        } else if (target && Math.hypot(target.pos.x - pos.x, target.pos.z - pos.z) < 4.5) {
-          setEnemyState(e, 'attack');
-          if (target.minion) damageMinion(target.minion, e.dmg);
-          else if (target.id === 'me') damageLocalPlayer(e.dmg);
-          else netSend({ t: 'phit', target: target.id, dmg: e.dmg });
-        } else if (target) {
-          // stalk on foot
-          const dxm = target.pos.x - pos.x, dzm = target.pos.z - pos.z;
-          const dm = Math.hypot(dxm, dzm) || 1;
-          moveWithCollision(pos, (dxm / dm) * 5 * dt, (dzm / dm) * 5 * dt, 1.6, { y: pos.y, grid: fs.grid });
-        }
-      }
-      // wounded on the ground → take back to the sky
-      if (d.landT > 7 || (e.hp < e.maxHp * 0.15 && d.landT > 3)) {
-        d.state = 'ascend';
-        setEnemyState(e, 'chase');
-      }
-      break;
-    }
-    case 'ascend': {
-      flyToward(pos.x, 6.5, pos.z, e.cfg.speed);
-      if (pos.y > 5.8) d.state = 'circle';
-      break;
-    }
-    case 'meteor': {
-      // rain fire on every hero at once — spread out or burn together
-      setEnemyState(e, 'attack');
-      if (d.t < 0.1) {
-        if (mine) addMsg('☄️ The sky ignites!', 'bad');
-        for (const p of players) {
-          if (p.minion) continue;
-          for (let i = 0; i < 2; i++) {
-            const mx = p.pos.x + (Math.random() - 0.5) * 5, mz = p.pos.z + (Math.random() - 0.5) * 5;
-            const bolt = { x: mx, y: 13, z: mz, dirX: 0, dirY: -1, dirZ: 0, speed: 10, dmg: Math.round(e.dmg * 0.9), owner: 'enemy', color: 0xff6622, vis: 'fireball', size: 1.6 };
-            if (mine) spawnBolt(bolt);
+          for (let i = 0; i < (enraged ? 3 : 2); i++) {
+            const to = new THREE.Vector3(target.pos.x + (Math.random() - 0.5) * 3, target.pos.y + 1.2, target.pos.z + (Math.random() - 0.5) * 3);
+            const from = pos.clone();
+            const dir = to.sub(from).normalize();
+            const bolt = { x: from.x, y: from.y, z: from.z, dirX: dir.x, dirY: dir.y, dirZ: dir.z, speed: 17, dmg: 18, owner: 'enemy', color: 0xff6622, vis: 'fireball', size: 1.4 };
+            if (mine) { spawnBolt(bolt); sfx.bolt(); }
             netSend({ t: 'ebolt', f: e.floor, b: bolt });
           }
+          if (enraged) {
+            // meteors rain while she is angry and airborne
+            for (const p of players) {
+              if (p.minion) continue;
+              const bolt = { x: p.pos.x + (Math.random() - 0.5) * 5, y: 14, z: p.pos.z + (Math.random() - 0.5) * 5, dirX: 0, dirY: -1, dirZ: 0, speed: 11, dmg: 20, owner: 'enemy', color: 0xff6622, vis: 'fireball', size: 1.6 };
+              if (mine) spawnBolt(bolt);
+              netSend({ t: 'ebolt', f: e.floor, b: bolt });
+            }
+          }
         }
       }
-      if (d.t > 0.6) { d.state = 'circle'; setEnemyState(e, 'chase'); }
+      if (d.t > 16) { d.state = 'landing'; d.landAt = { x: target?.pos.x ?? d.home.x, z: target?.pos.z ?? d.home.z }; d.t = 0; }
+      break;
+    }
+    case 'landing': {
+      flyToward(d.landAt.x, 0.2, d.landAt.z, 15);
+      if (pos.y < 0.6) {
+        pos.y = 0;
+        d.state = 'prowl'; d.t = 0; d.pain = 0;
+        setEnemyState(e, 'chase');
+        // LANDING SLAM
+        if (mine) { sfx.trap(); sfx.bossroar(); spawnBurst(pos.clone().setY(1), 0xccaa77, 40, 11, 0.2, 0.6); }
+        netSend({ t: 'fx', f: e.floor, x: pos.x, y: 1, z: pos.z, color: 0xccaa77, big: 1 });
+        hitPlayersWithin(8.5, 20, 16);
+      }
       break;
     }
   }
 
-  // phase 3: calls winged imps to its side
-  if (phase >= 3 && d.state !== 'sleep') {
+  // phase-3 imps answer her call even while grounded
+  if (enraged && d.state !== 'sleep') {
     d.summonT -= dt;
-    if (d.summonT <= 0) {
-      d.summonT = 14;
-      for (let i = 0; i < 2; i++) {
-        const a2 = Math.random() * 6.28;
-        const sx = pos.x + Math.sin(a2) * 4, sz = pos.z + Math.cos(a2) * 4;
-        const id = fs.n * 1000 + 500 + fs.nextSummonId++;
-        const imp = spawnEnemy(fs, 'imp', sx, sz, { y: 3, id });
-        setEnemyState(imp, 'awaken');
-        fs.summons.push({ id, type: 'imp', x: sx, z: sz, y: 3 });
-        netSend({ t: 'espawn', f: fs.n, id, type: 'imp', x: sx, z: sz, y: 3 });
-      }
-      if (mine) addMsg('Emberwing shrieks — imps answer!', 'bad');
-    }
+    if (d.summonT <= 0) { d.summonT = 16; summonImps(e, fs, 2); }
   }
 
   if (mine && d.state !== 'sleep') updateBossBar(e.hp / e.maxHp);
   let dyw = e.yaw - e.obj.rotation.y;
   while (dyw > Math.PI) dyw -= Math.PI * 2;
   while (dyw < -Math.PI) dyw += Math.PI * 2;
-  e.obj.rotation.y += dyw * Math.min(1, dt * 5);
+  e.obj.rotation.y += dyw * Math.min(1, dt * 6);
+}
+
+function summonImps(e, fs, n) {
+  for (let i = 0; i < n; i++) {
+    const a2 = Math.random() * 6.28;
+    const sx = e.obj.position.x + Math.sin(a2) * 6, sz = e.obj.position.z + Math.cos(a2) * 6;
+    const id = fs.n * 1000 + 500 + fs.nextSummonId++;
+    const imp = spawnEnemy(fs, 'imp', sx, sz, { y: 3, id });
+    setEnemyState(imp, 'awaken');
+    fs.summons.push({ id, type: 'imp', x: sx, z: sz, y: 3 });
+    netSend({ t: 'espawn', f: fs.n, id, type: 'imp', x: sx, z: sz, y: 3 });
+  }
+  if (onMyFloor(e)) addMsg('Emberwing shrieks — imps answer!', 'bad');
 }
 
 // visual status effects other clients must see too (via 'evfx' messages)
@@ -810,6 +991,7 @@ export function damageEnemy(e, amount, crit = false, fromNet = false, source = '
     e.threat = e.threat || {};
     const key = source === 'local' ? 'me' : source;
     e.threat[key] = (e.threat[key] || 0) + amount;
+    if (e.ds && e.obj.position.y < 2) e.ds.pain += amount; // grounded melee pressure
   }
   if (effects) {
     if (effects.slow) { e.slowT = effects.slow.dur; e.slowMult = effects.slow.mult; }
