@@ -72,6 +72,7 @@ export function buildDragonModel() {
   const root = new THREE.Group(); // origin at the ground between her feet
   const body = new THREE.Group();
   body.position.y = 2.45;
+  body.rotation.y = Math.PI; // built head-to--z; the game faces +z — turn her around
   root.add(body);
   const parts = { body, wings: [], legs: [], tail: [], neck: [] };
 
@@ -239,13 +240,13 @@ export function animateDragon(e, dt) {
   const dy = e.obj.position.y - (e._lastY ?? e.obj.position.y);
   e._lastY = e.obj.position.y;
   const climb = Math.max(-0.45, Math.min(0.45, -dy * 2.5));
-  const wantPitch = flying ? 0.15 + climb : 0;
+  const wantPitch = flying ? -(0.15 + climb) : 0;
   parts.body.rotation.x += (wantPitch - parts.body.rotation.x) * Math.min(1, dt * 3);
   let dyaw = e.obj.rotation.y - (e._lastYaw ?? e.obj.rotation.y);
   while (dyaw > Math.PI) dyaw -= Math.PI * 2;
   while (dyaw < -Math.PI) dyaw += Math.PI * 2;
   e._lastYaw = e.obj.rotation.y;
-  const wantBank = flying ? Math.max(-0.6, Math.min(0.6, (dyaw / Math.max(dt, 0.001)) * 0.45)) : 0;
+  const wantBank = flying ? Math.max(-0.6, Math.min(0.6, -(dyaw / Math.max(dt, 0.001)) * 0.45)) : 0;
   parts.body.rotation.z += (wantBank - parts.body.rotation.z) * Math.min(1, dt * 2.5);
   parts.body.position.y += Math.sin(t * (sleeping ? 1 : 2.2)) * 0.04;
 
