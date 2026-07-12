@@ -718,6 +718,30 @@ function simulateDragon(e, fs, players, dt, mine) {
   }
 
   const spd = enraged ? 1.35 : 1;
+  // she is a grounded duelist at heart: cap her total time aloft
+  if (['takeoff', 'circle', 'roostfly'].includes(d.state)) {
+    d.skyT = (d.skyT || 0) + dt;
+    if (d.skyT > 14 && d.state === 'circle') {
+      d.mustLand = true;
+      d.state = 'landing'; d.t = 0; d.strafed = false; d.skyT = 0;
+      d.landAt = { x: target?.pos.x ?? d.home.x, z: target?.pos.z ?? d.home.z };
+      if (mine) addMsg('🐉 She folds her wings and DROPS—', 'bad');
+    }
+  } else if (d.state === 'prowl') { d.skyT = 0; d.mustLand = false; }
+  // wingbeat downdraft: dust storms beneath her when she flies low
+  if (mine && pos.y > 2 && pos.y < 14 && Math.random() < dt * 2.2) {
+    const gy = groundHeightAt(pos.x, pos.z, 0, fs.grid);
+    spawnBurst(new THREE.Vector3(pos.x + (Math.random() - 0.5) * 4, gy + 0.4, pos.z + (Math.random() - 0.5) * 4), 0x8a7a66, 6, 3, 0.12, 0.5);
+  }
+  // her footfalls shake the earth when she stalks near
+  if (mine && d.state === 'prowl' && (d.spd || 0) > 2 && target && td < 26) {
+    d.stepT = (d.stepT || 0) + dt * d.spd;
+    if (d.stepT > 2.4) {
+      d.stepT = 0;
+      G.shake = Math.max(G.shake || 0, 0.14);
+      sfx.trap();
+    }
+  }
   switch (d.state) {
     case 'sleep': {
       if (target && td < e.cfg.aggro) {
@@ -907,13 +931,23 @@ function simulateDragon(e, fs, players, dt, mine) {
       break;
     }
     case 'circle': {
-      // wide wing-thundering circuits of the cavern — then a strafing pass,
-      // then either a crash landing or a ROOST on her tower
-      d.orbitA += dt * 0.45;
-      const cr = fs.grid.lair ? 22 : 14;
-      const ox = d.home.x + Math.cos(d.orbitA) * cr;
-      const oz = d.home.z + Math.sin(d.orbitA) * cr;
-      flyToward(ox, (fs.grid.lair ? 12 : 9) + Math.sin(d.t * 1.2), oz, 11);
+      // she circles her PREY, not her gold — high above the towers, banking,
+      // one strafing pass, and then she ALWAYS comes back down
+      d.orbitA += dt * 0.5;
+      // the hunt's center drifts to wherever the target runs
+      d.orbC = d.orbC || { x: pos.x, z: pos.z };
+      if (target) {
+        d.orbC.x += (target.pos.x - d.orbC.x) * Math.min(1, dt * 0.8);
+        d.orbC.z += (target.pos.z - d.orbC.z) * Math.min(1, dt * 0.8);
+        // keep the circuit inside the cavern even when prey hugs the walls
+        const mW = (fs.grid.w - 6) * 4, mn = 24;
+        d.orbC.x = Math.max(mn, Math.min(mW, d.orbC.x));
+        d.orbC.z = Math.max(mn, Math.min((fs.grid.h - 6) * 4, d.orbC.z));
+      }
+      const cr = fs.grid.lair ? 17 : 14;
+      const ox = d.orbC.x + Math.cos(d.orbitA) * cr;
+      const oz = d.orbC.z + Math.sin(d.orbitA) * cr;
+      flyToward(ox, (fs.grid.lair ? 17 : 10) + Math.sin(d.t * 1.2), oz, 12);
       if (target) turnTo(target.pos.x, target.pos.z, 4);
       if (!d.strafed && d.t > 2.5 && target) {
         d.strafed = true;
@@ -923,8 +957,8 @@ function simulateDragon(e, fs, players, dt, mine) {
         setEnemyState(e, 'attack');
         if (mine) { sfx.bossroar(); addMsg('🔥 She strafes the hall with fire!', 'bad'); }
       }
-      if (d.t > 8) {
-        if (fs.grid.dragonPerch && Math.random() < 0.5 && !enraged) {
+      if (d.t > 7) {
+        if (fs.grid.dragonPerch && Math.random() < 0.4 && !enraged && !d.mustLand) {
           d.state = 'roostfly'; d.t = 0; d.strafed = false;
           if (mine) addMsg('🐉 She wheels toward her tower—', 'bad');
         } else {
@@ -946,15 +980,16 @@ function simulateDragon(e, fs, players, dt, mine) {
     }
     case 'roostfly': {
       const pr = fs.grid.dragonPerch;
-      flyToward(pr.x, pr.y + 0.5, pr.z, 12);
+      flyToward(pr.x, pr.y + 0.5, pr.z, 13);
       if (target) turnTo(target.pos.x, target.pos.z, 3);
-      if (Math.hypot(pr.x - pos.x, pr.z - pos.z) < 1.6 && Math.abs(pos.y - pr.y - 0.5) < 1) {
+      const arrived = Math.hypot(pr.x - pos.x, pr.z - pos.z) < 1.6 && Math.abs(pos.y - pr.y - 0.5) < 1;
+      if (arrived || d.t > 6) {
+        // she LANDS — no endless wheeling
         pos.x = pr.x; pos.y = pr.y + 0.5; pos.z = pr.z;
         d.state = 'roost'; d.t = 0; d.roostCd = 1.2;
         setEnemyState(e, 'idle');
         if (mine) { sfx.bossroar(); addMsg('🐉 She ROOSTS on the tower, wings mantled.', 'bad'); }
       }
-      if (d.t > 7) { d.state = 'circle'; d.t = 0; }
       break;
     }
     case 'roost': {

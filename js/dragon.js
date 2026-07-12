@@ -79,11 +79,13 @@ export function buildDragonModel() {
   const torso = new THREE.Mesh(new THREE.CylinderGeometry(1.5, 1.1, 4.6, 7), mat(BODY));
   torso.rotation.x = Math.PI / 2;
   body.add(torso);
-  const chest = new THREE.Mesh(new THREE.SphereGeometry(1.6, 7, 6), mat(BODY));
-  chest.position.set(0, -0.05, -2.0);
+  const chest = new THREE.Mesh(new THREE.SphereGeometry(1.42, 7, 6), mat(BODY));
+  chest.scale.set(1, 0.92, 1.15);
+  chest.position.set(0, -0.08, -1.9);
   body.add(chest);
-  const hips = new THREE.Mesh(new THREE.SphereGeometry(1.25, 7, 6), mat(BODY_DARK));
-  hips.position.z = 2.1;
+  const hips = new THREE.Mesh(new THREE.SphereGeometry(1.08, 7, 6), mat(BODY_DARK));
+  hips.scale.set(1, 0.9, 1.25);
+  hips.position.set(0, -0.06, 2.15);
   body.add(hips);
   // spine spikes
   for (let i = 0; i < 6; i++) {
@@ -99,8 +101,8 @@ export function buildDragonModel() {
     const seg = new THREE.Group();
     seg.position.copy(anchor);
     prev.add(seg);
-    const m = new THREE.Mesh(new THREE.CylinderGeometry(0.72 - i * 0.12, 0.95 - i * 0.12, 1.7, 6), mat(i % 2 ? BODY_DARK : BODY));
-    m.rotation.x = Math.PI / 2 - 0.55;
+    const m = new THREE.Mesh(new THREE.BoxGeometry(1.5 - i * 0.28, 1.05 - i * 0.12, 1.85), mat(i % 2 ? BODY_DARK : BODY));
+    m.rotation.x = Math.PI / 2 - 1.05;
     m.position.set(0, 0.28, -0.6);
     seg.add(m);
     parts.neck.push(seg);
@@ -233,7 +235,18 @@ export function animateDragon(e, dt) {
   // body: settles low on the ground, pitches into flight, breathes at rest
   const wantBodyY = flying ? 2.9 : sleeping ? 1.55 : 2.45;
   parts.body.position.y += (wantBodyY - parts.body.position.y) * Math.min(1, dt * 3);
-  parts.body.rotation.x += ((flying ? 0.18 : 0) - parts.body.rotation.x) * Math.min(1, dt * 3);
+  // nose follows the climb/dive; the whole body BANKS into turns
+  const dy = e.obj.position.y - (e._lastY ?? e.obj.position.y);
+  e._lastY = e.obj.position.y;
+  const climb = Math.max(-0.45, Math.min(0.45, -dy * 2.5));
+  const wantPitch = flying ? 0.15 + climb : 0;
+  parts.body.rotation.x += (wantPitch - parts.body.rotation.x) * Math.min(1, dt * 3);
+  let dyaw = e.obj.rotation.y - (e._lastYaw ?? e.obj.rotation.y);
+  while (dyaw > Math.PI) dyaw -= Math.PI * 2;
+  while (dyaw < -Math.PI) dyaw += Math.PI * 2;
+  e._lastYaw = e.obj.rotation.y;
+  const wantBank = flying ? Math.max(-0.6, Math.min(0.6, (dyaw / Math.max(dt, 0.001)) * 0.45)) : 0;
+  parts.body.rotation.z += (wantBank - parts.body.rotation.z) * Math.min(1, dt * 2.5);
   parts.body.position.y += Math.sin(t * (sleeping ? 1 : 2.2)) * 0.04;
 
   // tail: a travelling sway, whipping harder with speed
