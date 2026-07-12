@@ -54,13 +54,16 @@ export async function loadAll(onProgress) {
   const load = (url) => new Promise((res, rej) => loader.load(url, res, undefined, rej));
 
   const jobs = [];
-  const assets = { char: {}, enemy: {}, piece: {}, weapon: {} };
+  const assets = { char: {}, enemy: {}, piece: {}, weapon: {}, lair: {} };
   for (const m of CHAR_MODELS) jobs.push(load(`assets/characters/${m}.glb`).then(g => assets.char[m] = g));
   for (const m of ENEMY_MODELS) jobs.push(load(`assets/enemies/${m}.glb`).then(g => assets.enemy[m] = g));
   for (const m of MONSTER_MODELS) jobs.push(load(`assets/monsters/${m}.glb`).then(g => assets.enemy[m] = g));
   for (const p of DUNGEON_PIECES) jobs.push(load(`assets/dungeon/${p}.glb`).then(g => assets.piece[p] = g));
   for (const [key, file] of Object.entries(TOWN_PIECES)) jobs.push(load(`assets/town/${file}.gltf`).then(g => assets.piece[key] = g));
   for (const w of WEAPON_MODELS) jobs.push(load(`assets/weapons/${w}.gltf`).then(g => assets.weapon[w] = g));
+  for (const r of ['Rock_1', 'Rock_2', 'Rock_3', 'Rock_4', 'Rock_5', 'Rock_6', 'Rock_7']) {
+    jobs.push(load(`assets/lair/${r}.glb`).then(g => assets.lair[r] = g));
+  }
   for (const w of WEAPON2_MODELS) {
     const ext = w.startsWith('Skeleton_') ? 'gltf' : 'glb';
     jobs.push(load(`assets/weapons2/${w}.${ext}`).then(g => assets.weapon[w] = g));

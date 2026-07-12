@@ -129,7 +129,7 @@ export function spawnBolt(b) {
     // point along the velocity (arrow/shard models face +z after this)
     const target = new THREE.Vector3(x + dirX, y + dirY, z + dirZ);
     vis.obj.lookAt(target);
-    if (b.vis === 'arrow') vis.obj.rotateX(Math.PI / 2); // arrow model points +y
+    if (b.vis === 'arrow') vis.obj.rotateX(-Math.PI / 2); // arrow model points +y; tip must lead
   }
   G.scene.add(vis.obj);
   G.projectiles.push({

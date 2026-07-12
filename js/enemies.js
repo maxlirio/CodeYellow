@@ -16,6 +16,7 @@ import { rollAnyItem } from './items.js';
 import { dropItemLoot } from './loot.js';
 import { minionTargetsOnFloor, damageMinion } from './minions.js';
 import { wallAt, damageWall } from './walls.js';
+import { buildDragonModel, animateDragon } from './dragon.js';
 import { nearestBuildPiece, weakestBuildPieceNear, damageBuild } from './builds.js';
 import { horde } from './horde.js';
 
@@ -29,9 +30,13 @@ export function spawnEnemiesForFloor(fs) {
   });
 }
 
+const DUMMY_ANIM = { update() {}, play() { return null; }, has() { return false; }, current: null };
+
 export function spawnEnemy(fs, type, x, z, { y = 0, elite = false, id = null } = {}) {
   const cfg = ENEMIES[type];
-  const { obj, anim } = makeCharacter('enemy', cfg.model);
+  const { obj, anim } = cfg.procDragon
+    ? { obj: buildDragonModel(), anim: DUMMY_ANIM }
+    : makeCharacter('enemy', cfg.model);
   obj.position.set(x, y, z);
   const scale = cfg.scale * (elite ? 1.28 : 1);
   obj.scale.setScalar(scale);
@@ -87,7 +92,7 @@ export function spawnEnemy(fs, type, x, z, { y = 0, elite = false, id = null } =
   };
   obj.rotation.y = e.yaw;
   const m0 = amap(e);
-  if (cfg.singleClip) anim.play(cfg.singleClip);
+  if (cfg.singleClip || cfg.procDragon) anim.play(cfg.singleClip);
   else if (m0) anim.play(m0.idle);
   else anim.play(anim.has('Skeleton_Inactive_Standing_Pose') ? 'Skeleton_Inactive_Standing_Pose' : 'Idle');
   fs.enemies.push(e);
@@ -325,6 +330,7 @@ export function updateEnemies(dt) {
 
     for (const e of fs.enemies) {
       if (mine) e.anim.update(dt);
+      if (e.cfg.procDragon && mine && e.state !== 'dead') animateDragon(e, dt);
       if (e.state === 'dead') {
         e.deadT += dt;
         if (e.deadT > 2.2) e.obj.position.y -= dt * 0.5;
@@ -650,7 +656,7 @@ function simulateDragon(e, fs, players, dt, mine) {
   const hitPlayersWithin = (r, dmg2, kbF, fxExtra) => {
     for (const p of players) {
       const pd = Math.hypot(p.pos.x - pos.x, p.pos.z - pos.z);
-      if (pd > r || p.pos.y > 4) continue;
+      if (pd > r || Math.abs(p.pos.y - pos.y) > 3.5) continue;
       const kb = kbF ? { x: (p.pos.x - pos.x) / Math.max(0.1, pd) * kbF, z: (p.pos.z - pos.z) / Math.max(0.1, pd) * kbF } : null;
       const fx = kb ? { kb, ...(fxExtra || {}) } : fxExtra || null;
       if (p.minion) damageMinion(p.minion, dmg2);
@@ -757,6 +763,24 @@ function simulateDragon(e, fs, players, dt, mine) {
         const pd = Math.hypot(p.pos.x - pos.x, p.pos.z - pos.z);
         if (pd < 9 && Math.abs(angleTo(p.pos.x, p.pos.z)) > 2.1) { rear = p; break; }
       }
+      // wrong tier? she doesn't shout at the air — she CLOSES the gap
+      const dyT = pos.y - target.pos.y;
+      if (Math.abs(dyT) > 2.5) d.unreach = (d.unreach || 0) + dt;
+      else d.unreach = 0;
+      if (d.unreach > 2.2) {
+        d.unreach = 0;
+        if (dyT > 0) {
+          // her prey is BELOW: she pours off the ledge onto them
+          d.state = 'landing'; d.t = 0;
+          d.landAt = { x: target.pos.x, z: target.pos.z };
+          if (mine) addMsg('🐉 She pours off the ledge toward you—', 'bad');
+          break;
+        }
+        d.state = 'takeoff'; d.t = 0;
+        setEnemyState(e, 'chase');
+        if (mine) { sfx.bossroar(); addMsg('🐉 EMBERWING takes to the sky!', 'bad'); }
+        break;
+      }
       if (d.atkCd <= 0) {
         // a real animal pauses to glare before it strikes
         if (Math.random() < 0.3 && td > 6) {
@@ -814,7 +838,7 @@ function simulateDragon(e, fs, players, dt, mine) {
         // a wide arc in front of her forelimbs
         for (const p of players) {
           const pd = Math.hypot(p.pos.x - pos.x, p.pos.z - pos.z);
-          if (pd < 9.5 && Math.abs(angleTo(p.pos.x, p.pos.z)) < 1.2 && p.pos.y < 4) {
+          if (pd < 9.5 && Math.abs(angleTo(p.pos.x, p.pos.z)) < 1.2 && Math.abs(p.pos.y - pos.y) < 3.5) {
             const kb = { x: (p.pos.x - pos.x) / pd * 11, z: (p.pos.z - pos.z) / pd * 11 };
             if (p.minion) damageMinion(p.minion, e.dmg);
             else if (p.id === 'me') damageLocalPlayer(e.dmg, { kb });
@@ -1026,7 +1050,7 @@ export function setEnemyState(e, s, fromNet = false) {
   e.state = s;
   e.stateT = 0;
   const a = e.anim;
-  if (e.cfg.singleClip) {
+  if (e.cfg.singleClip || e.cfg.procDragon) {
     // one organic loop; the body does the acting — but guests still need the state
     if (isAuthority() && !fromNet) netSend({ t: 'estate', f: e.floor, id: e.id, s });
     return;

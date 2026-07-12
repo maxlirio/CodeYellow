@@ -10,6 +10,8 @@ let rig = null, holder = null, offholder = null;
 let weaponObj = null, offhandObj = null, boltObj = null;
 let currentKey = '';
 let anim = null; // { t, dur, kind, dir }
+let offStab = null; // ranger's point-blank dagger: { t, dur, temp }
+let stabDagger = null;
 let swingDir = 1;
 let lastYaw = 0, lastPitch = 0, swayX = 0, swayY = 0;
 
@@ -133,6 +135,26 @@ function updateSigGlow(dt) {
       n.material.emissiveIntensity = n.userData.origEmissive.i;
     }
   });
+}
+
+// the ranger draws steel when something is at her throat: a quick off-hand
+// dagger jab, borrowing the offhand holder (a temp dagger appears if the
+// current weapon has no offhand model)
+export function triggerOffhandStab(dur = 0.45) {
+  if (!offholder) return;
+  if (!offhandObj) {
+    if (!stabDagger) {
+      stabDagger = makeWeaponModel('dagger');
+      stabDagger.traverse((n) => { if (n.isMesh) n.frustumCulled = false; });
+      stabDagger.rotation.set(-0.9, Math.PI - 0.3, -0.05);
+      stabDagger.scale.setScalar(0.5);
+    }
+    offholder.add(stabDagger);
+    offhandObj = stabDagger;
+    offStab = { t: 0, dur, temp: stabDagger };
+  } else {
+    offStab = { t: 0, dur, temp: null };
+  }
 }
 
 export function updateViewmodel(dt) {
@@ -291,6 +313,20 @@ export function updateViewmodel(dt) {
     if (k >= 1) {
       if (boltObj) { boltObj.visible = true; boltObj.position.z = -0.1; }
       anim = null;
+    }
+  }
+
+  // ranger's off-hand dagger: a fast independent thrust over whatever the
+  // main hand is doing (only ever active for ranged mains, so no dual clash)
+  if (offStab) {
+    offStab.t += dt;
+    const k2 = Math.min(1, offStab.t / offStab.dur);
+    const arc2 = Math.sin(k2 * Math.PI);
+    offPz = -arc2 * 0.5;
+    offRx = -arc2 * 0.22;
+    if (k2 >= 1) {
+      if (offStab.temp && offhandObj === offStab.temp) { offholder.remove(offhandObj); offhandObj = null; }
+      offStab = null;
     }
   }
 

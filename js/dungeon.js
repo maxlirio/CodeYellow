@@ -309,6 +309,37 @@ export function generateDragonLair(seedStr, floor) {
   }
   torches.push({ x: 20 * CELL, y: T2 + 1, z: 17 * CELL }, { x: 25 * CELL, y: T2 + 1, z: 17 * CELL });
 
+  // ---- the cave asserts itself: rock heaps, glowing crystals, lava seams ----
+  const lairDecor = [];
+  const rockNames = ['Rock_1', 'Rock_2', 'Rock_3', 'Rock_4', 'Rock_5', 'Rock_6', 'Rock_7'];
+  // rubble mounds hugging the cavern walls
+  for (let i = 0; i < 60; i++) {
+    const side = rng.int(0, 3);
+    let x, z;
+    if (side === 0) { x = rng.int(3, w - 3) * CELL; z = (3 + rng.next() * 2.2) * CELL; }
+    else if (side === 1) { x = rng.int(3, w - 3) * CELL; z = (h - 5.2 + rng.next() * 2.2) * CELL; }
+    else if (side === 2) { x = (3 + rng.next() * 2.2) * CELL; z = rng.int(3, h - 3) * CELL; }
+    else { x = (w - 5.2 + rng.next() * 2.2) * CELL; z = rng.int(3, h - 3) * CELL; }
+    lairDecor.push({ kind: 'rock', name: rng.pick(rockNames), x, z, s: 2.5 + rng.next() * 4.5, yaw: rng.next() * Math.PI * 2 });
+  }
+  // stalagmites rising from the open floor (stretched rocks), clear of the keep
+  for (let i = 0; i < 26; i++) {
+    const x = rng.int(4, w - 4), z = rng.int(4, h - 4);
+    if (x >= K0 - 3 && x <= K1 + 3 && z >= 13 && z <= 30) continue; // keep the court clear
+    lairDecor.push({ kind: 'rock', name: rng.pick(rockNames), x: x * CELL, z: z * CELL, s: 1.2 + rng.next() * 1.6, sy: 3 + rng.next() * 4, yaw: rng.next() * Math.PI * 2 });
+    colliders.push({ x: x * CELL, z: z * CELL, r: 1.1, h: 3 });
+  }
+  // crystal clusters, each a burning lamp in the dark
+  for (let i = 0; i < 12; i++) {
+    const x = rng.int(5, w - 5), z = rng.int(5, h - 5);
+    if (x >= K0 - 2 && x <= K1 + 2 && z >= 14 && z <= 29) continue;
+    lairDecor.push({ kind: 'crystal', name: rng.pick(['Crystal1', 'Crystal3', 'Crystal5']), x: x * CELL, z: z * CELL, s: 5 + rng.next() * 6, yaw: rng.next() * Math.PI * 2, color: rng.pick([0xff5522, 0xff8833, 0xffb347]), light: i < 6 });
+  }
+  // lava seams glowing at the cavern's edges
+  for (const [lx, lz, ls] of [[8, 8, 5], [w - 8, 9, 4], [7, h - 9, 4.5], [w - 9, h - 8, 6], [w / 2 - 9, 6, 3.5]]) {
+    lairDecor.push({ kind: 'lava', x: lx * CELL, z: lz * CELL, s: ls });
+  }
+
   const enemySpawns = [{ type: 'dragon', x: hoard.x, z: hoard.z, y: T2 }];
 
   const grid = {
@@ -319,7 +350,7 @@ export function generateDragonLair(seedStr, floor) {
     stairsLocked: false,
     portal: { dx: 0, dy: -1, yaw: 0 },
     dragonPerch: perch,
-    lair: true,
+    lair: true, lairDecor,
   };
   return {
     grid, torches, traps: [], ropes: [], placements, enemySpawns, lootSpawns,
@@ -701,6 +732,56 @@ export function generateFloorData(seedStr, floor) {
 export function buildFloorMeshes(fs) {
   if (fs.built) return;
   const group = buildMergedStatic(fs.placements);
+  // the dragon's vault dresses itself in cave, not corridor
+  if (fs.grid.lairDecor) {
+    let lights = 0;
+    const stone = fs.grid.lairDecor;
+    for (const d of stone) {
+      if (d.kind === 'rock') {
+        const g2 = G.assets.lair[d.name];
+        if (!g2) continue;
+        const m = g2.scene.clone(true);
+        m.scale.set(d.s, d.sy || d.s, d.s);
+        m.position.set(d.x, d.y || 0, d.z);
+        m.rotation.y = d.yaw || 0;
+        group.add(m);
+      } else if (d.kind === 'crystal') {
+        const g2 = G.assets.weapon[d.name];
+        if (!g2) continue;
+        const m = g2.scene.clone(true);
+        m.traverse((n) => {
+          if (!n.isMesh) return;
+          n.material = n.material.clone();
+          n.material.emissive = new THREE.Color(d.color || 0xff5522);
+          n.material.emissiveIntensity = 1.3;
+        });
+        m.scale.setScalar(d.s);
+        m.position.set(d.x, d.y || 0, d.z);
+        m.rotation.set((Math.sin(d.x) * 0.4), d.yaw || 0, (Math.cos(d.z) * 0.4));
+        group.add(m);
+        if (lights < 6 && d.light) {
+          const pl = new THREE.PointLight(d.color || 0xff5522, 1.6, 20);
+          pl.position.set(d.x, (d.y || 0) + 2, d.z);
+          group.add(pl);
+          lights++;
+        }
+      } else if (d.kind === 'lava') {
+        const pool = new THREE.Mesh(
+          new THREE.CircleGeometry(d.s, 18),
+          new THREE.MeshStandardMaterial({ color: 0x431104, emissive: 0xff4400, emissiveIntensity: 1.5, roughness: 1 })
+        );
+        pool.rotation.x = -Math.PI / 2;
+        pool.position.set(d.x, 0.04, d.z);
+        group.add(pool);
+        if (lights < 8) {
+          const pl = new THREE.PointLight(0xff5511, 1.3, d.s * 5);
+          pl.position.set(d.x, 1.2, d.z);
+          group.add(pl);
+          lights++;
+        }
+      }
+    }
+  }
   if (fs.grid.town || fs.grid.lawn) {
     // grass under the whole village / arena field
     const lawn = new THREE.Mesh(

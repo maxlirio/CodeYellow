@@ -14,7 +14,7 @@ import { gearStat, weaponDamage, equippedMeshes, affixOf } from './items.js';
 import { addMsg, refreshHud, showPrompt, hidePrompt, flashVignette, updatePartyBar, hitmarker, setCrosshairHostile } from './ui.js';
 import { netSend } from './net.js';
 import { nearestChest, takeLoot, nearestItemDrop } from './loot.js';
-import { triggerSwing, setViewmodelWeapon } from './viewmodel.js';
+import { triggerSwing, setViewmodelWeapon, triggerOffhandStab } from './viewmodel.js';
 import { WEAPON_TYPES } from './config.js';
 import { nearestRope, grabRope, releaseRope, updateRopePhysics } from './ropes.js';
 import { nearestShopkeeper, nearestDoor, useDoor, nearestHomeDoor } from './town.js';
@@ -650,6 +650,7 @@ export function sendPos(force = false) {
     yaw: +p.yaw.toFixed(2),
     anim: p.anim.currentName,
     hp: p.hp, mhp: p.maxHp, dead: p.dead,
+    ln: p.lash ? (p.lash.up ? [0, -1, 0] : [-p.lash.g.x, 0, -p.lash.g.z]) : 0,
   });
 }
 
@@ -658,6 +659,71 @@ function aimDir() {
   const v = new THREE.Vector3();
   G.camera.getWorldDirection(v);
   return v;
+}
+
+// something at her throat: is any foe inside dagger reach of the front arc?
+function meleeTargetInReach() {
+  const p = G.player;
+  if (!p) return false;
+  const within = (ox, oz, oy, bodyR) => {
+    const dx = ox - p.obj.position.x, dz = oz - p.obj.position.z;
+    const d = Math.hypot(dx, dz);
+    if (d - bodyR > 2.6 || Math.abs(oy - p.obj.position.y) > 2.2) return false;
+    let ang = Math.atan2(dx, dz) - p.yaw;
+    while (ang > Math.PI) ang -= Math.PI * 2;
+    while (ang < -Math.PI) ang += Math.PI * 2;
+    return Math.abs(ang) <= 1.3;
+  };
+  for (const e of G.enemies) {
+    if (e.state === 'dead') continue;
+    if (within(e.obj.position.x, e.obj.position.z, e.obj.position.y, e.cfg.bodyR || 0)) return true;
+  }
+  if (G.runMode === 'duel') {
+    for (const r of G.remotes.values()) {
+      if (r.dead || r.floor !== G.floor) continue;
+      if (within(r.obj.position.x, r.obj.position.z, r.obj.position.y, 0)) return true;
+    }
+  }
+  return false;
+}
+
+// too close to draw the string — the off-hand dagger answers instead
+function offhandDaggerSwipe(p, dmg, wfx) {
+  const swipe = Math.max(1, Math.round(dmg * 0.6));
+  sfx.swing();
+  if (G.runMode === 'duel') {
+    for (const [pid, r] of G.remotes) {
+      if (r.dead || r.floor !== G.floor) continue;
+      const dx = r.obj.position.x - p.obj.position.x;
+      const dz = r.obj.position.z - p.obj.position.z;
+      const d = Math.hypot(dx, dz);
+      if (d > 2.6 || Math.abs(r.obj.position.y - p.obj.position.y) > 2.2) continue;
+      let ang = Math.atan2(dx, dz) - p.yaw;
+      while (ang > Math.PI) ang -= Math.PI * 2;
+      while (ang < -Math.PI) ang += Math.PI * 2;
+      if (Math.abs(ang) > 1.3) continue;
+      const crit = Math.random() < effectiveCrit();
+      netSend({ t: 'pvp', target: pid, dmg: crit ? Math.round(swipe * 1.8) : swipe, by: p.name });
+      notifyHit(crit);
+    }
+  }
+  let landed = false;
+  for (const e of G.enemies) {
+    if (e.state === 'dead') continue;
+    const dx = e.obj.position.x - p.obj.position.x;
+    const dz = e.obj.position.z - p.obj.position.z;
+    const d = Math.hypot(dx, dz);
+    if (d - (e.cfg.bodyR || 0) > 2.6) continue;
+    if (Math.abs(e.obj.position.y - p.obj.position.y) > 2.2) continue;
+    let ang = Math.atan2(dx, dz) - p.yaw;
+    while (ang > Math.PI) ang -= Math.PI * 2;
+    while (ang < -Math.PI) ang += Math.PI * 2;
+    if (Math.abs(ang) > 1.3) continue;
+    const hit = crit4(swipe);
+    damageEnemy(e, hit.v, hit.crit, false, 'local', wfx);
+    landed = true;
+  }
+  if (landed) { addSigCharge(1); sfx.hit(); }
 }
 
 function doAttackHit() {
@@ -669,6 +735,10 @@ function doAttackHit() {
   // arrows fly only from a bow/crossbow in hand; the mage's bolt is innate mana
   const rangedAtk = G.inv.weapon?.ranged || !!cls.manaAttack;
   if (rangedAtk) {
+    if (G.inv.weapon?.ranged && meleeTargetInReach()) {
+      offhandDaggerSwipe(p, dmg, wfx);
+      return;
+    }
     if (G.inv.weapon?.ranged) {
       if ((G.run.arrows || 0) <= 0) return;
       G.run.arrows--;
@@ -731,7 +801,7 @@ function doAttackHit() {
     while (ang < -Math.PI) ang += Math.PI * 2;
     if (Math.abs(ang) > effectiveAttackArc()) continue;
     let hitDmg = crit4(dmg);
-    if (p.swapCritT > 0) { hitDmg = Math.round(dmg * 2); p.swapCritT = 0; }
+    if (p.swapCritT > 0) { hitDmg = { v: Math.round(dmg * 2), crit: true }; p.swapCritT = 0; }
     damageEnemy(e, hitDmg.v, hitDmg.crit, false, 'local', wfx);
     landed = true;
   }
@@ -746,21 +816,25 @@ function crit4(dmg) {
 export function tryAttack() {
   const p = G.player;
   if (!p || p.dead || p.attacking || p.dodgeT > 0 || G.mode !== 'playing') return;
-  if (G.inv.weapon?.ranged && (G.run.arrows || 0) <= 0) {
+  // a foe at knife range means the dagger comes out — no arrow needed
+  const daggerReach = !!G.inv.weapon?.ranged && meleeTargetInReach();
+  if (G.inv.weapon?.ranged && !daggerReach && (G.run.arrows || 0) <= 0) {
     addMsg('Out of arrows! Buy more at the blacksmith or tavern.', 'bad');
     return;
   }
   p.attacking = true;
   p.attackT = 0;
   p.attackFired = false;
-  const atkTime = effectiveAttackTime();
+  const atkTime = daggerReach ? 0.5 : effectiveAttackTime();
   let animName;
-  if (G.inv.weapon?.ranged && p.anim.has('2H_Ranged_Shoot')) animName = '2H_Ranged_Shoot';
+  if (daggerReach) animName = p.anim.has('1H_Melee_Attack_Slice_Horizontal') ? '1H_Melee_Attack_Slice_Horizontal' : p.cls.attackAnims[0];
+  else if (G.inv.weapon?.ranged && p.anim.has('2H_Ranged_Shoot')) animName = '2H_Ranged_Shoot';
   else animName = p.cls.attackAnims[p.attackIdx % p.cls.attackAnims.length];
   p.attackIdx++;
   const act = p.anim.play(animName, { once: true });
   if (act) act.timeScale = act.getClip().duration / atkTime;
-  triggerSwing('attack', atkTime * 0.9);
+  if (daggerReach) triggerOffhandStab(0.45);
+  else triggerSwing('attack', atkTime * 0.9);
   p.moving = false;
 }
 
@@ -1051,12 +1125,31 @@ export function updateRemotes(dt) {
     r.obj.position.x += (r.netX - r.obj.position.x) * Math.min(1, dt * 12);
     r.obj.position.y += (r.netY - r.obj.position.y) * Math.min(1, dt * 12);
     r.obj.position.z += (r.netZ - r.obj.position.z) * Math.min(1, dt * 12);
-    let dy = r.netYaw - r.obj.rotation.y;
-    while (dy > Math.PI) dy -= Math.PI * 2;
-    while (dy < -Math.PI) dy += Math.PI * 2;
-    r.obj.rotation.y += dy * Math.min(1, dt * 12);
+    if (r.lashN) {
+      // a lashed teammate's whole BODY tips onto the surface they walk
+      _rUp.set(r.lashN[0], r.lashN[1], r.lashN[2]).normalize();
+      _rq.setFromUnitVectors(new THREE.Vector3(0, 1, 0), _rUp);
+      _rEul.set(0, r.netYaw, 0, 'YXZ');
+      _rq2.setFromEuler(_rEul);
+      _rq.multiply(_rq2);
+      r.obj.quaternion.slerp(_rq, Math.min(1, dt * 5));
+    } else if (Math.abs(r.obj.rotation.x) > 0.01 || Math.abs(r.obj.rotation.z) > 0.01) {
+      // ease back upright after a lash ends
+      _rEul.set(0, r.netYaw, 0, 'YXZ');
+      _rq.setFromEuler(_rEul);
+      r.obj.quaternion.slerp(_rq, Math.min(1, dt * 5));
+    } else {
+      let dy = r.netYaw - r.obj.rotation.y;
+      while (dy > Math.PI) dy -= Math.PI * 2;
+      while (dy < -Math.PI) dy += Math.PI * 2;
+      r.obj.rotation.y += dy * Math.min(1, dt * 12);
+    }
   }
 }
+const _rUp = new THREE.Vector3();
+const _rq = new THREE.Quaternion();
+const _rq2 = new THREE.Quaternion();
+const _rEul = new THREE.Euler();
 
 // hide teammates who are on a different floor
 export function refreshRemoteVisibility() {
@@ -1074,6 +1167,7 @@ export function applyRemotePos(pid, m) {
     r.obj.visible = f === G.floor;
   }
   r.netX = m.x; r.netY = m.y || 0; r.netZ = m.z; r.netYaw = m.yaw;
+  r.lashN = m.ln || null;
   r.hp = m.hp; r.maxHp = m.mhp;
   if (m.dead && !r.dead) { r.dead = true; r.anim.play('Death_A', { once: true, clamp: true }); }
   if (!m.dead && r.dead) { r.dead = false; r.anim.play('Idle'); }
