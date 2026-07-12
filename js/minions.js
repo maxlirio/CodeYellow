@@ -153,13 +153,34 @@ export function updateMinions(dt) {
     const pos = m.obj.position;
     m.atkT -= dt;
 
-    // pick a target: nearest living enemy in aggro range (workers never fight)
+    // personal space: comrades shoulder each other apart instead of stacking
+    let sepX = 0, sepZ = 0;
+    for (const o of minions) {
+      if (o === m || o.dead || o.floor !== m.floor) continue;
+      const ox = pos.x - o.obj.position.x, oz = pos.z - o.obj.position.z;
+      const od = Math.hypot(ox, oz);
+      if (od < 1.8 && od > 0.001) { sepX += (ox / od) * (1.8 - od); sepZ += (oz / od) * (1.8 - od); }
+      else if (od <= 0.001) { sepX += Math.sin(m.id * 2.39996); sepZ += Math.cos(m.id * 2.39996); } // dead-stacked: pick a personal direction
+    }
+    if (sepX || sepZ) moveWithCollision(pos, sepX * dt * 3, sepZ * dt * 3, 0.5, { y: pos.y, grid: fs.grid });
+
+    // pick a target: nearest living enemy in aggro range (workers never
+    // fight) — but comrades DIVIDE the work: an enemy already mobbed by
+    // allies ranks lower, so the pack spreads across multiple foes
     let target = null, td = 14;
     if (!m.cfg.worker) {
+      let bestScore = 14;
       for (const e of fs.enemies) {
         if (e.state === 'dead' || e.state === 'inactive') continue;
         const d = Math.hypot(e.obj.position.x - pos.x, e.obj.position.z - pos.z);
-        if (d < td) { td = d; target = e; }
+        if (d >= 14) continue;
+        let mobbed = 0;
+        for (const o of minions) {
+          if (o === m || o.dead || o.floor !== m.floor || o.cfg.worker || o.cfg.decoy) continue;
+          if (Math.hypot(e.obj.position.x - o.obj.position.x, e.obj.position.z - o.obj.position.z) < 3) mobbed++;
+        }
+        const score = d + mobbed * 4;
+        if (score < bestScore) { bestScore = score; target = e; td = d; }
       }
     }
 
@@ -189,7 +210,12 @@ export function updateMinions(dt) {
           }
         }
       } else {
-        moveTo = target.obj.position;
+        // come at the target from your OWN angle, not down the same line
+        if (m.slotA === undefined) m.slotA = (m.id * 2.39996) % (Math.PI * 2); // golden-angle spread
+        const ring = Math.max(1.6, m.cfg.range * 0.7);
+        const fx2 = target.obj.position.x + Math.sin(m.slotA) * ring;
+        const fz2 = target.obj.position.z + Math.cos(m.slotA) * ring;
+        moveTo = Math.hypot(fx2 - pos.x, fz2 - pos.z) > 0.8 ? { x: fx2, z: fz2 } : target.obj.position;
       }
     } else {
       // a work crank or a commander's station order outranks following
@@ -207,7 +233,14 @@ export function updateMinions(dt) {
             pos.set(spot.x, groundHeightAt(spot.x, spot.z, op.y, fs.grid), spot.z);
             m.vy = 0;
             if (m.floor === G.floor) spawnBurst(pos.clone().setY(pos.y + 1.1), 0x9fd6ff, 10, 3, 0.1, 0.35);
-          } else if (d > 3.2) moveTo = op;
+          } else {
+            // every follower claims a fanned escort slot around the owner
+            const pack = minions.filter(o => !o.dead && o.owner === m.owner && o.floor === m.floor && !o.cfg.decoy);
+            const idx = Math.max(0, pack.indexOf(m));
+            const ang = (idx / Math.max(3, pack.length)) * Math.PI * 2 + (m.id % 7) * 0.13;
+            const sx = op.x + Math.sin(ang) * 2.6, sz = op.z + Math.cos(ang) * 2.6;
+            if (Math.hypot(sx - pos.x, sz - pos.z) > 1.4) moveTo = { x: sx, z: sz };
+          }
         }
       }
     }
