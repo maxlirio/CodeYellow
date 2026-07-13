@@ -63,10 +63,27 @@ function attachHeldWeapon(obj, held, held2) {
   for (const names of sides) {
     const bone = obj.getObjectByName(names[0]) || obj.getObjectByName(names[1]);
     if (!bone) continue;
-    const m = makeWeaponModel(held);
+    let m = makeWeaponModel(held);
+    const isBow = held === 'bow' || held.startsWith('Bow_');
+    if (isBow) {
+      // A bow isn't gripped like a blade — the blade pose lays it flat, limbs out
+      // to the sides. Pack bows carry their plane in XY and the procedural bow in
+      // YZ, so bring both into one frame (limbs +y, plane normal +x), then hold it
+      // limbs-vertical with the plane containing the shot.
+      const model = m;
+      if (held !== 'bow') model.rotation.y = -Math.PI / 2; // +90° holds it backwards (string downrange)
+      else model.scale.setScalar(1.5); // the procedural bow is viewmodel-sized
+      // models are grounded at their base — drop the bow so the grip, not the
+      // lower limb tip, lands in the fist
+      const mid = new THREE.Box3().setFromObject(model).getCenter(new THREE.Vector3());
+      model.position.y -= mid.y;
+      m = new THREE.Group();
+      m.add(model);
+      m.rotation.set(-1.833, -Math.PI, -Math.PI / 2);
+    } else {
+      m.rotation.x = Math.PI / 2; // grip points along the forearm
+    }
     m.userData.heldWeapon = true;
-    m.rotation.x = Math.PI / 2; // grip points along the forearm
-    if (held === 'bow') m.scale.setScalar(1.5); // the procedural bow is viewmodel-sized
     bone.add(m);
   }
 }

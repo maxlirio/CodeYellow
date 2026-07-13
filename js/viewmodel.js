@@ -37,7 +37,7 @@ const STYLES = {
   _smash: { rot: [-0.45, Math.PI + 0.4, 0.22], scale: 0.62, attack: 'smash' },
   _sweep: { rot: [-0.4, Math.PI + 0.55, 0.25], scale: 0.6, attack: 'sweep' },
   _shoot: { rot: [-0.12, Math.PI, 0], scale: 0.55, attack: 'shoot', bolt: true, pos: [0.3, -0.3, -0.58] },
-  _bowshoot: { rot: [0, Math.PI / 2 + 0.12, 0], scale: 0.62, attack: 'bowshoot', bow: true, packBow: true, pos: [0.3, -0.28, -0.6] },
+  _bowshoot: { rot: [0, 0, 0.12], scale: 0.62, attack: 'bowshoot', bow: true, packBow: true, pos: [0.3, -0.28, -0.6] },
   _cast: { rot: [-0.35, Math.PI + 0.25, 0.3], scale: 0.55, attack: 'cast' },
 };
 
@@ -68,6 +68,22 @@ export function setViewmodelWeapon(modelName, wtype = 'sword1h', verb = null, si
   if (boltObj) { holder.remove(boltObj); boltObj = null; }
 
   weaponObj = makeWeaponModel(modelName);
+  if (style.packBow) {
+    // Pack bows carry their plane in XY, but the nocked arrow and the draw both
+    // run along the weapon's local z — so turn the MODEL inside a wrapper and
+    // leave the weapon's own frame canonical. -90°, not +90°: the other way
+    // points the string downrange and bellies the grip at the archer.
+    const model = weaponObj;
+    model.rotation.y = -Math.PI / 2;
+    weaponObj = new THREE.Group();
+    weaponObj.add(model);
+    // A pack bow's string sits wherever its GLB put it and each bow is a
+    // different length, so read the nock (rearmost face) and the arrow rest
+    // (mid-bow) off the model — Wooden/Golden/Evil all differ.
+    const bb = new THREE.Box3().setFromObject(model);
+    weaponObj.userData.nockRest = bb.max.z;
+    weaponObj.userData.restY = (bb.min.y + bb.max.y) / 2;
+  }
   weaponObj.traverse((n) => { if (n.isMesh) n.frustumCulled = false; });
   weaponObj.rotation.set(...style.rot);
   weaponObj.scale.setScalar(style.scale);
@@ -85,11 +101,20 @@ export function setViewmodelWeapon(modelName, wtype = 'sword1h', verb = null, si
   }
   // bows nock a visible arrow against the string
   if (style.bow) {
-    boltObj = makeWeaponModel('arrow');
-    boltObj.traverse((n) => { if (n.isMesh) n.frustumCulled = false; });
-    boltObj.rotation.set(-Math.PI / 2, 0, 0); // tip points forward (-z)
-    boltObj.scale.setScalar(0.55);
-    boltObj.position.set(0, style.packBow ? 0.6 : 0, 0.08); // pack bows grip at their base
+    const shaft = makeWeaponModel('arrow');
+    shaft.traverse((n) => { if (n.isMesh) n.frustumCulled = false; });
+    // the arrow model stands on its head (+y = fletching), so +90° about x lays
+    // it along -z, broadhead downrange; -90° aims it at the player's own face.
+    shaft.rotation.set(Math.PI / 2, 0, 0);
+    // sized so a full draw brings the broadhead back to the riser and no further
+    shaft.scale.setScalar(0.8);
+    // that flip leaves the shaft behind its own origin — anchor the FLETCHING at
+    // the origin instead, so the nock rides the string (position.z below) and the
+    // shaft runs forward through the riser rather than trailing off the bow.
+    shaft.position.z = -new THREE.Box3().setFromObject(shaft).max.z;
+    boltObj = new THREE.Group();
+    boltObj.add(shaft);
+    boltObj.position.set(0, weaponObj.userData.restY ?? 0, weaponObj.userData.nockRest ?? 0.08);
     weaponObj.add(boltObj);
   }
   // crossbows carry a visible bolt that fires and reloads
@@ -311,7 +336,11 @@ export function updateViewmodel(dt) {
       }
     }
     if (k >= 1) {
-      if (boltObj) { boltObj.visible = true; boltObj.position.z = -0.1; }
+      // -0.1 is the CROSSBOW's rail rest; a bow re-nocks against its string
+      if (boltObj) {
+        boltObj.visible = true;
+        boltObj.position.z = rig.userData.style?.bow ? (weaponObj?.userData.nockRest ?? 0.08) : -0.1;
+      }
       anim = null;
     }
   }

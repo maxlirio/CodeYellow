@@ -59,13 +59,14 @@ export function spawnEnemy(fs, type, x, z, { y = 0, elite = false, id = null } =
     glow.position.set(0, 4, 0);
     obj.add(glow);
   }
-  // snipers visibly carry their crossbow
+  // snipers visibly carry their crossbow. NOTE the bone is 'handslotr', not
+  // 'handslot.r' — GLTFLoader strips dots from node names, so the dotted
+  // spelling never matched and every sniper fired from empty hands.
   if (cfg.heldModel) {
-    let hand = null;
-    obj.traverse((nd) => { if (!hand && nd.name === 'handslot.r') hand = nd; });
+    const hand = obj.getObjectByName('handslotr') || obj.getObjectByName('handslot.r');
     if (hand) {
       const held = makeWeaponModel(cfg.heldModel);
-      held.rotation.set(0, Math.PI / 2, 0);
+      held.rotation.x = Math.PI / 2; // grip along the forearm, as on the player
       hand.add(held);
     }
   }
