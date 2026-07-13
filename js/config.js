@@ -36,7 +36,7 @@ export const CLASSES = {
     hp: 84, dmg: 26, speed: 8.4, crit: 0.08, attackAnims: ['Spellcast_Shoot'],
     attackTime: 0.55, attackRange: 26, attackArc: 0, mana: 110, manaRegen: 3.5, manaAttack: 0.2,
     show: ['2H_Staff'], ranged: true, boltVis: 'fire',
-    spellPool: ['fireball', 'frostshard', 'chainlightning', 'meteor', 'blizzard', 'arcaneorb', 'bonewall', 'stormlance', 'mirrorimage', 'gravitywell', 'ricochet', 'gravitylash', 'chronobubble', 'frostprison', 'levitate', 'sanctuary'],
+    spellPool: ['fireball', 'frostshard', 'chainlightning', 'meteor', 'blizzard', 'arcaneorb', 'bonewall', 'stormlance', 'mirrorimage', 'gravitywell', 'ricochet', 'gravitylash', 'chronobubble', 'frostprison', 'levitate', 'sanctuary', 'wraithform', 'polymorph'],
   },
   ranger: {
     name: 'Ranger', icon: '🏹', model: 'Rogue_Hooded',
@@ -45,6 +45,14 @@ export const CLASSES = {
     attackTime: 0.95, attackRange: 28, attackArc: 0, mana: 80, manaRegen: 2.5,
     show: [], ranged: true, boltVis: 'arrow',
     spellPool: ['powershot', 'multishot', 'rainarrows', 'shadowstep', 'smokebomb', 'bonewall', 'lifeward', 'beartrap', 'truesight', 'decoy', 'embertrail', 'sanctuary'],
+  },
+  necromancer: {
+    name: 'Necromancer', icon: '💀', model: 'Skeleton_Mage',
+    desc: 'A skeleton who refused to stay down. Soul bolts, dark pacts — and the dead answer when called.',
+    hp: 80, dmg: 19, speed: 8.2, crit: 0.06, attackAnims: ['Spellcast_Shoot'],
+    attackTime: 0.6, attackRange: 24, attackArc: 0, mana: 120, manaRegen: 3.5, manaAttack: 0.14,
+    show: [], boltVis: 'wisp', boltColor: 0x77ff88, undead: true,
+    spellPool: ['raisedead', 'dominate', 'soulharvest', 'bloodpact', 'wraithform', 'deathcoil', 'bonewall', 'frostprison', 'gravitylash', 'polymorph'],
   },
 };
 
@@ -99,6 +107,14 @@ export const SPELLS = {
   levitate:    { name: 'Levitate', icon: '🎈', mana: 24, cd: 14, type: 'levitate', dur: 4.5 },
   embertrail:  { name: 'Ember Trail', icon: '🔥', mana: 21, cd: 12, type: 'trail', dur: 6, dmgMult: 0.5 },
   sanctuary:   { name: 'Sanctuary', icon: '🛡', mana: 27, cd: 16, type: 'sanctuary', radius: 5.5, dur: 6 },
+  // ---- the necromancer's school + shared dark exotics ----
+  raisedead:  { name: 'Raise Dead', icon: '⚰️', mana: 33, cd: 6, type: 'raise', cap: 4, dmgMult: 0.45 },
+  dominate:   { name: 'Dominate', icon: '🧿', mana: 36, cd: 14, type: 'charm', range: 20, dur: 9 },
+  soulharvest:{ name: 'Soul Harvest', icon: '🌾', mana: 30, cd: 11, type: 'harvest', radius: 8, dmgMult: 1.0, healFrac: 0.5 },
+  bloodpact:  { name: 'Blood Pact', icon: '🩸', mana: 0, cd: 9, type: 'pact', hpCost: 0.2, manaGain: 0.4 },
+  wraithform: { name: 'Wraith Form', icon: '👻', mana: 30, cd: 16, type: 'wraith', dur: 4.5, speedMult: 1.35 },
+  deathcoil:  { name: 'Death Coil', icon: '🌀', mana: 21, cd: 5, type: 'proj', dmgMult: 1.25, speed: 17, color: 0x77ff88, size: 1.2, vis: 'wisp', lifesteal: 0.5 },
+  polymorph:  { name: 'Polymorph', icon: '🐸', mana: 45, cd: 18, type: 'poly', range: 18, dur: 6 },
   // new schools
   mirrorimage: { name: 'Mirror Legion', icon: '👥', mana: 51, cd: 20, type: 'phantoms', count: 2, dur: 12, dmgMult: 0.5 },
   stormlance: { name: 'Storm Lance', icon: '⚡', mana: 30, cd: 6, type: 'lightning', dmgMult: 1.7, range: 18, forks: 3, forkRange: 8, forkMult: 0.75, stun: 0.6 },
@@ -165,6 +181,12 @@ export const WEAPON_TYPES = {
     { id: 'crystalscepter', noun: 'Crystal Scepter', mesh: [], held: 'crystalscepter', model: 'crystalscepter', verb: 'cast', dmgBonus: 0.95, atkTime: 0.45, manaRegenAdd: 1.5, sigPool: ['frostwave', 'voidrip'], minRarity: 1 },
     { id: 'bonestaff', noun: 'Grave Staff', mesh: [], held: 'Skeleton_Staff', model: 'Skeleton_Staff', verb: 'cast', dmgBonus: 1.05, lifestealAdd: 0.06, sigPool: ['lifedrain', 'thunderclap'] },
   ],
+  necromancer: [
+    { id: 'skullstaff', noun: 'Skull Staff', mesh: [], held: 'skullstaff', model: 'skullstaff', verb: 'cast', dmgBonus: 1.1, lifestealAdd: 0.05, sigPool: ['lifedrain', 'voidrip'] },
+    { id: 'bonestaff', noun: 'Grave Staff', mesh: [], held: 'Skeleton_Staff', model: 'Skeleton_Staff', verb: 'cast', dmgBonus: 1.0, sigPool: ['lifedrain', 'thunderclap'] },
+    { id: 'reapscythe', noun: 'Soul Scythe', mesh: [], held: 'Scythe', model: 'Scythe', verb: 'sweep', dmgBonus: 1.25, arcAdd: 0.5, rangeAdd: 0.6, lifestealAdd: 0.06, minRarity: 1, sigPool: ['lifedrain', 'dragonsbreath'] },
+    { id: 'crystalscepter', noun: 'Crystal Scepter', mesh: [], held: 'crystalscepter', model: 'crystalscepter', verb: 'cast', dmgBonus: 0.9, atkTime: 0.45, manaRegenAdd: 1.5, sigPool: ['frostwave', 'voidrip'] },
+  ],
   ranger: [
     { id: 'bow', noun: 'Bow', mesh: [], model: 'bow', verb: 'bowshoot', ranged: true, sigPool: ['arrowstorm', 'frostwave'] },
     { id: 'crossbow', noun: 'Crossbow', mesh: ['2H_Crossbow'], model: 'crossbow_2handed', verb: 'shoot', dmgBonus: 1.15, ranged: true, atkTime: 1.1, sigPool: ['arrowstorm', 'thunderclap'] },
@@ -195,6 +217,7 @@ export const OFFHAND_TYPES = {
   rogue: { noun: 'Offhand Blade', meshes: ['Knife_Offhand'], models: ['dagger'], stat: 'crit' },
   mage: { noun: 'Spellbook', meshes: ['Spellbook'], models: ['wand'], stat: 'mregen' },
   ranger: { noun: 'Hunting Knife', meshes: ['Knife_Offhand'], models: ['dagger'], stat: 'crit' },
+  necromancer: { noun: 'Phylactery', meshes: [], models: ['Skull'], stat: 'mregen' },
 };
 
 export const NAME_PREFIX = {

@@ -70,6 +70,10 @@ export async function loadAll(onProgress) {
   }
   await Promise.all(jobs);
 
+  // the necromancer and his Risen wear enemy skeleton rigs — alias them into
+  // the char registry so makeCharacter('char', 'Skeleton_*') just works
+  for (const m of ENEMY_MODELS) if (m.startsWith('Skeleton_')) assets.char[m] = assets.enemy[m];
+
   // Pre-bake static piece geometry (world-transform applied, attributes normalized)
   // so dungeon.js can merge thousands of placements into a handful of draw calls.
   for (const name of [...DUNGEON_PIECES, ...Object.keys(TOWN_PIECES)]) {

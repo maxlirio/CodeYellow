@@ -88,7 +88,7 @@ export function spawnEnemy(fs, type, x, z, { y = 0, elite = false, id = null } =
     summonT: cfg.summonEvery ? cfg.summonEvery * 0.6 : 5,
     netX: x, netY: y, netZ: z, netYaw: 0, deadT: 0,
     slowT: 0, slowMult: 1, stunT: 0, poisonT: 0, poisonDps: 0, poisonTick: 0, poisonBy: 'local',
-    vulnT: 0, kbX: 0, kbZ: 0, vy: 0,
+    vulnT: 0, kbX: 0, kbZ: 0, vy: 0, charmT: 0, polyT: 0,
   };
   obj.rotation.y = e.yaw;
   const m0 = amap(e);
@@ -382,7 +382,53 @@ function simulateEnemy(e, fs, players, dt, mine) {
   const t = nearestPlayer(e, players);
   const dy3 = t ? Math.abs(t.pos.y - e.obj.position.y) : 0;
 
-  switch (e.state) {
+  // ---- polymorphed: a harmless shrunken critter that scampers away ----
+  if (e.polyT > 0) {
+    e.polyT -= dt;
+    if (t && t.dist < 14) {
+      const dx = e.obj.position.x - t.pos.x, dz = e.obj.position.z - t.pos.z;
+      const d = Math.max(0.001, Math.hypot(dx, dz));
+      e.yaw = Math.atan2(dx, dz);
+      const spd = e.cfg.speed * 0.55 * e.slowMult;
+      moveWithCollision(e.obj.position, (dx / d) * spd * dt, (dz / d) * spd * dt, 0.5 * e.scale, { y: e.obj.position.y, ghost: e.ghost, grid });
+      if (e.state !== 'chase' && e.state !== 'hit') setEnemyState(e, 'chase');
+    } else if (e.state === 'chase') {
+      setEnemyState(e, 'idle');
+    }
+  // ---- dominated: it fights for the necromancer against its own kind ----
+  } else if (e.charmT > 0) {
+    e.charmT -= dt;
+    e.charmAtkT = (e.charmAtkT || 0) - dt;
+    let victim = null, vd = 16;
+    for (const o of fs.enemies) {
+      if (o === e || o.state === 'dead' || o.state === 'inactive') continue;
+      if (o.charmT > 0 || o.polyT > 0) continue; // thralls don't duel thralls
+      const d = Math.hypot(o.obj.position.x - e.obj.position.x, o.obj.position.z - e.obj.position.z);
+      if (d < vd) { vd = d; victim = o; }
+    }
+    if (victim) {
+      e.yaw = Math.atan2(victim.obj.position.x - e.obj.position.x, victim.obj.position.z - e.obj.position.z);
+      const inReach = vd < 2.8 && Math.abs(victim.obj.position.y - e.obj.position.y) < 2;
+      if (inReach) {
+        if (e.charmAtkT <= 0) {
+          e.charmAtkT = e.cfg.attackTime;
+          if (e.state === 'attack') e.state = 'chase'; // force the swing anim to replay
+          setEnemyState(e, 'attack');
+          e.attackFired = true; // the blow lands on its own kind, not a player
+          damageEnemy(victim, e.dmg, false, false, 'none');
+          if (mine) spawnBurst(victim.obj.position.clone().setY(victim.obj.position.y + 1.2), 0x55ff77, 6, 3, 0.09, 0.3);
+        }
+      } else {
+        const dx = victim.obj.position.x - e.obj.position.x, dz = victim.obj.position.z - e.obj.position.z;
+        const d = Math.max(0.001, Math.hypot(dx, dz));
+        const spd = e.cfg.speed * e.slowMult * e.speedMult;
+        moveWithCollision(e.obj.position, (dx / d) * spd * dt, (dz / d) * spd * dt, 0.5 * e.scale, { y: e.obj.position.y, ghost: e.ghost, grid });
+        if (e.state !== 'chase' && e.stateT > e.cfg.attackTime) setEnemyState(e, 'chase');
+      }
+    } else if ((e.state === 'chase' || e.state === 'attack') && e.stateT > e.cfg.attackTime) {
+      setEnemyState(e, 'idle'); // no one left to turn on — stand guard
+    }
+  } else switch (e.state) {
     case 'inactive': {
       if (t && t.dist < e.cfg.aggro && (e.ghost || hasLineOfSight(e.obj.position.x, e.obj.position.z, t.pos.x, t.pos.z, grid))) {
         setEnemyState(e, 'awaken');
@@ -547,8 +593,8 @@ function simulateEnemy(e, fs, players, dt, mine) {
     }
   }
 
-  // summoners (necromancers and summoning bosses)
-  if (e.cfg.summons && e.state !== 'inactive' && e.state !== 'dead') {
+  // summoners (necromancers and summoning bosses) — silenced while charmed or shrunken
+  if (e.cfg.summons && e.state !== 'inactive' && e.state !== 'dead' && e.charmT <= 0 && e.polyT <= 0) {
     e.summonT -= dt;
     if (e.summonT <= 0) {
       e.summonT = e.cfg.summonEvery || 9;
@@ -1057,6 +1103,42 @@ function summonImps(e, fs, n) {
 // visual status effects other clients must see too (via 'evfx' messages)
 export function applyEnemyVfx(e, kind, dur) {
   if (!e || e.state === 'dead') return;
+  if (kind === 'charm' || kind === 'poly') {
+    // material tint (and shrink, for poly) rather than a child mesh; a token
+    // guards the revert so a refreshed status isn't cut short by the old timer
+    e._statusTok = e._statusTok || {};
+    const tok = (e._statusTok[kind] = (e._statusTok[kind] || 0) + 1);
+    if (kind === 'poly' && e._polyScale0 === undefined) {
+      e._polyScale0 = e.obj.scale.x;
+      e.obj.scale.setScalar(e._polyScale0 * 0.35);
+    }
+    if (!e._statusMats) {
+      e._statusMats = [];
+      e.obj.traverse((n) => {
+        if (!n.isMesh && !n.isSkinnedMesh) return;
+        if (n.material.isMeshBasicMaterial) return; // blob shadows / glows
+        e._statusMats.push([n, n.material]);
+        n.material = n.material.clone();
+        if (n.material.emissive) {
+          n.material.emissive.setHex(kind === 'charm' ? 0x55ff77 : 0x2f7040);
+          n.material.emissiveIntensity = kind === 'charm' ? 0.5 : 0.35;
+        }
+      });
+    }
+    setTimeout(() => {
+      if (e._statusTok[kind] !== tok) return; // refreshed since — newer timer owns the revert
+      if (kind === 'poly' && e._polyScale0 !== undefined) {
+        e.obj.scale.setScalar(e._polyScale0);
+        e._polyScale0 = undefined;
+      }
+      const otherActive = kind === 'charm' ? e.polyT > 0 : e.charmT > 0;
+      if (e._statusMats && !otherActive) {
+        for (const [n, mat] of e._statusMats) { n.material.dispose?.(); n.material = mat; }
+        e._statusMats = null;
+      }
+    }, dur * 1000);
+    return;
+  }
   const old = e.obj.children.find(c => c.userData.evfx);
   if (old) e.obj.remove(old);
   let obj = null;
@@ -1154,6 +1236,17 @@ export function damageEnemy(e, amount, crit = false, fromNet = false, source = '
     if (effects.vuln) e.vulnT = Math.max(e.vulnT, effects.vuln);
     if (effects.lifesteal && mine && G.player && !G.player.dead) {
       G.player.hp = Math.min(G.player.maxHp, G.player.hp + Math.max(1, Math.round(amount * effects.lifesteal)));
+    }
+    // dominate / polymorph: minds too big (bosses, the dragon) shrug it off
+    if (effects.charm && !e.boss && !e.cfg.dragon) {
+      e.charmT = Math.max(e.charmT, effects.charm);
+      applyEnemyVfx(e, 'charm', effects.charm);
+      netSend({ t: 'evfx', f: e.floor, id: e.id, kind: 'charm', dur: effects.charm });
+    }
+    if (effects.poly && !e.boss && !e.cfg.dragon) {
+      e.polyT = Math.max(e.polyT, effects.poly);
+      applyEnemyVfx(e, 'poly', effects.poly);
+      netSend({ t: 'evfx', f: e.floor, id: e.id, kind: 'poly', dur: effects.poly });
     }
   }
 

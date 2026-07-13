@@ -6,7 +6,7 @@ import { spawnBolt } from './projectiles.js';
 import { spawnBurst, spawnDamageNumber, makeGlowSprite } from './fx.js';
 import { sfx } from './audio.js';
 import { damageEnemy } from './enemies.js';
-import { spawnMinion } from './minions.js';
+import { spawnMinion, minions, dismissMinion } from './minions.js';
 import { applyEnemyVfx } from './enemies.js';
 import { sigReady, spendSigCharge, effectiveAttackRange } from './player.js';
 import { healLocalPlayer } from './player.js';
@@ -322,6 +322,7 @@ export function castSpell(slot, effectiveDamage) {
           dirX: dx, dirY: dir.y, dirZ: dz,
           speed: sp.speed, dmg, owner: 'player', color: sp.color, size: sp.size || 1, vis: sp.vis,
           aoe: sp.aoe || 0, slow: sp.slow, pierce: !!sp.pierce, bounce: sp.bounce || 0,
+          lifesteal: sp.lifesteal || 0,
           poison: sp.poison ? { dps: Math.round(dmg * sp.poison.mult), dur: sp.poison.dur } : null,
         };
         spawnBolt(b);
@@ -501,6 +502,113 @@ export function castSpell(slot, effectiveDamage) {
         netSend({ t: 'fx', f: G.floor, x: px, y: 1.2, z: pz, color: 0xbfe0ff });
       }
       addMsg('Your reflections step out of the glass!', 'gold');
+      break;
+    }
+    case 'raise': {
+      // Raise Dead: the earth gives up its dead — a capped legion, the
+      // oldest servant quietly returning to dust to make room
+      sfx.trap(); sfx.levelup();
+      const mine = minions.filter(mm => !mm.dead && mm.owner === myId() && mm.kind === 'skeleton');
+      if (mine.length >= (sp.cap || 4)) {
+        const oldest = mine[0];
+        if (isAuthority()) dismissMinion(oldest);
+        else netSend({ t: 'mdismiss', id: oldest.id });
+      }
+      let px = origin.x + Math.sin(p.yaw) * 2, pz = origin.z + Math.cos(p.yaw) * 2;
+      if (posBlocked(px, pz, origin.y)) { px = origin.x; pz = origin.z; }
+      const o = { dmg: Math.max(4, Math.round(effectiveDamage() * sp.dmgMult)) };
+      if (isAuthority()) spawnMinion('skeleton', myId(), G.floor, px, pz, null, true, o);
+      else netSend({ t: 'hire', kind: 'skeleton', f: G.floor, x: px, z: pz, o });
+      spawnBurst(new THREE.Vector3(px, 1.0, pz), 0x77ff88, 20, 4, 0.14, 0.6);
+      netSend({ t: 'fx', f: G.floor, x: px, y: 1.0, z: pz, color: 0x77ff88 });
+      addMsg('The earth gives up its dead.', 'gold');
+      break;
+    }
+    case 'charm': {
+      // Dominate: the enemy under your crosshair fights for you
+      let target = null, best = 0.2;
+      const from = origin.clone().setY(origin.y + 1.5);
+      for (const e of G.enemies) {
+        if (e.state === 'dead' || e.state === 'inactive') continue;
+        const to = e.obj.position.clone().setY(e.obj.position.y + 1.1).sub(from);
+        const d = to.length();
+        if (d > sp.range) continue;
+        const ang = to.normalize().angleTo(dir);
+        if (ang < best && hasLineOfSight(from.x, from.z, e.obj.position.x, e.obj.position.z)) { best = ang; target = e; }
+      }
+      if (!target) { addMsg('No target in sight.', 'bad'); p.mana += sp.mana; cooldowns[spellId] = 0.4; break; }
+      sfx.levelup();
+      damageEnemy(target, 1, false, false, 'local', { charm: sp.dur });
+      spawnBurst(target.obj.position.clone().setY(target.obj.position.y + 1.4), 0x77ff88, 18, 4, 0.14, 0.6);
+      netSend({ t: 'fx', f: G.floor, x: target.obj.position.x, y: target.obj.position.y + 1.4, z: target.obj.position.z, color: 0x77ff88 });
+      spawnDamageNumber(target.obj.position.clone().setY(target.obj.position.y + 2.4), 'DOMINATED', '#77ff88', true);
+      addMsg('Its will is yours.', 'gold');
+      break;
+    }
+    case 'poly': {
+      // Polymorph: the enemy under your crosshair gets... smaller
+      let target = null, best = 0.2;
+      const from = origin.clone().setY(origin.y + 1.5);
+      for (const e of G.enemies) {
+        if (e.state === 'dead' || e.state === 'inactive') continue;
+        const to = e.obj.position.clone().setY(e.obj.position.y + 1.1).sub(from);
+        const d = to.length();
+        if (d > sp.range) continue;
+        const ang = to.normalize().angleTo(dir);
+        if (ang < best && hasLineOfSight(from.x, from.z, e.obj.position.x, e.obj.position.z)) { best = ang; target = e; }
+      }
+      if (!target) { addMsg('No target in sight.', 'bad'); p.mana += sp.mana; cooldowns[spellId] = 0.4; break; }
+      sfx.dodge(); sfx.potion();
+      damageEnemy(target, 1, false, false, 'local', { poly: sp.dur });
+      spawnBurst(target.obj.position.clone().setY(target.obj.position.y + 1.2), 0x88ff66, 20, 4, 0.14, 0.6);
+      netSend({ t: 'fx', f: G.floor, x: target.obj.position.x, y: target.obj.position.y + 1.2, z: target.obj.position.z, color: 0x88ff66 });
+      spawnDamageNumber(target.obj.position.clone().setY(target.obj.position.y + 2.4), 'RIBBIT', '#88ff66', true);
+      addMsg('Ribbit.', 'gold');
+      break;
+    }
+    case 'harvest': {
+      // Soul Harvest: rip the life out of everything nearby and wear it
+      sfx.crit();
+      const from = origin.clone().setY(origin.y + 1.4);
+      let total = 0;
+      for (const e of G.enemies) {
+        if (e.state === 'dead' || e.state === 'inactive') continue;
+        const d = Math.hypot(e.obj.position.x - origin.x, e.obj.position.z - origin.z);
+        if (d > sp.radius || Math.abs(e.obj.position.y - origin.y) > 3) continue;
+        const dealt = Math.min(Math.max(0, e.hp), dmg);
+        drawLightning(e.obj.position.clone().setY(e.obj.position.y + 1.1), from, 0x77ff88);
+        damageEnemy(e, dmg, false, false, 'local');
+        total += dealt;
+      }
+      if (total) {
+        healLocalPlayer(Math.max(2, Math.round(total * sp.healFrac)));
+        spawnBurst(origin.clone().setY(origin.y + 1.2), 0x77ff88, 22, 4.5, 0.15, 0.8);
+        netSend({ t: 'fx', f: G.floor, x: origin.x, y: origin.y + 1.2, z: origin.z, color: 0x77ff88 });
+        addMsg('Souls harvested — flesh mended.', 'gold');
+      } else {
+        addMsg('No souls to reap.', 'bad');
+      }
+      break;
+    }
+    case 'pact': {
+      // Blood Pact: trade flesh for power — costs no mana, only pain
+      sfx.hit(); sfx.potion();
+      const cost = Math.round(p.maxHp * sp.hpCost);
+      p.hp = Math.max(1, p.hp - cost);
+      p.mana = Math.min(p.maxMana, p.mana + Math.round(p.maxMana * sp.manaGain));
+      spawnDamageNumber(origin.clone().setY(origin.y + 2.2), `-${cost}`, '#ff5566');
+      spawnBurst(origin.clone().setY(origin.y + 1.2), 0xcc2233, 20, 4, 0.14, 0.7);
+      netSend({ t: 'fx', f: G.floor, x: origin.x, y: origin.y + 1.2, z: origin.z, color: 0xcc2233 });
+      addMsg('You pay in blood.', 'gold');
+      break;
+    }
+    case 'wraith': {
+      // Wraith Form: slip out of the flesh — player.js handles the ghost walk
+      sfx.dodge();
+      p.wraithT = sp.dur;
+      spawnBurst(origin.clone().setY(origin.y + 1.2), 0xbfe0ff, 22, 4, 0.14, 0.8);
+      netSend({ t: 'fx', f: G.floor, x: origin.x, y: origin.y + 1.2, z: origin.z, color: 0xbfe0ff });
+      addMsg('You slip between worlds.', 'gold');
       break;
     }
     case 'lightning': {
@@ -1133,7 +1241,7 @@ G.dropEmber = (x, z, dmg) => {
 
 // quick lightning beam visual
 const beams = [];
-function drawLightning(a, b) {
+function drawLightning(a, b, color = 0x99ddff) {
   const pts = [a];
   const n = 5;
   for (let i = 1; i < n; i++) {
@@ -1146,18 +1254,18 @@ function drawLightning(a, b) {
   }
   pts.push(b);
   const geo = new THREE.BufferGeometry().setFromPoints(pts);
-  const line = new THREE.Line(geo, new THREE.LineBasicMaterial({ color: 0x99ddff, transparent: true, opacity: 1 }));
+  const line = new THREE.Line(geo, new THREE.LineBasicMaterial({ color, transparent: true, opacity: 1 }));
   G.scene.add(line);
   beams.push({ line, t: 0 });
-  netSend({ t: 'beam', f: G.floor, a: [a.x, a.y, a.z], b: [b.x, b.y, b.z] });
+  netSend({ t: 'beam', f: G.floor, a: [a.x, a.y, a.z], b: [b.x, b.y, b.z], c: color });
 }
 
-export function remoteBeam(a, b) {
-  drawLightningLocal(new THREE.Vector3(...a), new THREE.Vector3(...b));
+export function remoteBeam(a, b, c) {
+  drawLightningLocal(new THREE.Vector3(...a), new THREE.Vector3(...b), c || 0x99ddff);
 }
-function drawLightningLocal(a, b) {
+function drawLightningLocal(a, b, color = 0x99ddff) {
   const geo = new THREE.BufferGeometry().setFromPoints([a, b]);
-  const line = new THREE.Line(geo, new THREE.LineBasicMaterial({ color: 0x99ddff, transparent: true, opacity: 1 }));
+  const line = new THREE.Line(geo, new THREE.LineBasicMaterial({ color, transparent: true, opacity: 1 }));
   G.scene.add(line);
   beams.push({ line, t: 0 });
 }

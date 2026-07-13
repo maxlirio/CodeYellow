@@ -170,7 +170,7 @@ function handleAsHost(conn, m) {
       relay(conn, { ...m, pid });
       break;
     case 'beam':
-      if (m.f === G.floor) H?.spells.remoteBeam(m.a, m.b);
+      if (m.f === G.floor) H?.spells.remoteBeam(m.a, m.b, m.c);
       relay(conn, { ...m, pid });
       break;
     case 'equip':
@@ -192,6 +192,12 @@ function handleAsHost(conn, m) {
     case 'hire':
       H?.minions.spawnMinion(m.kind, pid, m.f, m.x, m.z, null, true, m.o || {});
       break;
+    case 'mdismiss': {
+      // a guest quietly unsummons their own minion (raise-dead cap)
+      const dm = H?.minions.minionById(m.id);
+      if (dm && dm.owner === pid) H.minions.dismissMinion(dm, false);
+      break;
+    }
     case 'pheal':
       applyPheal(m);
       relay(conn, { ...m, pid });
@@ -299,7 +305,10 @@ function handleAsGuest(m) {
     }
     case 'mdie': {
       const mn = H?.minions.minionById(m.id);
-      if (mn && !mn.dead) H.minions.damageMinion(mn, mn.hp + 999, true);
+      if (mn && !mn.dead) {
+        if (m.q) H.minions.dismissMinion(mn, true);
+        else H.minions.damageMinion(mn, mn.hp + 999, true);
+      }
       break;
     }
     case 'wave':
@@ -340,7 +349,7 @@ function handleAsGuest(m) {
       H?.spells.endRemoteZone(m.id);
       break;
     case 'beam':
-      if (m.f === G.floor) H?.spells.remoteBeam(m.a, m.b);
+      if (m.f === G.floor) H?.spells.remoteBeam(m.a, m.b, m.c);
       break;
     case 'equip':
       H?.player.applyRemoteEquip(m.pid, m.meshes, m.held, m.held2);
