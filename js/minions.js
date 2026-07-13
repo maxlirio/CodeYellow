@@ -5,7 +5,7 @@ import { G, floorState } from './state.js';
 import { makeCharacter, applyLook, tintCharacter, makeWeaponModel } from './assets.js';
 import { makeBlobShadow, spawnDamageNumber, spawnBurst } from './fx.js';
 import { sfx } from './audio.js';
-import { moveWithCollision, groundHeightAt, hasLineOfSight, resolveStuck, posBlocked } from './dungeon.js';
+import { moveWithCollision, groundHeightAt, hasLineOfSight, resolveStuck, posBlocked, bodyBlocked, safeSpawn } from './dungeon.js';
 import { damageEnemy } from './enemies.js';
 import { spawnBolt } from './projectiles.js';
 import { netSend, isAuthority, myId } from './net.js';
@@ -50,7 +50,13 @@ export function spawnMinion(kindId, owner, floor, x, z, id = null, broadcast = t
       hand.add(held);
     }
   }
-  obj.position.set(x, 0, z);
+  // Spawn ON the surface, not at y=0. Summoning while you stand on a platform or
+  // a built deck used to drop the minion at ground level UNDERNEATH you, inside
+  // the block — where it is lost for good: groundHeightAt reports 0 for it
+  // forever, and the blink-to-owner rescue only fires past 18u HORIZONTAL, which
+  // never trips when you're straight overhead.
+  const casterPos = G.player?.obj.position;
+  obj.position.set(x, groundHeightAt(x, z, casterPos ? casterPos.y : 0), z);
   obj.add(makeBlobShadow(0.8));
   const c = document.createElement('canvas');
   c.width = 256; c.height = 44;
@@ -131,7 +137,9 @@ export function moveMinionsToFloor(owner, floor) {
     const fs = floorState(floor);
     if (!fs.grid) continue;
     m.floor = floor;
-    m.obj.position.set(fs.grid.spawn.x + 1.5, 0, fs.grid.spawn.z + 1.5);
+    const sp = safeSpawn(fs.grid.spawn.x + 1.5, fs.grid.spawn.z + 1.5, 0, fs.grid) || fs.grid.spawn;
+    m.obj.position.set(sp.x, groundHeightAt(sp.x, sp.z, 0, fs.grid), sp.z);
+    m.vy = 0;
     m.obj.parent?.remove(m.obj);
     (fs.meshGroup || G.scene).add(m.obj);
     m.obj.visible = floor === G.floor;
@@ -333,10 +341,27 @@ export function updateMinions(dt) {
       m.vy -= 26 * dt;
       pos.y = Math.max(ground, pos.y + m.vy * dt);
       if (pos.y === ground) m.vy = 0;
-    } else if (ground > pos.y && ground - pos.y <= 1.6) {
+    } else if (ground > pos.y) {
+      // groundHeightAt only ever offers a surface that can be reached, so always
+      // rise to it. The old `<= 1.6` was narrower than the 1.7 a build ramp can
+      // offer, leaving minions wading waist-deep INSIDE your ramps.
       pos.y = ground;
+      m.vy = 0;
     }
+    unstickMinion(m, fs, dt);
   }
+}
+
+// minions never had the player's unstick self-heal; with de-penetrating movement
+// an embedded one would otherwise claw through the level forever
+function unstickMinion(m, fs, dt) {
+  m.stuckT = (m.stuckT || 0) + dt;
+  if (m.stuckT < 0.5) return;
+  m.stuckT = 0;
+  const p = m.obj.position;
+  if (!bodyBlocked(p.x, p.z, p.y, fs.grid)) return;
+  const free = resolveStuck(p.x, p.z, p.y, fs.grid);
+  if (free) { p.x = free.x; p.z = free.z; }
 }
 
 // periodic snapshots (host), piggybacks on the esnap cadence

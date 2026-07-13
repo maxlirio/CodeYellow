@@ -7,7 +7,7 @@ import { ENEMIES, scaleHp, scaleDmg, ANIM_GROUND, ANIM_CRITTER, ANIM_FLYER } fro
 import { makeCharacter, tintCharacter, makeWeaponModel } from './assets.js';
 import { makeBlobShadow, spawnDamageNumber, spawnBurst, makeGlowSprite } from './fx.js';
 import { sfx } from './audio.js';
-import { moveWithCollision, hasLineOfSight, groundHeightAt } from './dungeon.js';
+import { moveWithCollision, hasLineOfSight, groundHeightAt, bodyBlocked, resolveStuck, safeSpawn } from './dungeon.js';
 import { spawnBolt } from './projectiles.js';
 import { netSend, isAuthority } from './net.js';
 import { addMsg, showBossBar, updateBossBar, hideBossBar, showBossCard } from './ui.js';
@@ -353,8 +353,24 @@ export function updateEnemies(dt) {
 
       if (e.cfg.dragon) simulateDragon(e, fs, players, dt, mine);
       else simulateEnemy(e, fs, players, dt, mine);
+      if (!e.cfg.fly && !e.cfg.dragon) unstickEntity(e, fs, dt);
     }
   }
+}
+
+// The player self-heals out of geometry every 0.5s; nothing else did. That was
+// survivable when an embedded body simply couldn't move — it just ground against
+// the wall — but movement now de-penetrates, so anything that ends up inside the
+// level (a summon spawned into a wall, a slime split against one, a bad landing)
+// needs a way OUT or it will keep clawing at the rock forever.
+function unstickEntity(e, fs, dt) {
+  e.stuckT = (e.stuckT || 0) + dt;
+  if (e.stuckT < 0.5) return;
+  e.stuckT = 0;
+  const p = e.obj.position;
+  if (!bodyBlocked(p.x, p.z, p.y, fs.grid)) return;
+  const free = resolveStuck(p.x, p.z, p.y, fs.grid);
+  if (free) { p.x = free.x; p.z = free.z; }
 }
 
 function simulateEnemy(e, fs, players, dt, mine) {
@@ -575,7 +591,7 @@ function simulateEnemy(e, fs, players, dt, mine) {
       e.vy -= 26 * dt;
       e.obj.position.y = Math.max(ground, e.obj.position.y + e.vy * dt);
       if (e.obj.position.y === ground) e.vy = 0;
-    } else if (ground > e.obj.position.y && ground - e.obj.position.y <= 1.6) {
+    } else if (ground > e.obj.position.y) { // <=1.6 was narrower than the 1.7 groundHeightAt offers — they waded inside ramps
       e.obj.position.y = ground;
       e.vy = 0;
     }
@@ -588,7 +604,11 @@ function simulateEnemy(e, fs, players, dt, mine) {
       e.summonT = e.cfg.summonEvery || 9;
       for (let i = 0; i < (e.cfg.summonCount || 1); i++) {
         const a = Math.random() * Math.PI * 2;
-        const x = e.obj.position.x + Math.sin(a) * 3, z = e.obj.position.z + Math.cos(a) * 3;
+        // a summoner backed against a wall would put its minions INSIDE it
+        const sp = safeSpawn(e.obj.position.x + Math.sin(a) * 3, e.obj.position.z + Math.cos(a) * 3,
+                             e.obj.position.y, fs.grid);
+        if (!sp) continue;
+        const x = sp.x, z = sp.z;
         const id = fs.n * 1000 + 500 + fs.nextSummonId++;
         const m = spawnEnemy(fs, e.cfg.summonType || 'minion', x, z, { y: e.obj.position.y, id });
         setEnemyState(m, 'awaken');
@@ -671,21 +691,61 @@ function simulateDragon(e, fs, players, dt, mine) {
     while (a < -Math.PI) a += Math.PI * 2;
     return a;
   };
+  // Her BULK has to clear the wall, not just her origin. The old test sampled a
+  // single point — her centre — so she could stand 0.1 from a wall face with
+  // half of herself (head, wings, tail: the parts you actually aim at) buried in
+  // stone. DRAGON_R is her torso; bodyR (4.5) also spans wings and tail, which
+  // may overlap scenery without looking wrong.
+  const DRAGON_R = 2.2;
+  const LAIR_WALL_TOP = 12; // lair walls stack 3 high — above this she's clear
+  const solidCell = (cx, cy) => {
+    if (cx < 0 || cy < 0 || cx >= fs.grid.w || cy >= fs.grid.h) return true;
+    return fs.grid.cells[cy * fs.grid.w + cx] === 0;
+  };
+  // Does her torso circle overlap any solid cell? This must test the cell's
+  // BOUNDS, not sample points at rounded cell centres: DRAGON_R (2.2) is wider
+  // than a cell's half-width (2.0), so a centre-sampling test read "blocked" for
+  // every cell merely ADJACENT to a wall — i.e. the whole lair perimeter — and
+  // she'd fall through to the already-embedded escape hatch and phase clean
+  // through the rock.
+  const bulkClear = (x, z) => {
+    const c0 = Math.floor((x - DRAGON_R) / 4 + 0.5), c1 = Math.floor((x + DRAGON_R) / 4 + 0.5);
+    const r0 = Math.floor((z - DRAGON_R) / 4 + 0.5), r1 = Math.floor((z + DRAGON_R) / 4 + 0.5);
+    for (let cy = r0; cy <= r1; cy++) {
+      for (let cx = c0; cx <= c1; cx++) {
+        if (!solidCell(cx, cy)) continue;
+        // closest point on this cell's box to her centre
+        const bx = Math.max(cx * 4 - 2, Math.min(x, cx * 4 + 2));
+        const bz = Math.max(cy * 4 - 2, Math.min(z, cy * 4 + 2));
+        const ddx = x - bx, ddz = z - bz;
+        if (ddx * ddx + ddz * ddz < DRAGON_R * DRAGON_R) return false;
+      }
+    }
+    return true;
+  };
+  // slide along the wall instead of stopping dead; if she is somehow ALREADY
+  // embedded, let her move freely so she can never be walled in permanently
+  const stepBulk = (nx, nz) => {
+    if (!bulkClear(pos.x, pos.z) || bulkClear(nx, nz)) { pos.x = nx; pos.z = nz; return; }
+    if (bulkClear(nx, pos.z)) pos.x = nx;
+    else if (bulkClear(pos.x, nz)) pos.z = nz;
+  };
   const groundMove = (tx, tz, sp) => {
     const dx = tx - pos.x, dz = tz - pos.z;
     const dist = Math.hypot(dx, dz) || 0.001;
     const step = Math.min(dist, sp * e.slowMult * dt);
-    const nx = pos.x + (dx / dist) * step, nz = pos.z + (dz / dist) * step;
-    const cx = Math.round(nx / 4), cy = Math.round(nz / 4);
-    if (cx > 0 && cy > 0 && cx < fs.grid.w && cy < fs.grid.h && fs.grid.cells[cy * fs.grid.w + cx] !== 0) {
-      pos.x = nx; pos.z = nz;
-    }
+    stepBulk(pos.x + (dx / dist) * step, pos.z + (dz / dist) * step);
   };
   const flyToward = (tx, ty, tz, sp) => {
     const dx = tx - pos.x, dy2 = ty - pos.y, dz = tz - pos.z;
     const dist = Math.hypot(dx, dy2, dz) || 0.001;
     const step = Math.min(dist, sp * dt);
-    pos.x += (dx / dist) * step; pos.y += (dy2 / dist) * step; pos.z += (dz / dist) * step;
+    pos.y += (dy2 / dist) * step;
+    const nx = pos.x + (dx / dist) * step, nz = pos.z + (dz / dist) * step;
+    // flight had NO collision at all: she flew straight out through the cavern
+    // wall. Over the wall tops she's genuinely clear; below them she goes around.
+    if (pos.y > LAIR_WALL_TOP) { pos.x = nx; pos.z = nz; }
+    else stepBulk(nx, nz);
   };
   const hitPlayersWithin = (r, dmg2, kbF, fxExtra) => {
     for (const p of players) {
@@ -1078,7 +1138,10 @@ function simulateDragon(e, fs, players, dt, mine) {
 function summonImps(e, fs, n) {
   for (let i = 0; i < n; i++) {
     const a2 = Math.random() * 6.28;
-    const sx = e.obj.position.x + Math.sin(a2) * 6, sz = e.obj.position.z + Math.cos(a2) * 6;
+    // lair walls are three cells tall — an unchecked 6u ring buries imps in stone
+    const sp = safeSpawn(e.obj.position.x + Math.sin(a2) * 6, e.obj.position.z + Math.cos(a2) * 6, 3, fs.grid);
+    if (!sp) continue;
+    const sx = sp.x, sz = sp.z;
     const id = fs.n * 1000 + 500 + fs.nextSummonId++;
     const imp = spawnEnemy(fs, 'imp', sx, sz, { y: 3, id });
     setEnemyState(imp, 'awaken');
@@ -1256,7 +1319,11 @@ export function killEnemy(e, source = 'local', fromNet = false) {
     const fs2 = floorState(e.floor);
     for (let i = 0; i < 2; i++) {
       const a2 = Math.random() * Math.PI * 2;
-      const sx = e.obj.position.x + Math.sin(a2) * 1.2, sz = e.obj.position.z + Math.cos(a2) * 1.2;
+      // you kill slimes AGAINST walls — don't pop the children into one
+      const sp2 = safeSpawn(e.obj.position.x + Math.sin(a2) * 1.2, e.obj.position.z + Math.cos(a2) * 1.2,
+                            e.obj.position.y, fs2.grid);
+      if (!sp2) continue;
+      const sx = sp2.x, sz = sp2.z;
       const id = fs2.n * 1000 + 500 + fs2.nextSummonId++;
       const mchild = spawnEnemy(fs2, e.cfg.splitInto, sx, sz, { y: e.obj.position.y, id });
       setEnemyState(mchild, 'awaken');

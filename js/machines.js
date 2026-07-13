@@ -6,7 +6,7 @@
 import * as THREE from 'three';
 import { G } from './state.js';
 import { makePiece, makeWeaponModel } from './assets.js';
-import { groundHeightAt, hasLineOfSight, FLOOR } from './dungeon.js';
+import { groundHeightAt, hasLineOfSight, FLOOR, cellOccupied } from './dungeon.js';
 import { addMsg, refreshHud } from './ui.js';
 import { sfx } from './audio.js';
 import { netSend, isAuthority } from './net.js';
@@ -104,6 +104,7 @@ export function planMachine(kindId) {
   if (cx < 1 || cy < 1 || cx >= fs.grid.w - 1 || cy >= fs.grid.h - 1) return null;
   const base = groundHeightAt(cx * CELL, cy * CELL, G.player.obj.position.y, fs.grid);
   const valid = fs.grid.cells[idx] === FLOOR && !machines.some(m => m.f === G.floor && m.cx === cx && m.cy === cy) &&
+    !cellOccupied(G.floor, cx, cy) && // never build a turret around a teammate
     hasLineOfSight(from.x, from.z, cx * CELL, cy * CELL, fs.grid);
   return { valid, kind: kindId, cx, cy, base, x: cx * CELL, z: cy * CELL };
 }

@@ -10,7 +10,7 @@ import { spawnMinion, minions, dismissMinion } from './minions.js';
 import { applyEnemyVfx } from './enemies.js';
 import { sigReady, spendSigCharge, effectiveAttackRange } from './player.js';
 import { healLocalPlayer } from './player.js';
-import { moveWithCollision, groundHeightAt, hasLineOfSight, posBlocked } from './dungeon.js';
+import { moveWithCollision, groundHeightAt, hasLineOfSight, posBlocked, safeSpawn } from './dungeon.js';
 import { addMsg, refreshHud } from './ui.js';
 import { netSend, isAuthority, myId } from './net.js';
 import { triggerSwing } from './viewmodel.js';
@@ -255,13 +255,28 @@ export function updateSpells(dt) {
     sfx.trap(); sfx.hit();
     spawnBurst(new THREE.Vector3(a.x, a.y + 0.6, a.z), a.color, 32, 9, 0.19, 0.6);
     netSend({ t: 'fx', f: G.floor, x: a.x, y: a.y + 0.6, z: a.z, color: a.color, big: 1 });
+    const at = { x: a.x, z: a.z };
     for (const e of G.enemies) {
       if (e.state === 'dead') continue;
       const d = Math.hypot(e.obj.position.x - a.x, e.obj.position.z - a.z);
       if (d > a.radius || Math.abs(e.obj.position.y - a.y) > 3) continue;
+      if (!inSight(at, e)) continue; // the blast doesn't reach through the wall it landed against
       damageEnemy(e, a.dmg, false, false, 'local', a.effects);
     }
   }
+}
+
+// Is there stone between this point and that enemy? The cone and aoe damage
+// loops tested radius and arc but never sight, so a blast detonated against a
+// wall still killed everything standing on the far side of it. Sight the point
+// on the enemy's BODY that faces us — a bodyR that wide (the dragon's is 4.5)
+// can have its origin behind cover while its flank is right in front of you.
+function inSight(origin, e) {
+  const dx = e.obj.position.x - origin.x, dz = e.obj.position.z - origin.z;
+  const d = Math.hypot(dx, dz);
+  if (d < 0.01) return true;
+  const back = Math.min(e.cfg?.bodyR || 0, d - 0.05);
+  return hasLineOfSight(origin.x, origin.z, e.obj.position.x - (dx / d) * back, e.obj.position.z - (dz / d) * back);
 }
 
 // march the crosshair ray to a ground point (or first wall) within range
@@ -343,6 +358,7 @@ export function castSpell(slot, effectiveDamage) {
         while (ang > Math.PI) ang -= Math.PI * 2;
         while (ang < -Math.PI) ang += Math.PI * 2;
         if (Math.abs(ang) > sp.arc) continue;
+        if (!inSight(origin, e)) continue; // a cone doesn't bend round a wall
         // executioner: the wounded are cut down outright
         const low = sp.execute && e.hp / e.maxHp < sp.execute;
         const coneDmg = low ? Math.round(dmg * (sp.execMult || 3)) : dmg;
@@ -361,6 +377,7 @@ export function castSpell(slot, effectiveDamage) {
         if (e.state === 'dead') continue;
         const d = Math.hypot(e.obj.position.x - origin.x, e.obj.position.z - origin.z);
         if (d > sp.radius || Math.abs(e.obj.position.y - origin.y) > 2.5) continue;
+        if (!inSight(origin, e)) continue; // the blast stops at the wall you're hugging
         const fx = { stun: sp.stun };
         if (sp.vulnAll) fx.vuln = sp.vulnAll;
         if (sp.slowAll) fx.slow = sp.slowAll;
@@ -495,7 +512,10 @@ export function castSpell(slot, effectiveDamage) {
       };
       for (let i = 0; i < count; i++) {
         const a = (i / count) * Math.PI * 2 + p.yaw + Math.PI / 2;
-        const px = origin.x + Math.sin(a) * 1.7, pz = origin.z + Math.cos(a) * 1.7;
+        // cast with your back to a wall and half the Legion lands inside it
+        const sp2 = safeSpawn(origin.x + Math.sin(a) * 1.7, origin.z + Math.cos(a) * 1.7, origin.y);
+        if (!sp2) continue;
+        const px = sp2.x, pz = sp2.z;
         if (isAuthority()) spawnMinion('phantom', myId(), G.floor, px, pz, null, true, o);
         else netSend({ t: 'hire', kind: 'phantom', f: G.floor, x: px, z: pz, o });
         spawnBurst(new THREE.Vector3(px, 1.2, pz), 0xbfe0ff, 16, 4, 0.13, 0.5);
@@ -860,7 +880,10 @@ export function castSpell(slot, effectiveDamage) {
       // STRAW DOUBLE: a scarecrow of yourself soaks the aggro
       sfx.bones(); sfx.dodge();
       const o = { model: p.cls.model, show: p.cls.show, dmg: 0, life: sp.dur, hp: sp.hp };
-      const px = origin.x + dir.x * 2, pz = origin.z + dir.z * 2;
+      // the decoy never moves, so a wall-buried one just draws the room to grind
+      // against the stone forever
+      const sp3 = safeSpawn(origin.x + dir.x * 2, origin.z + dir.z * 2, origin.y) || { x: origin.x, z: origin.z };
+      const px = sp3.x, pz = sp3.z;
       if (isAuthority()) spawnMinion('decoy', myId(), G.floor, px, pz, null, true, o);
       else netSend({ t: 'hire', kind: 'decoy', f: G.floor, x: px, z: pz, o });
       spawnBurst(new THREE.Vector3(px, 1.2, pz), 0xd9b36c, 16, 4, 0.13, 0.5);
@@ -952,7 +975,9 @@ export function castSpell(slot, effectiveDamage) {
         for (const e of G.enemies) {
           if (e.state === 'dead' || hitSet.has(e.id)) continue;
           const d = e.obj.position.distanceTo(cur.obj.position);
-          if (d < nd) { nd = d; next = e; }
+          // the arc has to see where it's jumping — only the FIRST target was
+          // sighted, so the chain used to fork through walls into the next room
+          if (d < nd && inSight(cur.obj.position, e)) { nd = d; next = e; }
         }
         cur = next;
       }

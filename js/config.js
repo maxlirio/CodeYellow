@@ -271,7 +271,9 @@ export const ENEMIES = {
   reaper:   { model: 'Skeleton_Rogue',   hp: 320, dmg: 20, speed: 6.8, range: 2.8, xp: 180, gold: [60, 95], attackTime: 0.6, aggro: 32, scale: 1.55, boss: true, ghost: true, tint: 0x223344, bossName: 'THE PALE REAPER' },
   boneking: { model: 'Skeleton_Mage',    hp: 620, dmg: 26, speed: 4.2, range: 16,  xp: 420, gold: [150, 220], attackTime: 1.3, aggro: 40, scale: 1.9, ranged: true, boss: true, summons: true, summonEvery: 9, summonType: 'minion', summonCount: 2, bossName: 'THE BONE KING' },
   mushking: { model: 'MushroomKing', hp: 350, dmg: 20, speed: 4.4, range: 3.0, xp: 190, gold: [70, 100], attackTime: 1.2, aggro: 30, scale: 1.35, animMap: 'ground', boss: true, stalwart: true, summons: true, summonEvery: 10, summonType: 'slimelet', summonCount: 3, bossName: 'THE MYCELIC KING', bossMsg: 'spawns spores' },
-  dragon:   { model: 'proc', hp: 2400, dmg: 24, speed: 5.5, range: 30, xp: 900, gold: [340, 480], attackTime: 1.2, aggro: 55, scale: 1.7, bodyR: 4.5, procDragon: true, boss: true, dragon: true, stalwart: true, bossName: 'EMBERWING THE UNDYING' },
+  // solidR = her TORSO: you must walk around it. bodyR (4.5) is her whole reach,
+  // wings and tail included — those you can duck under.
+  dragon:   { model: 'proc', hp: 2400, dmg: 24, speed: 5.5, range: 30, xp: 900, gold: [340, 480], attackTime: 1.2, aggro: 55, scale: 1.7, bodyR: 4.5, solidR: 2.2, procDragon: true, boss: true, dragon: true, stalwart: true, bossName: 'EMBERWING THE UNDYING' },
 };
 export const MIDBOSS_TYPES = ['boss', 'necrolord', 'reaper', 'mushking', 'boneking'];
 

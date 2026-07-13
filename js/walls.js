@@ -3,7 +3,7 @@
 import * as THREE from 'three';
 import { G, floorState } from './state.js';
 import { makePiece } from './assets.js';
-import { OBSTACLE, FLOOR } from './dungeon.js';
+import { OBSTACLE, FLOOR, cellOccupied } from './dungeon.js';
 import { spawnBurst } from './fx.js';
 import { sfx } from './audio.js';
 import { netSend } from './net.js';
@@ -29,12 +29,8 @@ export function placeWall(f, cx, cy, { dur = 10, yaw = 0, barricade = false, hp 
   if (prev !== FLOOR) return false;
   if (fs.grid.elev[idx]) return false;
   if (wallAt(f, cx, cy)) return false;
-  // never raise a wall under someone's feet — that traps them inside it
-  const onCell = (o) => Math.round(o.position.x / 4) === cx && Math.round(o.position.z / 4) === cy && o.position.y < 2.4;
-  if (G.player && G.floor === f && !G.player.dead && onCell(G.player.obj)) return false;
-  for (const r of G.remotes.values()) {
-    if (r.floor === f && !r.dead && onCell(r.obj)) return false;
-  }
+  // never raise a wall on someone — that traps them inside it
+  if (cellOccupied(f, cx, cy)) return false;
 
   fs.grid.cells[idx] = OBSTACLE;
   const pieceName = piece || (barricade ? 'crates_stacked' : 'wall');

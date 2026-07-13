@@ -4,18 +4,30 @@
 import * as THREE from 'three';
 import { G } from './state.js';
 import { makeGlowSprite, spawnBurst } from './fx.js';
-import { groundHeightAt } from './dungeon.js';
+import { groundHeightAt, boltBlocked } from './dungeon.js';
 import { makeWeaponModel, makePiece } from './assets.js';
 import { sfx } from './audio.js';
 import { netSend } from './net.js';
 
 const CELL = 4;
 
-function solidAt(x, z) {
+// A bolt stops on anything a body would: SOLID cells, bone walls / barricades
+// (OBSTACLE), player builds, pillars and props. It used to test SOLID alone, so
+// every arrow flew straight through the Bone Wall you paid 24 mana for.
+function solidAt(x, z, y) {
   if (!G.grid) return true;
-  const cx = Math.round(x / CELL), cy = Math.round(z / CELL);
-  if (cx < 0 || cy < 0 || cx >= G.grid.w || cy >= G.grid.h) return true;
-  return G.grid.cells[cy * G.grid.w + cx] === 0;
+  return boltBlocked(x, z, y);
+}
+
+// The volume a bolt has to enter to hit an enemy. For most monsters that's a
+// slim cylinder round the model, but big-bodied ones carry cfg.bodyR (the dragon
+// is 4.5) — MELEE already subtracts bodyR, so bolts must honour it too, or you
+// put an arrow through Emberwing's head and watch it burst on the wall behind.
+function enemyHitbox(e) {
+  const s = e.scale || 1;
+  const bodyR = e.cfg?.bodyR || 0;
+  if (!bodyR) return { r: 0.95 * s, cy: 1.1 * s, hy: 1.5 * s };
+  return { r: bodyR, cy: bodyR * 0.8, hy: bodyR };
 }
 
 // build the visual for a projectile; returns { obj, spin:'blade'|'tumble'|'pulse'|null, orient:bool, trail }
@@ -176,8 +188,8 @@ export function updateProjectiles(dt, hooks) {
     p.z += p.dirZ * p.speed * dt;
     // ricochet: bounce off walls and floor instead of bursting
     if (p.bounce > 0) {
-      if (solidAt(p.x, p.z)) {
-        const bx = solidAt(p.x, prevZ), bz = solidAt(prevX, p.z);
+      if (solidAt(p.x, p.z, p.y)) {
+        const bx = solidAt(p.x, prevZ, p.y), bz = solidAt(prevX, p.z, p.y);
         if (bx || !bz) p.dirX = -p.dirX;
         if (bz || !bx) p.dirZ = -p.dirZ;
         p.x = prevX; p.z = prevZ;
@@ -220,7 +232,7 @@ export function updateProjectiles(dt, hooks) {
       }
     }
 
-    let dead = p.life > (p.bounce > 0 ? 4.5 : 2.2) || solidAt(p.x, p.z) ||
+    let dead = p.life > (p.bounce > 0 ? 4.5 : 2.2) || solidAt(p.x, p.z, p.y) ||
       p.y < groundHeightAt(p.x, p.z, p.y) + 0.12 || p.y > 16;
 
     if (!dead && p.owner === 'player' && G.runMode === 'duel') {
@@ -238,9 +250,9 @@ export function updateProjectiles(dt, hooks) {
       for (const e of G.enemies) {
         if (e.state === 'dead' || e.state === 'inactive') continue;
         if (p.hitIds && p.hitIds.has(e.id)) continue;
-        const r = 0.95 * (e.scale || 1);
-        if (Math.hypot(e.obj.position.x - p.x, e.obj.position.z - p.z) < r &&
-            Math.abs(e.obj.position.y + 1.1 * e.scale - p.y) < 1.5 * e.scale) {
+        const hb = enemyHitbox(e);
+        if (Math.hypot(e.obj.position.x - p.x, e.obj.position.z - p.z) < hb.r &&
+            Math.abs(e.obj.position.y + hb.cy - p.y) < hb.hy) {
           if (p.aoe) { explode(p, hooks); p.exploded = true; dead = true; }
           else {
             hooks.damageEnemy(e, p.dmg, Math.random() < 0.08, false, 'local', { slow: p.slow, poison: p.poison, lifesteal: p.lifesteal });

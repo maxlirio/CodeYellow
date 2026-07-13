@@ -7,7 +7,7 @@ import { CLASSES, XP_FOR_LEVEL, CAPE_COLORS, SIGNATURES, SPELLS, CELL } from './
 import { makeCharacter, setEquipMeshes, applyLook, makeWeaponModel } from './assets.js';
 import { makeBlobShadow, spawnDamageNumber, spawnBurst } from './fx.js';
 import { sfx } from './audio.js';
-import { moveWithCollision, groundHeightAt, posBlocked, resolveStuck } from './dungeon.js';
+import { moveWithCollision, groundHeightAt, posBlocked, bodyBlocked, resolveStuck, hasLineOfSight } from './dungeon.js';
 import { spawnBolt } from './projectiles.js';
 import { damageEnemy } from './enemies.js';
 import { gearStat, weaponDamage, equippedMeshes, affixOf } from './items.js';
@@ -109,16 +109,15 @@ export function refreshEquipVisuals() {
 
 export function resetPlayerForFloor() {
   const p = G.player;
-  p.lash = null;
+  clearMotionState(p); // a rope/lash held across a floor change anchors to the OLD grid
   p.obj.position.set(G.grid.spawn.x, 0, G.grid.spawn.z);
   p.obj.position.y = groundHeightAt(G.grid.spawn.x, G.grid.spawn.z, 0);
   // never spawn embedded in geometry
-  if (posBlocked(p.obj.position.x, p.obj.position.z, p.obj.position.y)) {
+  if (bodyBlocked(p.obj.position.x, p.obj.position.z, p.obj.position.y)) {
     const free = resolveStuck(p.obj.position.x, p.obj.position.z, p.obj.position.y);
     if (free) { p.obj.position.x = free.x; p.obj.position.z = free.z; }
   }
   if (G.grid.spawnYaw !== undefined) p.camYaw = G.grid.spawnYaw;
-  p.vy = 0;
   p.obj.visible = false;
   if (p.dead) { p.dead = false; p.hp = Math.round(p.maxHp * 0.6); }
   p.attacking = false;
@@ -276,11 +275,26 @@ export function damageLocalPlayer(amount, effects = null) {
   sendPos(true);
 }
 
+// Drop everything that carries momentum or ties you to a fixed point. A rope or
+// lash left attached across a death or a floor change keeps its OLD anchor: the
+// rope's length constraint writes the position DIRECTLY, so the next frame after
+// you respawn it snaps you back across the map, straight through the geometry in
+// between (moveWithCollision only validates the endpoint — it can't sweep).
+function clearMotionState(p) {
+  p.rope = null; // the rope holds no state of its own — dropping the ref detaches
+  p.lash = null;
+  p.vy = 0;
+  p.airVX = 0; p.airVZ = 0;
+  p.kbX = 0; p.kbZ = 0;
+  p.levitateT = 0;
+}
+
 function die() {
   const p = G.player;
   p.dead = true;
   p.deadT = 0;
   p.attacking = false;
+  clearMotionState(p);
   p.obj.visible = true; // death cam shows your body
   p.anim.play('Death_A', { once: true, clamp: true });
   sfx.death();
@@ -313,11 +327,14 @@ function trackWedge(p, dt, movedNow) {
   // pressing into a flat wall is normal: if ANY direction can carry us a real
   // distance we're not wedged, just leaning. A true pocket lets you jiggle
   // but never travel — no probe gets anywhere.
+  // Probe with a step the player could ACTUALLY take. A big 1.6 probe leaps
+  // clear of a penetration band in one bound while the real ~0.1 steps never
+  // can, so it reported "clearly mobile" for exactly the players who were pinned.
   const pos = p.obj.position;
   for (let i = 0; i < 8; i++) {
     const a = (i / 8) * Math.PI * 2;
     const t = { x: pos.x, z: pos.z, y: pos.y };
-    moveWithCollision(t, Math.sin(a) * 1.6, Math.cos(a) * 1.6, 0.55, { y: pos.y });
+    for (let s = 0; s < 6; s++) moveWithCollision(t, Math.sin(a) * 0.25, Math.cos(a) * 0.25, 0.55, { y: pos.y });
     if (Math.hypot(t.x - pos.x, t.z - pos.z) > 1.2) return;
   }
   const free = findOpenGround(pos.x, pos.z);
@@ -409,18 +426,38 @@ export function updatePlayer(dt) {
     }
   }
   // unstick self-heal: if we ever end up inside geometry (bad landing,
-  // desync, a wall raised nearby), nudge to the nearest free spot
+  // desync, a wall raised nearby), nudge to the nearest free spot.
+  // Tests the BODY, not just the centre: with a centre-only test you could be
+  // pinned with a shoulder inside a wall — every direction blocked by the 0.55
+  // movement ring — while this reported you perfectly fine and never fired.
   p.stuckT = (p.stuckT || 0) + dt;
   if (p.stuckT > 0.5) {
     p.stuckT = 0;
     const pos0 = p.obj.position;
-    if (posBlocked(pos0.x, pos0.z, pos0.y)) {
+    if (!p.lash && bodyBlocked(pos0.x, pos0.z, pos0.y)) {
       const free = resolveStuck(pos0.x, pos0.z, pos0.y);
       if (free) {
         pos0.x = free.x; pos0.z = free.z;
         p.kbX = 0; p.kbZ = 0;
       }
     }
+  }
+
+  // Monsters are pass-through — you can walk clean into one, and that's the
+  // game's feel. But you could also stand INSIDE the dragon, where every attack
+  // of hers lands and none of yours can miss. The truly massive carry a solidR:
+  // their torso is real and you go round it. (Not while she's overhead — duck
+  // under her all you like.)
+  for (const e of G.enemies) {
+    const r = e.cfg?.solidR;
+    if (!r || e.state === 'dead' || e.state === 'inactive') continue;
+    const ep = e.obj.position, pp = p.obj.position;
+    if (Math.abs(pp.y - ep.y) > 4) continue; // she's in the air
+    const dx = pp.x - ep.x, dz = pp.z - ep.z;
+    const d = Math.hypot(dx, dz);
+    if (d >= r) continue;
+    if (d < 0.001) { moveWithCollision(pp, r, 0, 0.55, { y: pp.y }); continue; }
+    moveWithCollision(pp, (dx / d) * (r - d), (dz / d) * (r - d), 0.55, { y: pp.y });
   }
 
   // knockback impulse
@@ -487,59 +524,39 @@ export function updatePlayer(dt) {
             addMsg('🧲 You land on the surface — WASD walks it, SPACE lets go.');
           }
         }
+        // AIR CONTROL: steer while falling, like any other fall. Runs AFTER the
+        // gravity step so it can't fool the "did I land?" test above.
+        if (!p.lash.grounded) {
+          const mv = lashMoveDir(p);
+          if (mv) {
+            const sp = effectiveSpeed() * 0.55;
+            moveWithCollision(pos, mv.x * sp * dt, mv.z * sp * dt, 0.55, { y: pos.y });
+            if (!p.lash.up && Math.abs(mv.y) > 0.001) pos.y = lashClampY(pos.y + mv.y * sp * dt, pos.y, 0);
+          }
+        }
       } else if (p.lash.up) {
         // inverted stroll across the ceiling: free x/z, held to the vault
-        const k = G.keys;
-        let ix = 0, iz = 0;
-        if (k['KeyW']) iz -= 1;
-        if (k['KeyS']) iz += 1;
-        if (k['KeyA']) ix -= 1;
-        if (k['KeyD']) ix += 1;
-        if (ix || iz) {
-          G.camera.getWorldDirection(_lashFwd);
-          _lashFwd.y = 0;
-          if (_lashFwd.lengthSq() > 0.01) {
-            _lashFwd.normalize();
-            _lashRight.set(-_lashFwd.z, 0, _lashFwd.x);
-            _lashMove.copy(_lashFwd).multiplyScalar(-iz).addScaledVector(_lashRight, -ix);
-            if (_lashMove.lengthSq() > 0.001) {
-              _lashMove.normalize();
-              const sp = effectiveSpeed() * 0.8;
-              moveWithCollision(pos, _lashMove.x * sp * dt, _lashMove.z * sp * dt, 0.55, { y: pos.y });
-              p.bobT += dt * sp * 1.35;
-            }
-          }
+        const mv = lashMoveDir(p);
+        if (mv) {
+          const sp = effectiveSpeed() * 0.8;
+          moveWithCollision(pos, mv.x * sp * dt, mv.z * sp * dt, 0.55, { y: pos.y });
+          p.bobT += dt * sp * 1.35;
         }
         pos.y = LASH_CEIL;
       } else {
         // walking the wall face: camera-look projected onto the surface plane
-        const k = G.keys;
-        let ix = 0, iz = 0;
-        if (k['KeyW']) iz -= 1;
-        if (k['KeyS']) iz += 1;
-        if (k['KeyA']) ix -= 1;
-        if (k['KeyD']) ix += 1;
-        if (ix || iz) {
-          G.camera.getWorldDirection(_lashFwd);
-          _lashUp.set(-g.x, 0, -g.z);
-          _lashRight.crossVectors(_lashFwd, _lashUp).normalize();
-          _lashMove.copy(_lashFwd).multiplyScalar(-iz).addScaledVector(_lashRight, ix);
-          // strip the component INTO the wall, keep the surface-plane part
-          const into = _lashMove.x * g.x + _lashMove.z * g.z;
-          _lashMove.x -= g.x * into; _lashMove.z -= g.z * into;
-          if (_lashMove.lengthSq() > 0.001) {
-            _lashMove.normalize();
-            const sp = effectiveSpeed() * 0.8;
-            moveWithCollision(pos, _lashMove.x * sp * dt, _lashMove.z * sp * dt, 0.55, { y: pos.y });
-            const ny = Math.max(0.3, Math.min(11, pos.y + _lashMove.y * sp * dt));
-            // climb only while the wall is still there beside you
-            const wx = pos.x, wz = pos.z;
-            moveWithCollision(pos, g.x * 0.4, g.z * 0.4, 0.55, { y: ny });
-            const wallStillThere = Math.hypot(pos.x - wx, pos.z - wz) < 0.15;
-            pos.x = wx; pos.z = wz;
-            if (wallStillThere) pos.y = ny;
-            p.bobT += dt * sp * 1.35;
-          }
+        const mv = lashMoveDir(p);
+        if (mv) {
+          const sp = effectiveSpeed() * 0.8;
+          moveWithCollision(pos, mv.x * sp * dt, mv.z * sp * dt, 0.55, { y: pos.y });
+          const ny = lashClampY(pos.y + mv.y * sp * dt, pos.y);
+          // climb only while the wall is still there beside you
+          const wx = pos.x, wz = pos.z;
+          moveWithCollision(pos, g.x * 0.4, g.z * 0.4, 0.55, { y: ny });
+          const wallStillThere = Math.hypot(pos.x - wx, pos.z - wz) < 0.15;
+          pos.x = wx; pos.z = wz;
+          if (wallStillThere) pos.y = ny;
+          p.bobT += dt * sp * 1.35;
         }
         // is the surface still under your feet? probe along gravity: open
         // space means the wall ENDED — you fall anew toward the next one
@@ -642,7 +659,13 @@ export function updatePlayer(dt) {
     pos.y = Math.max(ground, pos.y + p.vy * dt);
     if (pos.y === ground) { p.vy = 0; p.airVX = 0; p.airVZ = 0; }
   } else if (ground > pos.y) {
-    if (ground - pos.y <= 1.6) { pos.y = ground; p.vy = 0; } // stick to ramps while climbing
+    // Stick to ramps while climbing. groundHeightAt only ever offers a surface
+    // you can actually reach (its own gates cap it at curY + 1.7), so ALWAYS
+    // rise to it. The old `<= 1.6` guard was narrower than the 1.7 a build ramp
+    // can offer, and a ramp landing in that 0.1 gap left you embedded in it
+    // forever — not lifted, not dropped, vy never even reset.
+    pos.y = ground;
+    p.vy = 0;
   } else {
     p.vy = 0;
   }
@@ -704,6 +727,22 @@ function meleeTargetInReach() {
   return false;
 }
 
+// Is there stone between us? Melee had NO line-of-sight test — only distance and
+// a yaw arc — so any enemy with a bodyR could be hit clean through a wall.
+// Emberwing (bodyR 4.5, boss ×1.4 range) was meleeable from 9+ units away with a
+// wall in between, which is a free boss kill.
+// We sight the point on her BODY that faces us, not her origin: a monster that
+// wide can have her centre behind a pillar while her flank is in your face.
+function canReach(p, e) {
+  const px = p.obj.position.x, pz = p.obj.position.z;
+  const ex = e.obj.position.x, ez = e.obj.position.z;
+  const dx = ex - px, dz = ez - pz;
+  const d = Math.hypot(dx, dz);
+  if (d < 0.01) return true;
+  const back = Math.min(e.cfg?.bodyR || 0, d - 0.05);
+  return hasLineOfSight(px, pz, ex - (dx / d) * back, ez - (dz / d) * back);
+}
+
 // too close to draw the string — the off-hand dagger answers instead
 function offhandDaggerSwipe(p, dmg, wfx) {
   const swipe = Math.max(1, Math.round(dmg * 0.6));
@@ -736,6 +775,7 @@ function offhandDaggerSwipe(p, dmg, wfx) {
     while (ang > Math.PI) ang -= Math.PI * 2;
     while (ang < -Math.PI) ang += Math.PI * 2;
     if (Math.abs(ang) > 1.3) continue;
+    if (!canReach(p, e)) continue; // no swinging through stone
     const hit = crit4(swipe);
     damageEnemy(e, hit.v, hit.crit, false, 'local', wfx);
     landed = true;
@@ -817,6 +857,7 @@ function doAttackHit() {
     while (ang > Math.PI) ang -= Math.PI * 2;
     while (ang < -Math.PI) ang += Math.PI * 2;
     if (Math.abs(ang) > effectiveAttackArc()) continue;
+    if (!canReach(p, e)) continue; // no swinging through stone
     let hitDmg = crit4(dmg);
     if (p.swapCritT > 0) { hitDmg = { v: Math.round(dmg * 2), crit: true }; p.swapCritT = 0; }
     damageEnemy(e, hitDmg.v, hitDmg.crit, false, 'local', wfx);
@@ -964,6 +1005,46 @@ const _lashMove = new THREE.Vector3();
 
 const LASH_CEIL = 8; // the height of the unseen vault you can stand on
 
+// WASD mapped into the plane PERPENDICULAR to the lash gravity — the same basis
+// whether you're walking the surface or still falling toward it. Returns null
+// when there's no input. The result's .y is the climb component.
+function lashMoveDir(p) {
+  const k = G.keys;
+  let ix = 0, iz = 0;
+  if (k['KeyW']) iz -= 1;
+  if (k['KeyS']) iz += 1;
+  if (k['KeyA']) ix -= 1;
+  if (k['KeyD']) ix += 1;
+  if (!ix && !iz) return null;
+  G.camera.getWorldDirection(_lashFwd);
+  if (p.lash.up) {
+    _lashFwd.y = 0;
+    if (_lashFwd.lengthSq() < 0.01) return null;
+    _lashFwd.normalize();
+    _lashRight.set(-_lashFwd.z, 0, _lashFwd.x);
+    _lashMove.copy(_lashFwd).multiplyScalar(-iz).addScaledVector(_lashRight, -ix); // flipped handedness, hanging
+  } else {
+    const g = p.lash.g;
+    _lashUp.set(-g.x, 0, -g.z);
+    _lashRight.crossVectors(_lashFwd, _lashUp).normalize();
+    _lashMove.copy(_lashFwd).multiplyScalar(-iz).addScaledVector(_lashRight, ix);
+    // strip the component INTO the wall, keep the surface-plane part
+    const into = _lashMove.x * g.x + _lashMove.z * g.z;
+    _lashMove.x -= g.x * into; _lashMove.z -= g.z * into;
+  }
+  if (_lashMove.lengthSq() < 0.001) return null;
+  return _lashMove.normalize();
+}
+
+// Climbing is capped at LASH_WALK_CEIL, but never YANK someone who lashed above
+// it back down — clamp against their own height instead. minY is 0.3 on a wall
+// (feet clear of the floor) but 0 in flight, so a ground-level lash doesn't pop
+// you up as soon as you steer.
+const LASH_WALK_CEIL = 11;
+function lashClampY(y, curY, minY = 0.3) {
+  return Math.max(minY, Math.min(Math.max(LASH_WALK_CEIL, curY), y));
+}
+
 export function releaseLash(p) {
   if (!p.lash) return;
   p.lash = null;
@@ -1017,15 +1098,23 @@ function updateCamera(dt, moving) {
   const lashN = p.lash ? (p.lash.up ? { x: 0, y: -1, z: 0 } : { x: -p.lash.g.x, y: 0, z: -p.lash.g.z }) : null;
   const wantBlend = lashN ? 1 : 0;
   p.lashBlend += (wantBlend - p.lashBlend) * Math.min(1, dt * 3.5);
+  // The VIEW rolls the moment you cast — but the EYE must not swing onto the new
+  // "up" until you have actually LANDED on the surface. A wall's up is
+  // horizontal (n.y = 0), so blending the eye onto it while you're still falling
+  // collapses the eye to your feet — and your feet are still on the floor, so
+  // the camera sinks into the ground until you land.
+  p.lashEye = p.lashEye ?? 0;
+  const wantEye = p.lash?.grounded ? 1 : 0;
+  p.lashEye += (wantEye - p.lashEye) * Math.min(1, dt * 3.5);
   if (p.lashBlend > 0.01 && (lashN || p.lastLashN)) {
     const n = lashN || p.lastLashN;
     if (lashN) p.lastLashN = n;
     // the eye sits 1.6u along the TURNED up — out from the wall, not skyward
-    const bl = p.lashBlend;
+    const be = p.lashEye;
     cam.position.set(
-      p.obj.position.x + (n.x || 0) * EYE * bl,
-      p.obj.position.y + (EYE + bob) * (1 - bl) + (n.y || 0) * EYE * bl,
-      p.obj.position.z + (n.z || 0) * EYE * bl
+      p.obj.position.x + (n.x || 0) * EYE * be,
+      p.obj.position.y + (EYE + bob) * (1 - be) + (n.y || 0) * EYE * be,
+      p.obj.position.z + (n.z || 0) * EYE * be
     );
     _vUp.set(n.x, n.y || 0, n.z);
     if (_vUp.lengthSq() < 0.01) _vUp.set(0, 1, 0);

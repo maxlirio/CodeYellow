@@ -6,7 +6,7 @@
 import * as THREE from 'three';
 import { G, floorState } from './state.js';
 import { makePiece } from './assets.js';
-import { groundHeightAt, hasLineOfSight, FLOOR } from './dungeon.js';
+import { groundHeightAt, hasLineOfSight, FLOOR, cellOccupied, pointOccupied } from './dungeon.js';
 import { PLATFORM_H } from './config.js';
 import { addMsg, refreshHud } from './ui.js';
 import { sfx } from './audio.js';
@@ -237,7 +237,8 @@ export function planPiece(pieceId) {
     const base = groundHeightAt(cw.x, cw.z, py, fs.grid);
     const top = base + LVL;
     const tops = postTops(b, i, j);
-    const valid = top <= MAX_H && !tops.has(top) && cellOpen(fs, cw.x, cw.z);
+    const valid = top <= MAX_H && !tops.has(top) && cellOpen(fs, cw.x, cw.z) &&
+      !pointOccupied(G.floor, cw.x, cw.z, 0.6); // never post through a teammate
     return { valid, kind: 'post', i, j, base, x: cw.x, z: cw.z };
   }
 
@@ -271,7 +272,8 @@ export function planPiece(pieceId) {
       G.camera.getWorldDirection(v);
       dir = Math.abs(v.x) > Math.abs(v.z) ? { dx: Math.sign(v.x), dy: 0 } : { dx: 0, dy: Math.sign(v.z) };
     }
-    const valid = !b.ramps.has(idx) && !fs.grid.ramps.has(idx) && fs.grid.cells[idx] === FLOOR && cellOpen(fs, cx * CELL, cy * CELL);
+    const valid = !b.ramps.has(idx) && !fs.grid.ramps.has(idx) && fs.grid.cells[idx] === FLOOR &&
+      cellOpen(fs, cx * CELL, cy * CELL) && !cellOccupied(G.floor, cx, cy);
     return { valid, kind: 'ramp', cx, cy, base, dir, x: cx * CELL, z: cy * CELL };
   }
 
@@ -286,7 +288,8 @@ export function planPiece(pieceId) {
     const base = groundHeightAt(cx * CELL, cy * CELL, py, fs.grid);
     const key = `${cx},${cy},${d.dx},${d.dy},${base}`;
     const altKey = `${cx + d.dx},${cy + d.dy},${-d.dx},${-d.dy},${base}`;
-    const valid = !b.walls.has(key) && !b.walls.has(altKey);
+    const valid = !b.walls.has(key) && !b.walls.has(altKey) &&
+      !pointOccupied(G.floor, ex, ez, 1.4); // its colliders span the edge — don't wall anyone in
     return { valid, kind: 'wall', cx, cy, d, base, key, x: ex, z: ez, yaw: d.dx !== 0 ? Math.PI / 2 : 0 };
   }
 
@@ -294,6 +297,7 @@ export function planPiece(pieceId) {
     const cx = Math.round(hit.x / CELL), cy = Math.round(hit.z / CELL);
     const idx = cy * fs.grid.w + cx;
     const valid = fs.grid.cells[idx] === FLOOR && !fs.grid.elev[idx] &&
+      !cellOccupied(G.floor, cx, cy) && // the distance test below only saw the LOCAL player
       Math.hypot(cx * CELL - G.player.obj.position.x, cy * CELL - G.player.obj.position.z) > 2;
     return { valid, kind: 'barricade', cx, cy, x: cx * CELL, z: cy * CELL };
   }

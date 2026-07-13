@@ -885,15 +885,20 @@ export function moveWithCollision(pos, dx, dz, radius = 0.55, opts = {}) {
   const y = opts.y ?? pos.y ?? 0;
   const ghost = !!opts.ghost;
   const ref = Math.max(y, groundHeightAt(pos.x, pos.z, y, g));
-  const curIdx = Math.round(pos.z / CELL) * g.w + Math.round(pos.x / CELL);
-  const onPlatform = y > 2.4 && g.elev[curIdx] === 1;
-  const tryAxis = (nx, nz) => {
+  // bounds-guard the cell BEFORE indexing: at the west edge cx rounds to -1 and
+  // the flat index silently wraps into the previous row's last column
+  const ccx = Math.round(pos.x / CELL), ccy = Math.round(pos.z / CELL);
+  const inGrid = ccx >= 0 && ccy >= 0 && ccx < g.w && ccy < g.h;
+  const onPlatform = y > 2.4 && inGrid && g.elev[ccy * g.w + ccx] === 1;
+  // how many of the body's probe points are inside geometry at (nx, nz)?
+  const overlap = (nx, nz) => {
+    let n = 0;
     const checks = [
       [nx + radius, nz], [nx - radius, nz], [nx, nz + radius], [nx, nz - radius],
       [nx + radius * 0.7, nz + radius * 0.7], [nx - radius * 0.7, nz + radius * 0.7],
       [nx + radius * 0.7, nz - radius * 0.7], [nx - radius * 0.7, nz - radius * 0.7],
     ];
-    if (!checks.every(([cx, cz]) => !cellBlocked(g, cx, cz, y, ghost, ref, onPlatform))) return false;
+    for (const [cx, cz] of checks) if (cellBlocked(g, cx, cz, y, ghost, ref, onPlatform)) n++;
     // measured colliders for props/trees/buildings, each with a real vertical
     // extent [y0, h]: solid only at heights the model actually occupies, so you
     // can walk on top of anything (y >= h) and under overhangs (body clears y0).
@@ -903,16 +908,31 @@ export function moveWithCollision(pos, dx, dz, radius = 0.55, opts = {}) {
         const top = c.h ?? (c.hx !== undefined ? 99 : 3);
         if (y >= top - 0.05 || y + 2.0 <= (c.y0 ?? 0)) continue;
         if (c.hx !== undefined) {
-          if (Math.abs(nx - c.x) < c.hx + pr && Math.abs(nz - c.z) < c.hz + pr) return false;
+          if (Math.abs(nx - c.x) < c.hx + pr && Math.abs(nz - c.z) < c.hz + pr) n++;
         } else {
           const ddx = nx - c.x, ddz = nz - c.z;
           const rr = pr + c.r;
-          if (ddx * ddx + ddz * ddz < rr * rr) return false;
+          if (ddx * ddx + ddz * ddz < rr * rr) n++;
         }
       }
     }
-    return true;
+    return n;
   };
+  // Already embedded (a wall raised on you, a bad landing, a desync)? Then a step
+  // only has to not make it WORSE. Demanding a fully clear endpoint meant every
+  // small step was rejected — your far side was still inside the wall — so you
+  // were pinned, unable to walk out in ANY direction.
+  //
+  // It has to be "no worse" rather than "strictly better": a 0.1 step never
+  // clears a probe point, so the count doesn't drop until you've travelled ~0.4,
+  // and a strict test rejects every step on the way there — i.e. no escape at
+  // all. The cost is that a fully-embedded body can also slide sideways through
+  // rock, so EVERY entity that can end up embedded needs an unstick self-heal to
+  // bound that window (player.js, enemies.js, minions.js all run one at 0.5s).
+  const cur = overlap(pos.x, pos.z);
+  const tryAxis = cur > 0
+    ? (nx, nz) => overlap(nx, nz) <= cur
+    : (nx, nz) => overlap(nx, nz) === 0;
   let x = pos.x, z = pos.z;
   if (dx !== 0 && tryAxis(x + dx, z)) x += dx;
   if (dz !== 0 && tryAxis(x, z + dz)) z += dz;
@@ -920,7 +940,10 @@ export function moveWithCollision(pos, dx, dz, radius = 0.55, opts = {}) {
 }
 
 // is this exact spot inside geometry? (used by the unstick self-heal)
-export function posBlocked(x, z, y, grid = null) {
+// `height` is how tall the thing standing here is — 2.0 for a body, 0 for a
+// point like a projectile, which must NOT be stopped by an overhang it flies
+// under. `pad` grows the blocker for fat things (the dragon's bulk).
+export function posBlocked(x, z, y, grid = null, height = 2.0, pad = 0) {
   const g = grid || G.grid;
   if (!g) return false;
   const cx = Math.round(x / CELL), cy = Math.round(z / CELL);
@@ -931,15 +954,68 @@ export function posBlocked(x, z, y, grid = null) {
   if (g.colliders) {
     for (const col of g.colliders) {
       const top = col.h ?? (col.hx !== undefined ? 99 : 3);
-      if (y >= top - 0.05 || y + 2.0 <= (col.y0 ?? 0)) continue;
+      if (y >= top - 0.05 || y + height <= (col.y0 ?? 0)) continue;
       if (col.hx !== undefined) {
-        if (Math.abs(x - col.x) < col.hx && Math.abs(z - col.z) < col.hz) return true;
+        if (Math.abs(x - col.x) < col.hx + pad && Math.abs(z - col.z) < col.hz + pad) return true;
       } else {
         const dx = x - col.x, dz = z - col.z;
-        if (dx * dx + dz * dz < col.r * col.r) return true;
+        const r = col.r + pad;
+        if (dx * dx + dz * dz < r * r) return true;
       }
     }
   }
+  return false;
+}
+
+// Does anything stop a bolt at this point? Same blockers a body feels, but as a
+// POINT (an arrow slips under a balcony a player would bump into). Bone walls,
+// barricades, player builds, pillars and props all count — a bolt used to only
+// notice SOLID cells and sailed through every one of them.
+export function boltBlocked(x, z, y, grid = null) {
+  return posBlocked(x, z, y, grid, 0);
+}
+
+// Would a BODY standing here overlap geometry? moveWithCollision probes a ring
+// of this radius, so anything that only tests the centre point (the old unstick
+// self-heal, resolveStuck, placeWall) disagrees with it: you could stand with
+// your centre in a free cell but your shoulder inside a wall, unable to move in
+// ANY direction while every "am I stuck?" test cheerfully reported "no".
+export const BODY_R = 0.55;
+export function bodyBlocked(x, z, y, grid = null, radius = BODY_R) {
+  if (posBlocked(x, z, y, grid)) return true;
+  return posBlocked(x + radius, z, y, grid) || posBlocked(x - radius, z, y, grid) ||
+         posBlocked(x, z + radius, y, grid) || posBlocked(x, z - radius, y, grid);
+}
+
+// Is anyone standing on this cell? Raising a wall, a build piece or a machine on
+// top of a player engulfs them in geometry. Test the whole BODY against the
+// cell's bounds — a player whose centre is in the NEXT cell still has a shoulder
+// in this one, and walling that up pins them with no way out.
+export function cellOccupied(f, cx, cy, maxY = 2.4) {
+  const half = CELL / 2 + BODY_R;
+  const on = (o) => Math.abs(o.position.x - cx * CELL) < half &&
+                    Math.abs(o.position.z - cy * CELL) < half && o.position.y < maxY;
+  return anyPlayerAt(f, on);
+}
+
+// Nudge a spawn point out of geometry. Summons, slime splits, phantoms, decoys
+// and imps all pick a point on a ring around their caster — and a caster with
+// its back to a wall puts half of them INSIDE it. An entity that starts embedded
+// never recovers on its own, so validate before you place anything.
+export function safeSpawn(x, z, y = 0, grid = null) {
+  if (!bodyBlocked(x, z, y, grid)) return { x, z };
+  return resolveStuck(x, z, y, grid) || null;
+}
+
+// same, for pieces that sit on a cell EDGE or lattice corner rather than a cell
+export function pointOccupied(f, x, z, rad, maxY = 2.4) {
+  const on = (o) => Math.hypot(o.position.x - x, o.position.z - z) < rad + BODY_R && o.position.y < maxY;
+  return anyPlayerAt(f, on);
+}
+
+function anyPlayerAt(f, on) {
+  if (G.player && G.floor === f && !G.player.dead && on(G.player.obj)) return true;
+  for (const r of G.remotes.values()) if (r.floor === f && !r.dead && on(r.obj)) return true;
   return false;
 }
 
@@ -947,11 +1023,14 @@ export function posBlocked(x, z, y, grid = null) {
 export function resolveStuck(x, z, y, grid = null) {
   const g = grid || G.grid;
   if (!g) return null;
-  for (let r = 0.6; r <= 6.01; r += 0.6) {
+  // the spot must fit the whole BODY, not just its centre — a centre-only test
+  // could deposit you a shoulder's width inside a wall, which is exactly the
+  // pinned-forever state this is supposed to rescue you from
+  for (let r = 0.6; r <= 10.01; r += 0.6) {
     for (let i = 0; i < 14; i++) {
       const a = (i / 14) * Math.PI * 2;
       const nx = x + Math.cos(a) * r, nz = z + Math.sin(a) * r;
-      if (!posBlocked(nx, nz, y, g) && groundHeightAt(nx, nz, y, g) <= y + 1.3) return { x: nx, z: nz };
+      if (!bodyBlocked(nx, nz, y, g) && groundHeightAt(nx, nz, y, g) <= y + 1.3) return { x: nx, z: nz };
     }
   }
   return null;

@@ -71,6 +71,46 @@ try {
   const gh0 = groundHeightAt(60.9, 60, 0, g);
   assert(gh0 === 0, 'box top NOT ground while walking beside it: ' + gh0);
 
+  // --- the pin: centre free, BODY inside a wall (this soft-locked you forever) ---
+  const { posBlocked, bodyBlocked, boltBlocked, cellOccupied } = await import('./js/dungeon.js');
+  const CELL_ = 4;
+  // pick a floor cell whose east neighbour we can turn into an obstacle
+  let pc = null;
+  for (let cy = 2; cy < g.h - 2 && !pc; cy++) {
+    for (let cx = 2; cx < g.w - 3; cx++) {
+      const i = cy * g.w + cx;
+      if (g.cells[i] === 1 && g.cells[i + 1] === 1 && !g.elev[i] && !g.elev[i + 1]) { pc = { cx, cy }; break; }
+    }
+  }
+  if (pc) {
+    const oIdx = pc.cy * g.w + pc.cx + 1;
+    const savedCell = g.cells[oIdx];
+    g.cells[oIdx] = 5; // OBSTACLE next door
+    const sx = (pc.cx + 0.5) * CELL_ - 0.15; // centre in OUR cell, shoulder over the line
+    const sz = pc.cy * CELL_;
+    assert(!posBlocked(sx, sz, 0, g), 'pin: centre-only test says NOT stuck (the old blind spot)');
+    assert(bodyBlocked(sx, sz, 0, g), 'pin: body test DOES catch the shoulder in the wall');
+    // and an embedded body must be able to walk back out (de-penetrating move)
+    const esc = { x: sx, y: 0, z: sz };
+    for (let s = 0; s < 20; s++) moveWithCollision(esc, -0.15, 0, 0.55, { y: 0, grid: g });
+    assert(esc.x < sx - 0.5, 'pin: embedded body can walk back OUT: ' + sx.toFixed(2) + ' → ' + esc.x.toFixed(2));
+    g.cells[oIdx] = savedCell;
+  }
+
+  // --- bolts stop at bone walls / barricades / props, not just SOLID ---
+  const bIdx = 3 * g.w + 3;
+  const savedB = g.cells[bIdx];
+  g.cells[bIdx] = 1;
+  assert(!boltBlocked(12, 12, 1.4, g), 'bolt flies through open floor');
+  g.cells[bIdx] = 5; // OBSTACLE (bone wall / barricade)
+  assert(boltBlocked(12, 12, 1.4, g), 'bolt STOPS at a bone wall (was: flew straight through)');
+  g.cells[bIdx] = savedB;
+  const pillar = { x: 12, z: 12, r: 1.1, y0: 0, h: 4 };
+  g.colliders.push(pillar);
+  assert(boltBlocked(12, 12, 1.4, g), 'bolt STOPS at a pillar/prop collider');
+  assert(!boltBlocked(12, 12, 5.0, g), 'bolt clears the pillar over its top');
+  g.colliders.splice(g.colliders.indexOf(pillar), 1);
+
   // --- builds: pieces registry, damage, storey collapse ---
   G.floors = new Map();
   const fsMock = { n: 1, grid: g, meshGroup: new THREE.Group(), enemies: [] };
