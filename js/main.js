@@ -5,6 +5,7 @@ import { CLASSES } from './config.js';
 import { randomSeed } from './rng.js';
 import { loadAll, makeCharacter, applyLook } from './assets.js';
 import { initFx, buildTorchFx, updateFx, clearTransientFx } from './fx.js';
+import { updateFireFx, clearFireFx, spawnFireImpact } from './firefx.js';
 import { initAudio, resumeAudio, toggleMute, sfx } from './audio.js';
 import { generateFloorData, buildFloorMeshes, disposeAllFloors } from './dungeon.js';
 import { spawnEnemiesForFloor, updateEnemies, damageEnemy, spawnEnemy, setEnemyState, killEnemy, refreshBossBarForFloor } from './enemies.js';
@@ -391,6 +392,7 @@ function startRun(seed, mode = 'campaign') {
 
   disposeAllFloors();
   clearTransientFx();
+  clearFireFx();
   clearProjectiles();
   clearWalls();
   clearMinions();
@@ -473,6 +475,7 @@ function setLocalFloor(n) {
   applyThemeAtmosphere(fs);
   setMusicBase(musicCtxFor(n, G.runMode, fs.theme?.id));
   clearTransientFx();
+  clearFireFx();
   clearProjectiles();
   buildTorchFx();
   resetPlayerForFloor();
@@ -1158,6 +1161,7 @@ function loop(t) {
     updateSpells(dt);
     updateBeams(dt);
     updateFx(dt);
+    updateFireFx(dt);
     updateWalls(dt);
     updateTraps(dt);
     updateRopes(dt);

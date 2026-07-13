@@ -265,5 +265,32 @@ export function animateDragon(e, dt) {
   // jaw + furnace: she opens wide when the fire comes
   const jawOpen = breathing ? 0.75 : st === 'lunge' || st === 'claw' ? 0.4 : 0.06;
   parts.jaw.rotation.x += (jawOpen - parts.jaw.rotation.x) * Math.min(1, dt * 10);
-  parts.mouthGlow.intensity += ((breathing ? 3.2 : 0) - parts.mouthGlow.intensity) * Math.min(1, dt * 6);
+  const glow = breathing ? 3.2 + Math.random() * 2.4 : 0; // the furnace gutters
+  parts.mouthGlow.intensity += (glow - parts.mouthGlow.intensity) * Math.min(1, dt * 12);
+
+  // her HEAD follows the fire. e.ds.aim is the breath's world yaw; the head turns
+  // to it (in her body's frame) so the jet reads as something she is pointing,
+  // not something the game is drawing near her face.
+  const aim = e.ds?.aim;
+  let headYaw = 0;
+  if (aim != null && breathing) {
+    headYaw = aim - e.yaw;
+    while (headYaw > Math.PI) headYaw -= Math.PI * 2;
+    while (headYaw < -Math.PI) headYaw += Math.PI * 2;
+    headYaw = Math.max(-0.9, Math.min(0.9, headYaw));
+  }
+  // the body is built facing -z and turned around, so the head's yaw is negated
+  parts.head.rotation.y += (-headYaw - parts.head.rotation.y) * Math.min(1, dt * 8);
 }
+
+// Where her fire comes OUT. World position of the muzzle and the direction it
+// points — the jet is anchored here so the flame has an actual source.
+export function dragonMuzzle(e, outPos, outDir) {
+  const parts = e.obj.userData.dragonParts;
+  if (!parts) return false;
+  parts.mouthGlow.getWorldPosition(outPos);
+  // the head's local -z is forward (she was built head-toward -z)
+  outDir.set(0, 0, -1).applyQuaternion(parts.head.getWorldQuaternion(_q)).normalize();
+  return true;
+}
+const _q = new THREE.Quaternion();

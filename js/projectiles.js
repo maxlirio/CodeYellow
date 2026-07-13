@@ -5,6 +5,7 @@ import * as THREE from 'three';
 import { G } from './state.js';
 import { makeGlowSprite, spawnBurst } from './fx.js';
 import { groundHeightAt, boltBlocked } from './dungeon.js';
+import { buildFireballVisual, animateFireball, spawnFireImpact } from './firefx.js';
 import { makeWeaponModel, makePiece } from './assets.js';
 import { sfx } from './audio.js';
 import { netSend } from './net.js';
@@ -87,15 +88,9 @@ function buildVisual(b) {
       return { obj, spin: 'pulse', trail: { color: 0xbb66ff, rate: 0.05, n: 2, s: 0.1 } };
     }
     case 'fireball': {
-      const obj = new THREE.Group();
-      const core = new THREE.Mesh(
-        new THREE.SphereGeometry(0.42 * size, 10, 8),
-        new THREE.MeshStandardMaterial({ color: 0x662200, emissive: 0xff5511, emissiveIntensity: 1.6, roughness: 0.8 })
-      );
-      obj.add(core);
-      const glow = makeGlowSprite(0xff7722, 1.8 * size);
-      obj.add(glow);
-      return { obj, spin: 'tumble', trail: { color: 0xff6622, rate: 0.03, n: 3, s: 0.12, smoke: true } };
+      // faceted molten core in a counter-spinning shell, shedding real embers —
+      // a smooth sphere behind a soft glow sprite read as a bead, not as fire
+      return { obj: buildFireballVisual(size), fire: true };
     }
     case 'fire': {
       const obj = new THREE.Group();
@@ -165,20 +160,37 @@ function disposeBolt(p) {
 }
 
 function explode(p, hooks) {
-  spawnBurst(new THREE.Vector3(p.x, p.y, p.z), p.color, p.aoe ? 26 : 8, p.aoe ? 7 : 3, p.aoe ? 0.17 : 0.1, p.aoe ? 0.55 : 0.35);
+  if (p.vis?.fire) spawnFireImpact(new THREE.Vector3(p.x, p.y, p.z), G.floor, p.aoe ? 1.5 : 0.9);
+  else spawnBurst(new THREE.Vector3(p.x, p.y, p.z), p.color, p.aoe ? 26 : 8, p.aoe ? 7 : 3, p.aoe ? 0.17 : 0.1, p.aoe ? 0.55 : 0.35);
   if (p.aoe && p.owner === 'player') {
     sfx.trap();
     for (const e of G.enemies) {
       if (e.state === 'dead') continue;
-      const d = Math.hypot(e.obj.position.x - p.x, e.obj.position.z - p.z);
-      if (d > p.aoe || Math.abs(e.obj.position.y + 1 - p.y) > 3.5) continue;
+      const hb = enemyHitbox(e);
+      // the blast reaches the enemy's SURFACE, not just its origin — a fireball
+      // landing under the dragon's flank has to hurt her
+      const d = Math.max(0, Math.hypot(e.obj.position.x - p.x, e.obj.position.z - p.z) - hb.r);
+      if (d > p.aoe || Math.abs(e.obj.position.y + hb.cy - p.y) > 3.5 + hb.hy) continue;
       hooks.damageEnemy(e, Math.round(p.dmg * (d < p.aoe * 0.5 ? 1 : 0.6)), false, false, 'local',
         { slow: p.slow, poison: p.poison });
     }
   }
 }
 
+// A bolt advances in ONE jump per frame and only its endpoint is tested for
+// hits. A 30 u/s arrow covers 1.5 units in a 50ms frame, while a slimelet's
+// hitbox is 0.38 across — so the arrow can step clean over it and never sample
+// inside. (The same gap tunnels thin walls the moment dt rises above the clamp.)
+// Sub-step so no single advance outruns the smallest thing it could hit.
+const MAX_STEP = 0.35;
 export function updateProjectiles(dt, hooks) {
+  let fastest = 0;
+  for (const p of G.projectiles) if (p.speed > fastest) fastest = p.speed;
+  const n = Math.min(8, Math.max(1, Math.ceil((fastest * dt) / MAX_STEP)));
+  for (let s = 0; s < n; s++) stepProjectiles(dt / n, hooks);
+}
+
+function stepProjectiles(dt, hooks) {
   for (let i = G.projectiles.length - 1; i >= 0; i--) {
     const p = G.projectiles[i];
     p.life += dt;
@@ -209,6 +221,7 @@ export function updateProjectiles(dt, hooks) {
 
     // per-visual motion
     const v = p.vis;
+    if (v.fire) animateFireball(p.sp, dt, G.floor);
     if (v.spin === 'blade') p.sp.rotation.z -= dt * 16; // wheel spin (legacy, unoriented)
     else if (v.spin === 'wheel') p.sp.rotateX(dt * 16);  // tomahawk flip in the vertical travel plane
     else if (v.spin === 'tumble') { p.sp.rotation.x += dt * 7; p.sp.rotation.z += dt * 5; }
@@ -284,6 +297,7 @@ export function updateProjectiles(dt, hooks) {
     }
     if (dead) {
       if (p.aoe && p.owner === 'player' && !p.exploded) explode(p, hooks);
+      else if (p.vis?.fire) spawnFireImpact(new THREE.Vector3(p.x, p.y, p.z), G.floor, 0.8); // burst on the wall too
       else if (!p.aoe) spawnBurst(new THREE.Vector3(p.x, p.y, p.z), p.color, 8, 3, 0.1, 0.35);
       disposeBolt(p);
       G.projectiles.splice(i, 1);

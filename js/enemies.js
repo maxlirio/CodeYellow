@@ -8,6 +8,7 @@ import { makeCharacter, tintCharacter, makeWeaponModel } from './assets.js';
 import { makeBlobShadow, spawnDamageNumber, spawnBurst, makeGlowSprite } from './fx.js';
 import { sfx } from './audio.js';
 import { moveWithCollision, hasLineOfSight, groundHeightAt, bodyBlocked, resolveStuck, safeSpawn } from './dungeon.js';
+import { spawnFireJet, endFireJet, spawnGroundFire, spawnFireImpact } from './firefx.js';
 import { spawnBolt } from './projectiles.js';
 import { netSend, isAuthority } from './net.js';
 import { addMsg, showBossBar, updateBossBar, hideBossBar, showBossCard } from './ui.js';
@@ -16,7 +17,7 @@ import { rollAnyItem } from './items.js';
 import { dropItemLoot } from './loot.js';
 import { minionTargetsOnFloor, damageMinion } from './minions.js';
 import { wallAt, damageWall } from './walls.js';
-import { buildDragonModel, animateDragon } from './dragon.js';
+import { buildDragonModel, animateDragon, dragonMuzzle } from './dragon.js';
 import { nearestBuildPiece, weakestBuildPieceNear, damageBuild } from './builds.js';
 import { horde } from './horde.js';
 
@@ -257,27 +258,20 @@ function tacticalGoal(e, fs, t, dt) {
 const ATTACK_ANIMS = ['Unarmed_Melee_Attack_Punch_A', 'Unarmed_Melee_Attack_Punch_B'];
 
 // ---- dragonfire that STAYS: burning ground left by her breath ----
-const dragonFlames = []; // {x, z, f, t, obj, tick}
+// The patch itself is drawn by firefx (a scorch mark licking real flame); this
+// only owns the damage. It used to BE the effect — two glow billboards popped in
+// wherever the breath happened to hurt you, which is why the fire looked like
+// orbs appearing out of nowhere rather than anything she'd breathed.
+const dragonFlames = []; // {x, z, f, t, tick}
 function igniteGround(f, x, z) {
-  const obj = new THREE.Group();
-  const g1 = makeGlowSprite(0xff6622, 2.4);
-  g1.position.y = 0.5;
-  obj.add(g1);
-  const g2 = makeGlowSprite(0xffbb44, 1.1);
-  g2.position.y = 0.9;
-  obj.add(g2);
-  obj.position.set(x, 0, z);
-  obj.visible = f === G.floor;
-  G.scene.add(obj);
-  dragonFlames.push({ x, z, f, t: 2.8, tick: Math.random() * 0.4, obj });
+  const y = groundHeightAt(x, z, 0);
+  if (f === G.floor) spawnGroundFire(f, x, z, y, 2.8);
+  dragonFlames.push({ x, z, f, t: 2.8, tick: Math.random() * 0.4 });
 }
 function updateDragonFlames(dt) {
   for (let i = dragonFlames.length - 1; i >= 0; i--) {
     const fl = dragonFlames[i];
     fl.t -= dt;
-    fl.obj.visible = fl.f === G.floor;
-    fl.obj.children[0].material.opacity = Math.min(0.8, fl.t * 0.6);
-    fl.obj.children[1].position.y = 0.9 + Math.sin(fl.t * 9) * 0.2;
     fl.tick -= dt;
     if (fl.tick <= 0 && isAuthority()) {
       fl.tick = 0.5;
@@ -290,9 +284,12 @@ function updateDragonFlames(dt) {
         if (Math.hypot(r.obj.position.x - fl.x, r.obj.position.z - fl.z) < 1.7) netSend({ t: 'phit', target: pid, dmg: 6, fx: { poison: { dps: 3, dur: 1.5 } } });
       }
     }
-    if (fl.t <= 0) { G.scene.remove(fl.obj); dragonFlames.splice(i, 1); }
+    if (fl.t <= 0) dragonFlames.splice(i, 1);
   }
 }
+const _muzzle = new THREE.Vector3();
+const _muzDir = new THREE.Vector3();
+
 const ANIM_MAPS = { ground: ANIM_GROUND, critter: ANIM_CRITTER, flyer: ANIM_FLYER };
 const amap = (e) => e.cfg.animMap ? ANIM_MAPS[e.cfg.animMap] : null;
 const onMyFloor = (e) => e.floor === G.floor;
@@ -768,6 +765,25 @@ function simulateDragon(e, fs, players, dt, mine) {
   if (d.sweep) {
     const s = d.sweep;
     s.t += dt;
+    const prog0 = Math.max(0, Math.min(1, s.t / 1.6));
+    const aimA = s.a0 + (s.a1 - s.a0) * prog0;
+    d.aim = e.yaw + aimA; // her head turns to follow the fire (see animateDragon)
+    // FIRE COMES OUT OF HER MOUTH. The jet is re-anchored to the muzzle every
+    // frame and thrown along the current sweep angle, so it rakes the floor as
+    // she turns her head — the burning patches below are where it LANDS.
+    if (mine && onMyFloor(e)) {
+      if (!s.jet && s.t > -0.25) {
+        s.jet = spawnFireJet(e.floor, { dur: 1.85, reach: 17, width: 1.15, rate: 110, speed: 27 });
+      }
+      if (s.jet && dragonMuzzle(e, _muzzle, _muzDir)) {
+        s.jet.origin.copy(_muzzle);
+        // throw it along the sweep, angled down at the floor she's raking
+        _muzDir.set(Math.sin(d.aim), 0, Math.cos(d.aim));
+        _muzDir.y = (0.9 - _muzzle.y) / 12; // aim at the ground a dozen units out
+        s.jet.dir.copy(_muzDir).normalize();
+      }
+      if (s.t >= 1.6 && s.jet) { endFireJet(s.jet); s.jet = null; }
+    }
     if (s.t >= 0 && s.t < 1.6) {
       s.tick -= dt;
       if (s.tick <= 0) {
@@ -786,12 +802,24 @@ function simulateDragon(e, fs, players, dt, mine) {
           }
         }
       }
-    } else if (s.t >= 1.6) d.sweep = null;
+    } else if (s.t >= 1.6) { if (s.jet) endFireJet(s.jet); d.aim = null; d.sweep = null; }
   }
   // ---- flight breath run (line of fire along the strafe) ----
   if (d.breath) {
     const b = d.breath;
     b.t += dt;
+    d.aim = Math.atan2(b.dx, b.dz);
+    if (mine && onMyFloor(e)) {
+      if (!b.jet && b.t > -0.35) b.jet = spawnFireJet(e.floor, { dur: 1.75, reach: 15, width: 1.0, rate: 95, speed: 30 });
+      if (b.jet && dragonMuzzle(e, _muzzle, _muzDir)) {
+        b.jet.origin.copy(_muzzle);
+        // strafing overhead: she pours it down and forward onto the run
+        _muzDir.set(b.dx, 0, b.dz);
+        _muzDir.y = -Math.max(0.35, (_muzzle.y - 0.9) / 14);
+        b.jet.dir.copy(_muzDir).normalize();
+      }
+      if (b.t >= 1.4 && b.jet) { endFireJet(b.jet); b.jet = null; }
+    }
     if (b.t >= 0 && b.t < 1.4) {
       b.tick -= dt;
       if (b.tick <= 0) {
@@ -808,7 +836,7 @@ function simulateDragon(e, fs, players, dt, mine) {
           }
         }
       }
-    } else if (b.t >= 1.4) d.breath = null;
+    } else if (b.t >= 1.4) { if (b.jet) endFireJet(b.jet); d.aim = null; d.breath = null; }
   }
 
   const spd = enraged ? 1.35 : 1;
