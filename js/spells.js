@@ -545,27 +545,6 @@ export function castSpell(slot, effectiveDamage) {
       addMsg('Its will is yours.', 'gold');
       break;
     }
-    case 'poly': {
-      // Polymorph: the enemy under your crosshair gets... smaller
-      let target = null, best = 0.2;
-      const from = origin.clone().setY(origin.y + 1.5);
-      for (const e of G.enemies) {
-        if (e.state === 'dead' || e.state === 'inactive') continue;
-        const to = e.obj.position.clone().setY(e.obj.position.y + 1.1).sub(from);
-        const d = to.length();
-        if (d > sp.range) continue;
-        const ang = to.normalize().angleTo(dir);
-        if (ang < best && hasLineOfSight(from.x, from.z, e.obj.position.x, e.obj.position.z)) { best = ang; target = e; }
-      }
-      if (!target) { addMsg('No target in sight.', 'bad'); p.mana += sp.mana; cooldowns[spellId] = 0.4; break; }
-      sfx.dodge(); sfx.potion();
-      damageEnemy(target, 1, false, false, 'local', { poly: sp.dur });
-      spawnBurst(target.obj.position.clone().setY(target.obj.position.y + 1.2), 0x88ff66, 20, 4, 0.14, 0.6);
-      netSend({ t: 'fx', f: G.floor, x: target.obj.position.x, y: target.obj.position.y + 1.2, z: target.obj.position.z, color: 0x88ff66 });
-      spawnDamageNumber(target.obj.position.clone().setY(target.obj.position.y + 2.4), 'RIBBIT', '#88ff66', true);
-      addMsg('Ribbit.', 'gold');
-      break;
-    }
     case 'harvest': {
       // Soul Harvest: rip the life out of everything nearby and wear it
       sfx.crit();
@@ -600,15 +579,6 @@ export function castSpell(slot, effectiveDamage) {
       spawnBurst(origin.clone().setY(origin.y + 1.2), 0xcc2233, 20, 4, 0.14, 0.7);
       netSend({ t: 'fx', f: G.floor, x: origin.x, y: origin.y + 1.2, z: origin.z, color: 0xcc2233 });
       addMsg('You pay in blood.', 'gold');
-      break;
-    }
-    case 'wraith': {
-      // Wraith Form: slip out of the flesh — player.js handles the ghost walk
-      sfx.dodge();
-      p.wraithT = sp.dur;
-      spawnBurst(origin.clone().setY(origin.y + 1.2), 0xbfe0ff, 22, 4, 0.14, 0.8);
-      netSend({ t: 'fx', f: G.floor, x: origin.x, y: origin.y + 1.2, z: origin.z, color: 0xbfe0ff });
-      addMsg('You slip between worlds.', 'gold');
       break;
     }
     case 'lightning': {

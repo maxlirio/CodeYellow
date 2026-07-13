@@ -36,7 +36,7 @@ export const CLASSES = {
     hp: 84, dmg: 26, speed: 8.4, crit: 0.08, attackAnims: ['Spellcast_Shoot'],
     attackTime: 0.55, attackRange: 26, attackArc: 0, mana: 110, manaRegen: 3.5, manaAttack: 0.2,
     show: ['2H_Staff'], ranged: true, boltVis: 'fire',
-    spellPool: ['fireball', 'frostshard', 'chainlightning', 'meteor', 'blizzard', 'arcaneorb', 'bonewall', 'stormlance', 'mirrorimage', 'gravitywell', 'ricochet', 'gravitylash', 'chronobubble', 'frostprison', 'levitate', 'sanctuary', 'wraithform', 'polymorph'],
+    spellPool: ['fireball', 'frostshard', 'chainlightning', 'meteor', 'blizzard', 'arcaneorb', 'bonewall', 'stormlance', 'mirrorimage', 'gravitywell', 'ricochet', 'gravitylash', 'chronobubble', 'frostprison', 'levitate', 'sanctuary'],
   },
   ranger: {
     name: 'Ranger', icon: '🏹', model: 'Rogue_Hooded',
@@ -52,7 +52,7 @@ export const CLASSES = {
     hp: 80, dmg: 19, speed: 8.2, crit: 0.06, attackAnims: ['Spellcast_Shoot'],
     attackTime: 0.6, attackRange: 24, attackArc: 0, mana: 120, manaRegen: 3.5, manaAttack: 0.14,
     show: [], boltVis: 'wisp', boltColor: 0x77ff88, undead: true,
-    spellPool: ['raisedead', 'dominate', 'soulharvest', 'bloodpact', 'wraithform', 'deathcoil', 'bonewall', 'frostprison', 'gravitylash', 'polymorph'],
+    spellPool: ['raisedead', 'dominate', 'soulharvest', 'bloodpact', 'deathcoil', 'bonewall', 'frostprison', 'gravitylash'],
   },
 };
 
@@ -112,9 +112,7 @@ export const SPELLS = {
   dominate:   { name: 'Dominate', icon: '🧿', mana: 36, cd: 14, type: 'charm', range: 20, dur: 9 },
   soulharvest:{ name: 'Soul Harvest', icon: '🌾', mana: 30, cd: 11, type: 'harvest', radius: 8, dmgMult: 1.0, healFrac: 0.5 },
   bloodpact:  { name: 'Blood Pact', icon: '🩸', mana: 0, cd: 9, type: 'pact', hpCost: 0.2, manaGain: 0.4 },
-  wraithform: { name: 'Wraith Form', icon: '👻', mana: 30, cd: 16, type: 'wraith', dur: 4.5, speedMult: 1.35 },
   deathcoil:  { name: 'Death Coil', icon: '🌀', mana: 21, cd: 5, type: 'proj', dmgMult: 1.25, speed: 17, color: 0x77ff88, size: 1.2, vis: 'wisp', lifesteal: 0.5 },
-  polymorph:  { name: 'Polymorph', icon: '🐸', mana: 45, cd: 18, type: 'poly', range: 18, dur: 6 },
   // new schools
   mirrorimage: { name: 'Mirror Legion', icon: '👥', mana: 51, cd: 20, type: 'phantoms', count: 2, dur: 12, dmgMult: 0.5 },
   stormlance: { name: 'Storm Lance', icon: '⚡', mana: 30, cd: 6, type: 'lightning', dmgMult: 1.7, range: 18, forks: 3, forkRange: 8, forkMult: 0.75, stun: 0.6 },

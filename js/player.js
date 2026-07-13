@@ -129,7 +129,6 @@ export function effectiveSpeed() {
   const p = G.player;
   let s = p.cls.speed + G.run.speedBonus + gearStat('speed');
   if (p.buff) s *= p.buff.speedMult;
-  if (p.wraithT > 0) s *= SPELLS.wraithform?.speedMult || 1.35;
   if (p.slowT > 0) s *= 0.55;
   if (p.aiming) s *= 0.6;
   return s;
@@ -392,36 +391,10 @@ export function updatePlayer(dt) {
       refreshHud();
     }
   }
-  // WRAITH FORM: the world's grip slips — walls forget you exist for a few seconds
-  if (p.wraithT > 0) {
-    p.wraithT -= dt;
-    if (p._wraithMsgT > 0) p._wraithMsgT -= dt;
-    if (p.lash) releaseLash(p); // gravity frames and noclip do not mix
-    if (!p._wraithVig) {
-      p._wraithVig = true;
-      const v = document.getElementById('wraithVignette');
-      if (v) v.style.opacity = '1';
-    }
-    if (p.wraithT <= 0) {
-      p.wraithT = 0;
-      p._wraithVig = false;
-      const v = document.getElementById('wraithVignette');
-      if (v) v.style.opacity = '0';
-      const pos0 = p.obj.position;
-      if (posBlocked(pos0.x, pos0.z, pos0.y)) {
-        const free = resolveStuck(pos0.x, pos0.z, pos0.y);
-        if (free) { pos0.x = free.x; pos0.z = free.z; p.kbX = 0; p.kbZ = 0; }
-      }
-      spawnBurst(pos0.clone().setY(pos0.y + 1.2), 0xbfe0ff, 16, 3, 0.12, 0.45);
-      addMsg('The world takes you back.', 'gold');
-    }
-  }
-
   // unstick self-heal: if we ever end up inside geometry (bad landing,
   // desync, a wall raised nearby), nudge to the nearest free spot
-  // (skipped while wraithed — being inside a wall is the whole point)
   p.stuckT = (p.stuckT || 0) + dt;
-  if (p.stuckT > 0.5 && !(p.wraithT > 0)) {
+  if (p.stuckT > 0.5) {
     p.stuckT = 0;
     const pos0 = p.obj.position;
     if (posBlocked(pos0.x, pos0.z, pos0.y)) {
@@ -627,14 +600,7 @@ export function updatePlayer(dt) {
       const wz = -ix * sin + iz * cos;
       const sp = effectiveSpeed() * (p.attacking ? 0.55 : 1);
       const wbx = pos.x, wbz = pos.z;
-      if (p.wraithT > 0 && G.grid) {
-        // a ghost ignores walls entirely — but still can't leave the world
-        const g = G.grid;
-        pos.x = Math.min((g.w - 1.5) * CELL, Math.max(0.5 * CELL, pos.x + wx * sp * dt));
-        pos.z = Math.min((g.h - 1.5) * CELL, Math.max(0.5 * CELL, pos.z + wz * sp * dt));
-      } else {
-        moveWithCollision(pos, wx * sp * dt, wz * sp * dt, 0.55, { y: pos.y });
-      }
+      moveWithCollision(pos, wx * sp * dt, wz * sp * dt, 0.55, { y: pos.y });
       trackWedge(p, dt, Math.hypot(pos.x - wbx, pos.z - wbz));
       p.bobT += dt * sp * 1.35;
       if (!p.moving) { p.anim.play('Running_A'); p.moving = true; }
@@ -685,7 +651,6 @@ export function sendPos(force = false) {
     anim: p.anim.currentName,
     hp: p.hp, mhp: p.maxHp, dead: p.dead,
     ln: p.lash ? (p.lash.up ? [0, -1, 0] : [-p.lash.g.x, 0, -p.lash.g.z]) : 0,
-    ...(p.wraithT > 0 ? { wf: 1 } : {}),
   });
 }
 
@@ -851,11 +816,6 @@ function crit4(dmg) {
 export function tryAttack() {
   const p = G.player;
   if (!p || p.dead || p.attacking || p.dodgeT > 0 || G.mode !== 'playing') return;
-  if (p.wraithT > 0) {
-    // spectral hands hold nothing — spells still work, steel does not
-    if (!(p._wraithMsgT > 0)) { addMsg('Your hands pass through the world.', 'bad'); p._wraithMsgT = 2; }
-    return;
-  }
   // a foe at knife range means the dagger comes out — no arrow needed
   const daggerReach = !!G.inv.weapon?.ranged && meleeTargetInReach();
   if (G.inv.weapon?.ranged && !daggerReach && (G.run.arrows || 0) <= 0) {
@@ -1208,18 +1168,6 @@ export function applyRemotePos(pid, m) {
   }
   r.netX = m.x; r.netY = m.y || 0; r.netZ = m.z; r.netYaw = m.yaw;
   r.lashN = m.ln || null;
-  // wraith form: fade the whole rig while their wf flag is up
-  if (!!m.wf !== !!r.wraith) {
-    r.wraith = !!m.wf;
-    r.obj.traverse((n) => {
-      if (!n.isMesh && !n.isSkinnedMesh) return;
-      if (n.material.isMeshBasicMaterial) return; // blob shadow / glow discs
-      if (!n.userData._wraithMat) { n.material = n.material.clone(); n.userData._wraithMat = true; } // rigs share materials across clones
-      n.material.transparent = r.wraith;
-      n.material.opacity = r.wraith ? 0.4 : 1;
-      n.material.depthWrite = !r.wraith;
-    });
-  }
   r.hp = m.hp; r.maxHp = m.mhp;
   if (m.dead && !r.dead) { r.dead = true; r.anim.play('Death_A', { once: true, clamp: true }); }
   if (!m.dead && r.dead) { r.dead = false; r.anim.play('Idle'); }
