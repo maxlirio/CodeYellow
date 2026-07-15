@@ -100,6 +100,7 @@ async function boot() {
   const params = new URLSearchParams(location.search);
   if (params.get('auto')) {
     initAudio();
+    if (params.get('class')) getClass = () => params.get('class'); // probe hook
     startRun(params.get('seed') || randomSeed(), params.get('mode') || 'campaign');
     // ?boss=1 — playtest kit: a seasoned delver dropped at the dragon's door
     if (params.get('boss')) {

@@ -95,8 +95,12 @@ export function refreshEquipVisuals() {
   const w = G.inv.weapon;
   // no rig mesh AND no held model (e.g. the ranger's procedural bow):
   // teammates would see empty hands — hold the drop model instead
-  const heldName = w ? (w.held || (!w.mesh?.length ? w.model : null)) : null;
-  const meshes = heldName ? [] : equippedMeshes(p.classId);
+  let heldName = w ? (w.held || (!w.mesh?.length ? w.model : null)) : null;
+  let meshes = heldName ? [] : equippedMeshes(p.classId);
+  // guns aren't gripped like blades: astronaut rigs carry their own Pistol mesh
+  // for the third-person silhouette, and toon rigs have the rifle baked in —
+  // never bone-attach a blaster drop model.
+  if (heldName?.startsWith('blaster-')) { heldName = null; meshes = ['Pistol']; }
   setEquipMeshes(p.obj, meshes);
   attachHeldWeapon(p.obj, heldName, w?.held2);
   setViewmodelWeapon(w?.model || WEAPON_TYPES[p.classId][0].model, w?.wtype || WEAPON_TYPES[p.classId][0].id, w?.verb, w?.sig);

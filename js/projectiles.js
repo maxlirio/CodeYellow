@@ -115,14 +115,17 @@ function buildVisual(b) {
     case 'laser': {
       // a hard bright energy bolt: stretched core + halo, oriented along flight
       const obj = new THREE.Group();
-      const core = new THREE.Mesh(
-        new THREE.BoxGeometry(0.07 * size, 0.07 * size, 0.9 * size),
-        new THREE.MeshBasicMaterial({ color: 0xffffff, toneMapped: false })
-      );
+      const coreGeo = new THREE.CylinderGeometry(0.035 * size, 0.035 * size, 0.9 * size, 6);
+      coreGeo.rotateX(Math.PI / 2);
+      const core = new THREE.Mesh(coreGeo, new THREE.MeshBasicMaterial({ color: 0xffffff, toneMapped: false }));
       obj.add(core);
+      // radial halo: a cylinder looks the same from every angle — a box read as
+      // a big flat quad when a bolt flew straight away from the camera
+      const haloGeo = new THREE.CylinderGeometry(0.09 * size, 0.09 * size, 1.0 * size, 8, 1, true);
+      haloGeo.rotateX(Math.PI / 2);
       const halo = new THREE.Mesh(
-        new THREE.BoxGeometry(0.16 * size, 0.16 * size, 1.0 * size),
-        new THREE.MeshBasicMaterial({ color, transparent: true, opacity: 0.55, blending: THREE.AdditiveBlending, depthWrite: false, toneMapped: false })
+        haloGeo,
+        new THREE.MeshBasicMaterial({ color, transparent: true, opacity: 0.5, blending: THREE.AdditiveBlending, depthWrite: false, side: THREE.DoubleSide, toneMapped: false })
       );
       obj.add(halo);
       const pl = new THREE.PointLight(color, 2.5, 7);

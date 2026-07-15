@@ -39,6 +39,11 @@ const STYLES = {
   _shoot: { rot: [-0.12, Math.PI, 0], scale: 0.55, attack: 'shoot', bolt: true, pos: [0.3, -0.3, -0.58] },
   _bowshoot: { rot: [0, 0, 0.12], scale: 0.62, attack: 'bowshoot', bow: true, packBow: true, pos: [0.3, -0.28, -0.6] },
   _cast: { rot: [-0.35, Math.PI + 0.25, 0.3], scale: 0.55, attack: 'cast' },
+  // Kenney blasters fire along their OWN -z: zero yaw already points downrange.
+  // (The crossbow style's 180° yaw exists because KayKit models point +z — that
+  // same yaw turns a blaster around and aims it at your face.)
+  _gun: { rot: [0.02, 0, 0], scale: 0.68, attack: 'shoot', pos: [0.3, -0.24, -0.52] },
+  _guncast: { rot: [0.02, 0, 0], scale: 0.62, attack: 'cast', pos: [0.28, -0.24, -0.48] },
 };
 
 export function initViewmodel() {
@@ -59,6 +64,7 @@ export function setViewmodelWeapon(modelName, wtype = 'sword1h', verb = null, si
   if (key === currentKey) return;
   currentKey = key;
   let style = STYLES[wtype];
+  if (modelName?.startsWith?.('blaster-')) style = STYLES[verb === 'cast' ? '_guncast' : '_gun'];
   if (!style && verb) style = STYLES['_' + verb + (verb === 'stab' && G.inv?.weapon?.held2 ? '2' : '')];
   style = style || STYLES.sword1h;
   hasSig = !!sig;
