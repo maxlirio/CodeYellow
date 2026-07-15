@@ -10,6 +10,7 @@ import {
   THEMES, MUTATORS, MUTATOR_CHANCE, MIDBOSS_TYPES,
 } from './config.js';
 import { buildMergedStatic, pieceColliders } from './assets.js';
+import { buildShipStatic } from './shipmeshes.js';
 import { ENEMIES } from './config.js';
 const ENEMIES_TRIO = new Set(Object.keys(ENEMIES).filter(k => ENEMIES[k].trio));
 
@@ -731,7 +732,8 @@ export function generateFloorData(seedStr, floor) {
 // Build (or rebuild) the visual geometry for a floor the local player visits.
 export function buildFloorMeshes(fs) {
   if (fs.built) return;
-  const group = buildMergedStatic(fs.placements);
+  // ship decks are procedural geometry, not tile placements
+  const group = fs.grid.ship ? buildShipStatic(fs) : buildMergedStatic(fs.placements);
   // the dragon's vault dresses itself in cave, not corridor
   if (fs.grid.lairDecor) {
     let lights = 0;
@@ -793,14 +795,15 @@ export function buildFloorMeshes(fs) {
     group.add(lawn);
   }
   const { stairs, portal } = fs.grid;
+  const portalCol = fs.theme?.portal ?? 0xff7718;
   const glow = new THREE.Mesh(
     new THREE.PlaneGeometry(2.6, 3.4),
-    new THREE.MeshBasicMaterial({ color: 0xff7718, transparent: true, opacity: 0.75, side: THREE.DoubleSide })
+    new THREE.MeshBasicMaterial({ color: portalCol, transparent: true, opacity: 0.75, side: THREE.DoubleSide })
   );
   glow.position.set(stairs.x + portal.dx * CELL / 2, 1.8, stairs.z + portal.dy * CELL / 2);
   glow.rotation.y = portal.yaw;
   group.add(glow);
-  const plight = new THREE.PointLight(0xff8822, 18, 14, 1.6);
+  const plight = new THREE.PointLight(portalCol, 18, 14, 1.6);
   plight.position.set(stairs.x + portal.dx * (CELL / 2 - 0.6), 2.2, stairs.z + portal.dy * (CELL / 2 - 0.6));
   group.add(plight);
   group.visible = false;
