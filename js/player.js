@@ -24,9 +24,10 @@ const BASE_FOV = 66, AIM_FOV = 44;
 
 export function createPlayer(classId, name) {
   const cls = CLASSES[classId];
-  const modelName = classId === 'rogue' && G.look.helmet ? 'Rogue_Hooded' : cls.model;
+  const modelName = cls.model;
   const { obj, anim } = makeCharacter('char', modelName, cls.show);
   applyLook(obj, G.look);
+  obj.scale.setScalar(cls.scale || 1); // sci-fi rigs are pack-scale, not KayKit-scale
   obj.visible = false; // first person: own body hidden until death cam
   G.scene.add(obj);
   // warm lantern glow that follows the hero
@@ -1180,10 +1181,11 @@ export function addRemotePlayer(pid, name, classId, look, equip) {
   if (G.remotes.has(pid)) return G.remotes.get(pid);
   const cls = CLASSES[classId] || CLASSES.knight;
   const lk = look || { cape: true, helmet: true, capeColor: 0 };
-  const modelName = classId === 'rogue' && lk.helmet ? 'Rogue_Hooded' : cls.model;
+  const modelName = cls.model;
   const { obj, anim } = makeCharacter('char', modelName, equip || cls.show);
   applyLook(obj, lk);
-  obj.add(makeBlobShadow(0.85));
+  obj.scale.setScalar(cls.scale || 1);
+  obj.add(makeBlobShadow(0.85 / (cls.scale || 1)));
   const c = document.createElement('canvas');
   c.width = 256; c.height = 48;
   const g = c.getContext('2d');

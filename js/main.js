@@ -165,9 +165,10 @@ function rebuildPreview() {
   if (pvChar) pvScene.remove(pvChar);
   const classId = getClass();
   const cls = CLASSES[classId];
-  const modelName = classId === 'rogue' && G.look.helmet ? 'Rogue_Hooded' : cls.model;
+  const modelName = cls.model;
   const { obj } = makeCharacter('char', modelName, cls.show);
   applyLook(obj, G.look);
+  obj.scale.setScalar(cls.scale || 1);
   pvChar = obj;
   pvScene.add(obj);
 }
@@ -405,16 +406,9 @@ function startRun(seed, mode = 'campaign') {
   createPlayer(classId, playerName());
   G.player.maxHp = effectiveMaxHp();
   G.player.hp = G.player.maxHp;
-  const chosen = loadSpellChoice(classId);
-  let spells;
-  if (chosen) {
-    G.run.spells = [...chosen];
-    spells = G.run.spells;
-  } else {
-    spells = dealSpells(classId);
-  }
-  const kitWord = CLASSES[classId].physical ? 'abilities' : 'spells';
-  addMsg(`Your ${kitWord} this run: ${spells.map(s => `${SPELLS[s].icon} ${SPELLS[s].name}`).join(' · ')}${chosen ? '' : ' (random — pick your own in the menu)'}`, 'gold');
+  // sci-fi first pass: no spell deck. Signatures, stims and second wind carry
+  // the kit; the ability system returns later under a tech name.
+  G.run.spells = [];
 
   if (mode === 'horde') {
     setLocalFloor(1);

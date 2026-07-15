@@ -3,7 +3,7 @@
 // floor-namespaced and deterministic (floor*1000+index; summons get 500+).
 import * as THREE from 'three';
 import { G, floorState } from './state.js';
-import { ENEMIES, scaleHp, scaleDmg, ANIM_GROUND, ANIM_CRITTER, ANIM_FLYER } from './config.js';
+import { ENEMIES, scaleHp, scaleDmg, ANIM_GROUND, ANIM_CRITTER, ANIM_FLYER, ANIM_ROBOT, ANIM_MECH, ANIM_TROOP, ANIM_VOID } from './config.js';
 import { makeCharacter, tintCharacter, makeWeaponModel } from './assets.js';
 import { makeBlobShadow, spawnDamageNumber, spawnBurst, makeGlowSprite } from './fx.js';
 import { sfx } from './audio.js';
@@ -290,7 +290,7 @@ function updateDragonFlames(dt) {
 const _muzzle = new THREE.Vector3();
 const _muzDir = new THREE.Vector3();
 
-const ANIM_MAPS = { ground: ANIM_GROUND, critter: ANIM_CRITTER, flyer: ANIM_FLYER };
+const ANIM_MAPS = { ground: ANIM_GROUND, critter: ANIM_CRITTER, flyer: ANIM_FLYER, robot: ANIM_ROBOT, mech: ANIM_MECH, troop: ANIM_TROOP, void: ANIM_VOID };
 const amap = (e) => e.cfg.animMap ? ANIM_MAPS[e.cfg.animMap] : null;
 const onMyFloor = (e) => e.floor === G.floor;
 

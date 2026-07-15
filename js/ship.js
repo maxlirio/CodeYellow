@@ -88,7 +88,7 @@ export function generateShipDeck(seedStr, floor) {
   const inb = (x, y) => x > 0 && y > 0 && x < w - 1 && y < h - 1;
 
   // ---- BSP the deck into holds ----
-  const MINROOM = 8, WALL = 2;   // bulkhead thickness between holds
+  const MINROOM = 8, WALL = 3;   // bulkhead thickness between holds
   const MAXW = 18, MAXH = 14;    // a hold larger than this must keep splitting
   let leaves = [{ x: 1, y: 1, w: w - 2, h: h - 2 }];
   const canSplit = (l) => l.w >= MINROOM * 2 + WALL || l.h >= MINROOM * 2 + WALL;
@@ -138,10 +138,11 @@ export function generateShipDeck(seedStr, floor) {
 
   // ---- seal a section or two (dead void space keeps the hulk claustrophobic
   //      at the edges without ever pinching the fights) ----
-  const sealable = leaves.length >= 6 ? rng.int(1, 2) : leaves.length === 5 ? rng.int(0, 1) : 0;
+  const sealable = leaves.length >= 6 ? 2 : leaves.length === 5 ? rng.int(1, 2) : 1;
   const sealed = new Set();
   for (let i = 0; i < sealable; i++) {
-    const cand = leaves.filter(l => !sealed.has(l) && adj.get(l).length <= 2);
+    let cand = leaves.filter(l => !sealed.has(l) && adj.get(l).length <= 2);
+    if (!cand.length) cand = leaves.filter(l => !sealed.has(l) && adj.get(l).length <= 3);
     if (!cand.length) break;
     const pick = rng.pick(cand);
     sealed.add(pick);
@@ -160,13 +161,29 @@ export function generateShipDeck(seedStr, floor) {
   // ---- carve holds (with chamfered hull corners for a ship silhouette) ----
   const chamfer = [];
   for (const [cx0, cy0, sx, sy] of [[1, 1, 1, 1], [w - 2, 1, -1, 1], [1, h - 2, 1, -1], [w - 2, h - 2, -1, -1]]) {
-    if (rng.chance(0.6)) chamfer.push({ cx0, cy0, sx, sy, s: rng.int(3, 7) });
+    if (rng.chance(0.7)) chamfer.push({ cx0, cy0, sx, sy, s: rng.int(4, 9) });
   }
   // diagonal hull bite: cells within taxicab distance s of a chosen deck corner
   const chamfered = (x, y) => chamfer.some(c => (x - c.cx0) * c.sx + (y - c.cy0) * c.sy < c.s);
   for (const l of holds) {
     for (let y = l.y; y < l.y + l.h; y++) for (let x = l.x; x < l.x + l.w; x++) {
       if (!chamfered(x, y)) set(x, y, FLOOR);
+    }
+  }
+
+  // ---- structural mass: SOLID column-blocks inside the big holds. Real walls
+  //      on the grid — they block sight and shot, break up the sightlines of a
+  //      big hold, and put hull tonnage back into the deck ----
+  const biggestHold = holds.slice().sort((a, b) => b.w * b.h - a.w * a.h)[0];
+  for (const l of holds) {
+    if (l.w < 10 || l.h < 10 || l === biggestHold) continue;
+    const nBlocks = l.w * l.h > 140 ? 2 : 1;
+    for (let b = 0; b < nBlocks; b++) {
+      const bw = rng.int(2, 3), bh = rng.int(2, 3);
+      const bx = l.x + 2 + rng.int(0, l.w - bw - 4);
+      const by = l.y + 2 + rng.int(0, l.h - bh - 4);
+      // never beside a bulkhead (breach spans check the cells next to walls)
+      for (let y = by; y < by + bh; y++) for (let x = bx; x < bx + bw; x++) set(x, y, SOLID);
     }
   }
 
@@ -268,7 +285,7 @@ export function generateShipDeck(seedStr, floor) {
     engineering: ['machine', 'machine', 'gantry', 'cargo', 'barracks'],
     command: ['gantry', 'machine', 'barracks', 'cargo'],
   }[theme.id];
-  const biggest = holds.slice().sort((a, b) => b.w * b.h - a.w * a.h)[0];
+  const biggest = biggestHold;
   for (const l of holds) {
     if (l === spawnHold) l.role = 'breach';
     else if (l === biggest && l.w >= 12 && l.h >= 9 && theme.id === 'cargo') l.role = 'hangar';
@@ -317,6 +334,13 @@ export function generateShipDeck(seedStr, floor) {
       const along = l.w >= l.h;
       const cxw = l.cx * CELL, cyw = l.cy * CELL;
       const hx = (along ? 9 : 5), hz = (along ? 5 : 9);
+      // the hull footprint must be open floor — a structural block or chamfer
+      // under the shuttle would put a collider inside SOLID
+      let footprintOpen = true;
+      for (let dy = -Math.ceil(hz / CELL); dy <= Math.ceil(hz / CELL); dy++)
+        for (let dx = -Math.ceil(hx / CELL); dx <= Math.ceil(hx / CELL); dx++)
+          if (at(l.cx + dx, l.cy + dy) !== FLOOR) footprintOpen = false;
+      if (!footprintOpen) { l.role = 'cargo'; continue; } // fall back to crates next pass? no — just crates below
       colliders.push({ x: cxw, z: cyw, hx, hz, y0: 0, h: 3.4 });                      // hull
       colliders.push({ x: cxw + (along ? hx + 2 : 0), z: cyw + (along ? 0 : hz + 2), hx: along ? 2.4 : 1.6, hz: along ? 1.6 : 2.4, y0: 0, h: 1.6 }); // tail ramp — mantleable
       shipDecor.push({ kind: 'shuttle', x: cxw, z: cyw, w: hx * 2, d: hz * 2, h: 3.4, yaw: along ? 0 : Math.PI / 2 });
@@ -338,20 +362,30 @@ export function generateShipDeck(seedStr, floor) {
       const along = l.w >= l.h;
       const lanes = l.role === 'gantry' && (along ? l.h : l.w) >= 9 && rng.chance(0.4) ? 2 : 1;
       const mid = along ? l.cy + rng.int(-1, 1) : l.cx + rng.int(-1, 1);
-      const cellsP = [];
+      // the catwalk must be one CONTIGUOUS run — a structural block mid-hold
+      // would split it into an island with no ramp. Walk the primary lane and
+      // keep the longest unbroken stretch.
       const span = along
         ? { a0: l.x + 2, a1: l.x + l.w - 3 }
         : { a0: l.y + 2, a1: l.y + l.h - 3 };
+      let run = [], bestRun = [];
       for (let a = span.a0; a <= span.a1; a++) {
+        const x = along ? a : mid, y = along ? mid : a;
+        if (at(x, y) === FLOOR) { run.push(a); if (run.length > bestRun.length) bestRun = run.slice(); }
+        else run = [];
+      }
+      const cellsP = [];
+      for (const a of bestRun) {
         for (let k = 0; k < lanes; k++) {
           const x = along ? a : mid + k, y = along ? mid + k : a;
           if (at(x, y) === FLOOR) cellsP.push({ x, y });
         }
       }
-      if (cellsP.length >= 4) {
+      if (cellsP.length >= 4 && bestRun.length >= 4) {
+        const r0 = bestRun[0], r1 = bestRun[bestRun.length - 1];
         const ends = along
-          ? [{ x: span.a0 - 1, y: mid, dx: 1, dy: 0 }, { x: span.a1 + 1, y: mid, dx: -1, dy: 0 }]
-          : [{ x: mid, y: span.a0 - 1, dx: 0, dy: 1 }, { x: mid, y: span.a1 + 1, dx: 0, dy: -1 }];
+          ? [{ x: r0 - 1, y: mid, dx: 1, dy: 0 }, { x: r1 + 1, y: mid, dx: -1, dy: 0 }]
+          : [{ x: mid, y: r0 - 1, dx: 0, dy: 1 }, { x: mid, y: r1 + 1, dx: 0, dy: -1 }];
         const okRamps = ends.filter(r => inb(r.x, r.y) && at(r.x, r.y) === FLOOR && !keepClear.has(idxOf(r.x, r.y)));
         if (okRamps.length) {
           for (const c of cellsP) elev[idxOf(c.x, c.y)] = 1;
@@ -541,10 +575,12 @@ export function generateShipDeck(seedStr, floor) {
   const pool = mutator?.poolOverride ? mutator.poolOverride.slice() : enemyPool(floor).concat(theme.bias);
   const eChance = eliteChance(floor);
   const countMult = mutator?.countMult ?? 1;
-  const baseFor = (l) => l.role === 'hangar' ? rng.int(4, 7)
+  // early decks are a beachhead, not a meat grinder
+  const floorScale = floor === 1 ? 0.55 : floor === 2 ? 0.8 : 1;
+  const baseFor = (l) => (l.role === 'hangar' ? rng.int(4, 7)
     : l.role === 'cargo' ? rng.int(3, 5)
     : l.role === 'machine' ? rng.int(2, 4)
-    : rng.int(2, 3);
+    : rng.int(2, 3)) * floorScale;
   for (const l of holds) {
     if (l === spawnHold) continue;
     const n = Math.round((l === liftHold && isBossFloor ? 1 : baseFor(l)) * countMult);
@@ -570,7 +606,13 @@ export function generateShipDeck(seedStr, floor) {
   const packSpawns = [];
   for (const s of enemySpawns) {
     if (TRIO.has(s.type)) {
-      for (let i = 0; i < 2; i++) packSpawns.push({ ...s, x: s.x + rng.next() * 3 - 1.5, z: s.z + rng.next() * 3 - 1.5, elite: false });
+      for (let i = 0; i < 2; i++) {
+        // the offset must stay on walkable ground — a parent near a cell edge
+        // plus a 1.5u jitter used to bury pack members inside the wall
+        const px = s.x + rng.next() * 3 - 1.5, pz = s.z + rng.next() * 3 - 1.5;
+        const ok = at(Math.round(px / CELL), Math.round(pz / CELL)) !== SOLID;
+        packSpawns.push({ ...s, x: ok ? px : s.x, z: ok ? pz : s.z, elite: false });
+      }
     }
   }
   enemySpawns.push(...packSpawns);

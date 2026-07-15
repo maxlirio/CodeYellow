@@ -11,6 +11,7 @@ import {
 } from './config.js';
 import { buildMergedStatic, pieceColliders } from './assets.js';
 import { buildShipStatic } from './shipmeshes.js';
+import { generateShipDeck } from './ship.js';
 import { ENEMIES } from './config.js';
 const ENEMIES_TRIO = new Set(Object.keys(ENEMIES).filter(k => ENEMIES[k].trio));
 
@@ -363,6 +364,8 @@ export function generateDragonLair(seedStr, floor) {
 
 export function generateFloorData(seedStr, floor) {
   if (floor > 0 && floor % 9 === 0) return generateDragonLair(seedStr, floor);
+  // sci-fi branch: every ordinary floor is a deck of the hulk
+  if (floor > 0) return generateShipDeck(seedStr, floor);
   const rng = makeRng(`${seedStr}:floor:${floor}`);
   const size = Math.min(34 + floor * 2, 46);
   const w = size, h = size;

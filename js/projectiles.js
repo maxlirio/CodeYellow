@@ -112,6 +112,23 @@ function buildVisual(b) {
       obj.add(makeGlowSprite(0xffe9a0, 1.3 * size));
       return { obj, spin: 'pulse', trail: { color: 0xffe08a, rate: 0.04, n: 2, s: 0.08 } };
     }
+    case 'laser': {
+      // a hard bright energy bolt: stretched core + halo, oriented along flight
+      const obj = new THREE.Group();
+      const core = new THREE.Mesh(
+        new THREE.BoxGeometry(0.07 * size, 0.07 * size, 0.9 * size),
+        new THREE.MeshBasicMaterial({ color: 0xffffff, toneMapped: false })
+      );
+      obj.add(core);
+      const halo = new THREE.Mesh(
+        new THREE.BoxGeometry(0.16 * size, 0.16 * size, 1.0 * size),
+        new THREE.MeshBasicMaterial({ color, transparent: true, opacity: 0.55, blending: THREE.AdditiveBlending, depthWrite: false, toneMapped: false })
+      );
+      obj.add(halo);
+      const pl = new THREE.PointLight(color, 2.5, 7);
+      obj.add(pl);
+      return { obj, orient: true, trail: { color, rate: 0.05, n: 1, s: 0.06 } };
+    }
     case 'wisp': {
       const obj = new THREE.Group();
       obj.add(makeGlowSprite(color, 0.9 * size));

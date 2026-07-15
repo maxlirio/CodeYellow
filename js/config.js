@@ -5,50 +5,50 @@ export const PLATFORM_H = 4;        // height of climbable platforms
 
 export const CLASSES = {
   knight: {
-    name: 'Knight', icon: '🛡', model: 'Knight',
-    desc: 'Sturdy sword & board. No magic — raw martial power-ups.',
+    name: 'Breacher', icon: '🛡', model: 'Astronaut_BarbaraTheBee', scale: 0.62,
+    desc: 'Point of the spear. Arc-blade and riot plate — first through the hull.',
     physical: true,
     hp: 125, dmg: 16, speed: 8.2, crit: 0.06, attackAnims: ['1H_Melee_Attack_Slice_Horizontal', '1H_Melee_Attack_Chop'],
     attackTime: 0.7, attackRange: 3.0, attackArc: 1.1, mana: 60, manaRegen: 2,
-    show: ['1H_Sword', 'Round_Shield'],
+    show: [],
     spellPool: ['shieldbash', 'warcry', 'bulwark', 'bullcharge', 'warbanner', 'executioner', 'chainhook'],
   },
   barbarian: {
-    name: 'Barbarian', icon: '🪓', model: 'Barbarian',
-    desc: 'Massive two-handed axe. No magic — raw martial power-ups.',
+    name: 'Wrecker', icon: '🪓', model: 'Astronaut_FernandoTheFlamingo', scale: 0.62,
+    desc: 'Salvage-crew muscle. Two-handed plasma render — walls optional.',
     physical: true,
     hp: 150, dmg: 26, speed: 7.7, crit: 0.1, attackAnims: ['2H_Melee_Attack_Chop', '2H_Melee_Attack_Slice'],
     attackTime: 0.92, attackRange: 3.4, attackArc: 1.35, mana: 60, manaRegen: 2,
-    show: ['2H_Axe'],
+    show: [],
     spellPool: ['axethrow', 'groundslam', 'rage', 'whirlwind', 'leap', 'bloodlust', 'bullcharge', 'sunderstomp', 'chainhook', 'executioner'],
   },
   rogue: {
-    name: 'Rogue', icon: '🗡', model: 'Rogue',
-    desc: 'Twin daggers. Fast, fragile, deadly crits.',
+    name: 'Splicer', icon: '🗡', model: 'Astronaut_RaeTheRedPanda', scale: 0.62,
+    desc: 'Twin vibro-blades. Fast, fragile, deadly crits.',
     hp: 92, dmg: 11, speed: 9.4, crit: 0.28, attackAnims: ['Dualwield_Melee_Attack_Slice', 'Dualwield_Melee_Attack_Stab'],
     attackTime: 0.44, attackRange: 2.6, attackArc: 1.0, mana: 70, manaRegen: 2.5,
-    show: ['Knife', 'Knife_Offhand'],
+    show: [],
     spellPool: ['knifefan', 'shadowstep', 'venomvial', 'smokebomb', 'deathmark', 'shurikenstorm', 'bonewall', 'mirrorimage', 'ricochet', 'shadowswap', 'decoy', 'beartrap', 'embertrail'],
   },
   mage: {
-    name: 'Mage', icon: '🔮', model: 'Mage',
-    desc: 'Arcane staff. Bolts burn mana — they hit like a cannon when your reserves are full.',
+    name: 'Technician', icon: '⚡', model: 'Astronaut_FinnTheFrog', scale: 0.62,
+    desc: 'Arc projector. Bolts burn energy — they hit like a cannon when your capacitors are full.',
     hp: 84, dmg: 26, speed: 8.4, crit: 0.08, attackAnims: ['Spellcast_Shoot'],
     attackTime: 0.55, attackRange: 26, attackArc: 0, mana: 110, manaRegen: 3.5, manaAttack: 0.2,
-    show: ['2H_Staff'], ranged: true, boltVis: 'fire',
+    show: [], ranged: true, boltVis: 'laser', boltColor: 0x55ddff,
     spellPool: ['fireball', 'frostshard', 'chainlightning', 'meteor', 'blizzard', 'arcaneorb', 'bonewall', 'stormlance', 'mirrorimage', 'gravitywell', 'ricochet', 'gravitylash', 'chronobubble', 'frostprison', 'levitate', 'sanctuary'],
   },
   ranger: {
-    name: 'Ranger', icon: '🏹', model: 'Rogue_Hooded',
-    desc: 'Hooded archer. Draws a true bow — arrows fly where you aim.',
+    name: 'Marksman', icon: '🎯', model: 'Character_Soldier', scale: 0.85,
+    desc: 'Ship-security veteran. Pulse rifles fire where you aim — count your cells.',
     hp: 95, dmg: 14, speed: 9.0, crit: 0.15, attackAnims: ['2H_Ranged_Shoot'],
     attackTime: 0.95, attackRange: 28, attackArc: 0, mana: 80, manaRegen: 2.5,
-    show: [], ranged: true, boltVis: 'arrow',
+    show: [], ranged: true, boltVis: 'laser', boltColor: 0xffb02e,
     spellPool: ['powershot', 'multishot', 'rainarrows', 'shadowstep', 'smokebomb', 'bonewall', 'lifeward', 'beartrap', 'truesight', 'decoy', 'embertrail', 'sanctuary'],
   },
   necromancer: {
-    name: 'Necromancer', icon: '💀', model: 'Skeleton_Mage',
-    desc: 'A skeleton who refused to stay down. Soul bolts, dark pacts — and the dead answer when called.',
+    name: 'Fabricator', icon: '🤖', model: 'Character_Hazmat', scale: 0.85,
+    desc: 'Nanite engineer. Corrosive bolts, dark bargains with the machine — and the scrap answers when called.',
     hp: 80, dmg: 19, speed: 8.2, crit: 0.06, attackAnims: ['Spellcast_Shoot'],
     attackTime: 0.6, attackRange: 24, attackArc: 0, mana: 120, manaRegen: 3.5, manaAttack: 0.14,
     show: [], boltVis: 'wisp', boltColor: 0x77ff88, undead: true,
@@ -147,50 +147,45 @@ export const RARITIES = [
 // mesh = KayKit rig meshes; held = a GLB attached to the hand instead.
 export const WEAPON_TYPES = {
   knight: [
-    { id: 'sword1h', noun: 'Sword', mesh: ['1H_Sword', 'OFFHAND'], model: 'sword_1handed', verb: 'slash', sigPool: ['radiantbeam', 'frostwave'] },
-    { id: 'sword2h', noun: 'Greatsword', mesh: ['2H_Sword'], model: 'sword_2handed', verb: 'cleave', dmgBonus: 1.15, sigPool: ['radiantbeam', 'earthsplitter'] },
-    { id: 'knightblade', noun: 'Blade', mesh: [], held: 'Sword', model: 'Sword', verb: 'slash', dmgBonus: 0.95, atkTime: 0.6, critAdd: 0.05, sigPool: ['radiantbeam', 'frostwave'] },
-    { id: 'claymore', noun: 'Claymore', mesh: [], held: 'Claymore', model: 'Claymore', verb: 'cleave', dmgBonus: 1.45, atkTime: 1.1, sigPool: ['earthsplitter', 'thunderclap'] },
-    { id: 'warhammer', noun: 'Warhammer', mesh: [], held: 'Hammer_Double', model: 'Hammer_Double', verb: 'smash', dmgBonus: 1.3, atkTime: 1.0, stunHit: 0.4, sigPool: ['thunderclap', 'earthsplitter'] },
-    { id: 'spear', noun: 'Spear', mesh: [], held: 'Spear', model: 'Spear', verb: 'stab', dmgBonus: 1.05, rangeAdd: 1.3, sigPool: ['frostwave', 'radiantbeam'] },
-    { id: 'runesword', noun: 'Runeblade', mesh: [], held: 'Sword_Golden', model: 'Sword_Golden', verb: 'slash', dmgBonus: 1.1, atkTime: 0.62, critAdd: 0.08, minRarity: 2, sigPool: ['radiantbeam', 'dragonsbreath'] },
+    { id: 'arcblade', noun: 'Arc-Blade', mesh: [], held: 'arcblade', model: 'arcblade', verb: 'slash', sigPool: ['radiantbeam', 'frostwave'] },
+    { id: 'plasrend', noun: 'Plas-Render', mesh: [], held: 'plasrend', model: 'plasrend', verb: 'cleave', dmgBonus: 1.45, atkTime: 1.1, sigPool: ['earthsplitter', 'thunderclap'] },
+    { id: 'breachmaul', noun: 'Breach Maul', mesh: [], held: 'breachmaul', model: 'breachmaul', verb: 'smash', dmgBonus: 1.3, atkTime: 1.0, stunHit: 0.4, sigPool: ['thunderclap', 'earthsplitter'] },
+    { id: 'phasepike', noun: 'Phase Pike', mesh: [], held: 'phasepike', model: 'phasepike', verb: 'stab', dmgBonus: 1.05, rangeAdd: 1.3, sigPool: ['frostwave', 'radiantbeam'] },
+    { id: 'sidearm', noun: 'Pulse Sidearm', mesh: [], model: 'blaster-a', verb: 'shoot', ranged: true, dmgBonus: 0.85, atkTime: 0.55, sigPool: ['radiantbeam', 'dragonsbreath'] },
+    { id: 'runeblade', noun: 'Vengeance Edge', mesh: [], held: 'monoedge', model: 'monoedge', verb: 'slash', dmgBonus: 1.1, atkTime: 0.62, critAdd: 0.08, minRarity: 2, sigPool: ['radiantbeam', 'dragonsbreath'] },
   ],
   barbarian: [
-    { id: 'axe1h', noun: 'Axe', mesh: ['1H_Axe', 'OFFHAND'], model: 'axe_1handed', verb: 'slash', sigPool: ['firenova', 'dragonsbreath'] },
-    { id: 'axe2h', noun: 'Great Axe', mesh: ['2H_Axe'], model: 'axe_2handed', verb: 'cleave', dmgBonus: 1.15, sigPool: ['firenova', 'earthsplitter'] },
-    { id: 'waraxe', noun: 'War Axe', mesh: [], held: 'Axe', model: 'Axe', verb: 'cleave', dmgBonus: 1.25, atkTime: 1.0, sigPool: ['firenova', 'thunderclap'] },
-    { id: 'doubleaxe', noun: 'Twinblade Axe', mesh: [], held: 'Axe_Double', model: 'Axe_Double', verb: 'cleave', dmgBonus: 1.2, arcAdd: 0.3, sigPool: ['firenova', 'earthsplitter'] },
-    { id: 'maul', noun: 'Maul', mesh: [], held: 'Hammer_Small', model: 'Hammer_Small', verb: 'smash', dmgBonus: 1.5, atkTime: 1.25, stunHit: 0.5, sigPool: ['thunderclap', 'earthsplitter'] },
-    { id: 'scythe', noun: 'Reaper Scythe', mesh: [], held: 'Scythe', model: 'Scythe', verb: 'sweep', dmgBonus: 1.15, arcAdd: 0.5, rangeAdd: 0.6, sigPool: ['lifedrain', 'dragonsbreath'], minRarity: 1 },
-    { id: 'boneaxe', noun: 'Bone Cleaver', mesh: [], held: 'Skeleton_Axe', model: 'Skeleton_Axe', verb: 'cleave', dmgBonus: 1.1, lifestealAdd: 0.05, sigPool: ['lifedrain', 'firenova'] },
+    { id: 'ripblade', noun: 'Rip-Blade', mesh: [], held: 'arcblade', model: 'arcblade', verb: 'slash', sigPool: ['firenova', 'dragonsbreath'] },
+    { id: 'render2h', noun: 'Heavy Render', mesh: [], held: 'plasrend', model: 'plasrend', verb: 'cleave', dmgBonus: 1.25, atkTime: 1.0, sigPool: ['firenova', 'thunderclap'] },
+    { id: 'wreckmaul', noun: 'Wrecking Maul', mesh: [], held: 'breachmaul', model: 'breachmaul', verb: 'smash', dmgBonus: 1.5, atkTime: 1.25, stunHit: 0.5, sigPool: ['thunderclap', 'earthsplitter'] },
+    { id: 'monoscythe', noun: 'Salvage Scythe', mesh: [], held: 'monoscythe', model: 'monoscythe', verb: 'sweep', dmgBonus: 1.15, arcAdd: 0.5, rangeAdd: 0.6, sigPool: ['lifedrain', 'dragonsbreath'], minRarity: 1 },
+    { id: 'scattergun', noun: 'Scattergun', mesh: [], model: 'blaster-g', verb: 'shoot', ranged: true, dmgBonus: 1.35, atkTime: 1.2, sigPool: ['firenova', 'earthsplitter'] },
   ],
-  // rogues are blade-work only — bows and arrows belong to the ranger
+  // splicers are blade-work only — rifles belong to the marksman
   rogue: [
-    { id: 'daggers', noun: 'Daggers', mesh: ['Knife', 'Knife_Offhand'], model: 'dagger', verb: 'stab', sigPool: ['shadowflurry', 'frostwave'] },
-    { id: 'fangs', noun: 'Twin Fangs', mesh: [], held: 'Dagger', held2: true, model: 'Dagger', verb: 'stab', dmgBonus: 0.9, atkTime: 0.4, critAdd: 0.07, sigPool: ['shadowflurry', 'dragonsbreath'] },
-    { id: 'shadowfangs', noun: 'Shadow Fangs', mesh: [], held: 'Dagger_2', held2: true, model: 'Dagger_2', verb: 'stab', dmgBonus: 1.05, atkTime: 0.45, critAdd: 0.1, minRarity: 2, sigPool: ['shadowflurry', 'lifedrain'] },
-    { id: 'boneblade', noun: 'Bone Shiv', mesh: [], held: 'Skeleton_Blade', model: 'Skeleton_Blade', verb: 'slash', dmgBonus: 1.0, lifestealAdd: 0.06, sigPool: ['lifedrain', 'shadowflurry'] },
-    { id: 'goldfang', noun: 'Gilded Fang', mesh: [], held: 'Dagger_Golden', model: 'Dagger_Golden', verb: 'slash', dmgBonus: 1.15, critAdd: 0.06, minRarity: 2, sigPool: ['shadowflurry', 'radiantbeam'] },
+    { id: 'vibropair', noun: 'Vibro-Blades', mesh: [], held: 'vibro', held2: true, model: 'vibro', verb: 'stab', sigPool: ['shadowflurry', 'frostwave'] },
+    { id: 'fangs', noun: 'Twin Splicers', mesh: [], held: 'vibro', held2: true, model: 'vibro', verb: 'stab', dmgBonus: 0.9, atkTime: 0.4, critAdd: 0.07, sigPool: ['shadowflurry', 'dragonsbreath'] },
+    { id: 'monoedge', noun: 'Mono-Edge', mesh: [], held: 'monoedge', model: 'monoedge', verb: 'slash', dmgBonus: 1.0, lifestealAdd: 0.06, sigPool: ['lifedrain', 'shadowflurry'] },
+    { id: 'ghostfangs', noun: 'Ghost Fangs', mesh: [], held: 'vibro', held2: true, model: 'vibro', verb: 'stab', dmgBonus: 1.05, atkTime: 0.45, critAdd: 0.1, minRarity: 2, sigPool: ['shadowflurry', 'lifedrain'] },
   ],
   mage: [
-    { id: 'staff', noun: 'Staff', mesh: ['2H_Staff'], model: 'staff', verb: 'cast', sigPool: ['voidrip', 'frostwave'] },
-    { id: 'wand', noun: 'Wand', mesh: ['1H_Wand'], model: 'wand', verb: 'cast', dmgBonus: 0.82, atkTime: 0.38, speedAdd: 0.4, sigPool: ['voidrip', 'dragonsbreath'] },
-    { id: 'skullstaff', noun: 'Skull Staff', mesh: [], held: 'skullstaff', model: 'skullstaff', verb: 'cast', dmgBonus: 1.15, atkTime: 0.65, lifestealAdd: 0.05, sigPool: ['lifedrain', 'voidrip'] },
-    { id: 'crystalscepter', noun: 'Crystal Scepter', mesh: [], held: 'crystalscepter', model: 'crystalscepter', verb: 'cast', dmgBonus: 0.95, atkTime: 0.45, manaRegenAdd: 1.5, sigPool: ['frostwave', 'voidrip'], minRarity: 1 },
-    { id: 'bonestaff', noun: 'Grave Staff', mesh: [], held: 'Skeleton_Staff', model: 'Skeleton_Staff', verb: 'cast', dmgBonus: 1.05, lifestealAdd: 0.06, sigPool: ['lifedrain', 'thunderclap'] },
+    { id: 'arcprojector', noun: 'Arc Projector', mesh: [], model: 'blaster-h', verb: 'cast', sigPool: ['voidrip', 'frostwave'] },
+    { id: 'fluxcaster', noun: 'Flux Caster', mesh: [], model: 'blaster-k', verb: 'cast', dmgBonus: 0.82, atkTime: 0.38, speedAdd: 0.4, sigPool: ['voidrip', 'dragonsbreath'] },
+    { id: 'gravtool', noun: 'Grav Inductor', mesh: [], model: 'blaster-r', verb: 'cast', dmgBonus: 1.15, atkTime: 0.65, lifestealAdd: 0.05, sigPool: ['lifedrain', 'voidrip'] },
+    { id: 'coolantlance', noun: 'Coolant Lance', mesh: [], model: 'blaster-b', verb: 'cast', dmgBonus: 0.95, atkTime: 0.45, manaRegenAdd: 1.5, sigPool: ['frostwave', 'voidrip'], minRarity: 1 },
   ],
   necromancer: [
-    { id: 'skullstaff', noun: 'Skull Staff', mesh: [], held: 'skullstaff', model: 'skullstaff', verb: 'cast', dmgBonus: 1.1, lifestealAdd: 0.05, sigPool: ['lifedrain', 'voidrip'] },
-    { id: 'bonestaff', noun: 'Grave Staff', mesh: [], held: 'Skeleton_Staff', model: 'Skeleton_Staff', verb: 'cast', dmgBonus: 1.0, sigPool: ['lifedrain', 'thunderclap'] },
-    { id: 'reapscythe', noun: 'Soul Scythe', mesh: [], held: 'Scythe', model: 'Scythe', verb: 'sweep', dmgBonus: 1.25, arcAdd: 0.5, rangeAdd: 0.6, lifestealAdd: 0.06, minRarity: 1, sigPool: ['lifedrain', 'dragonsbreath'] },
-    { id: 'crystalscepter', noun: 'Crystal Scepter', mesh: [], held: 'crystalscepter', model: 'crystalscepter', verb: 'cast', dmgBonus: 0.9, atkTime: 0.45, manaRegenAdd: 1.5, sigPool: ['frostwave', 'voidrip'] },
+    { id: 'nanoseeder', noun: 'Nano-Seeder', mesh: [], model: 'blaster-c', verb: 'cast', dmgBonus: 1.1, lifestealAdd: 0.05, sigPool: ['lifedrain', 'voidrip'] },
+    { id: 'printclaw', noun: 'Printer Scythe', mesh: [], held: 'monoscythe', model: 'monoscythe', verb: 'sweep', dmgBonus: 1.25, arcAdd: 0.5, rangeAdd: 0.6, lifestealAdd: 0.06, minRarity: 1, sigPool: ['lifedrain', 'dragonsbreath'] },
+    { id: 'fluxcaster', noun: 'Flux Caster', mesh: [], model: 'blaster-k', verb: 'cast', dmgBonus: 1.0, sigPool: ['lifedrain', 'thunderclap'] },
+    { id: 'coolantlance', noun: 'Coolant Lance', mesh: [], model: 'blaster-b', verb: 'cast', dmgBonus: 0.9, atkTime: 0.45, manaRegenAdd: 1.5, sigPool: ['frostwave', 'voidrip'] },
   ],
   ranger: [
-    { id: 'bow', noun: 'Bow', mesh: [], model: 'bow', verb: 'bowshoot', ranged: true, sigPool: ['arrowstorm', 'frostwave'] },
-    { id: 'crossbow', noun: 'Crossbow', mesh: ['2H_Crossbow'], model: 'crossbow_2handed', verb: 'shoot', dmgBonus: 1.15, ranged: true, atkTime: 1.1, sigPool: ['arrowstorm', 'thunderclap'] },
-    { id: 'longbow', noun: 'Longbow', mesh: [], held: 'Bow_Wooden', model: 'Bow_Wooden', verb: 'bowshoot', ranged: true, dmgBonus: 1.2, atkTime: 1.05, sigPool: ['arrowstorm', 'frostwave'] },
-    { id: 'goldenbow', noun: 'Sunstrand Bow', mesh: [], held: 'Bow_Golden', model: 'Bow_Golden', verb: 'bowshoot', ranged: true, dmgBonus: 1.0, atkTime: 0.7, critAdd: 0.06, minRarity: 2, sigPool: ['radiantbeam', 'arrowstorm'] },
-    { id: 'evilbow', noun: 'Dreadbow', mesh: [], held: 'Bow_Evil', model: 'Bow_Evil', verb: 'bowshoot', ranged: true, dmgBonus: 1.35, atkTime: 1.15, lifestealAdd: 0.05, minRarity: 1, sigPool: ['dragonsbreath', 'lifedrain'] },
+    { id: 'pulsecarbine', noun: 'Pulse Carbine', mesh: [], model: 'blaster-d', verb: 'shoot', ranged: true, sigPool: ['arrowstorm', 'frostwave'] },
+    { id: 'longlas', noun: 'Long-Las', mesh: [], model: 'blaster-e', verb: 'shoot', ranged: true, dmgBonus: 1.35, atkTime: 1.15, sigPool: ['arrowstorm', 'thunderclap'] },
+    { id: 'needler', noun: 'Needler', mesh: [], model: 'blaster-j', verb: 'shoot', ranged: true, dmgBonus: 0.8, atkTime: 0.45, sigPool: ['arrowstorm', 'frostwave'] },
+    { id: 'marauder', noun: 'Marauder Rifle', mesh: [], model: 'blaster-f', verb: 'shoot', ranged: true, dmgBonus: 1.2, atkTime: 1.0, critAdd: 0.06, minRarity: 2, sigPool: ['radiantbeam', 'arrowstorm'] },
+    { id: 'suppressor', noun: 'Suppressor', mesh: [], model: 'blaster-p', verb: 'shoot', ranged: true, dmgBonus: 1.0, atkTime: 0.7, lifestealAdd: 0.05, minRarity: 1, sigPool: ['dragonsbreath', 'lifedrain'] },
   ],
 };
 
@@ -198,16 +193,16 @@ export const WEAPON_TYPES = {
 // Rare+ weapons can roll one: landing basic hits builds charge; at full charge
 // the weapon glows and key 4 unleashes it (costing mana + the charge).
 export const SIGNATURES = {
-  radiantbeam:   { name: 'Radiant Beam', icon: '🌟', mana: 20, hits: 8, desc: 'a piercing lance of light burns through everything in a line' },
-  firenova:      { name: 'Fire Nova', icon: '💥', mana: 22, hits: 9, desc: 'an explosion of flame erupts around you, igniting the pack' },
-  thunderclap:   { name: 'Thunderclap', icon: '🌩', mana: 22, hits: 9, desc: 'a stunning shockwave of thunder around you' },
-  voidrip:       { name: 'Void Rip', icon: '🕳', mana: 25, hits: 10, desc: 'tear a hungry vortex open at your crosshair' },
-  lifedrain:     { name: 'Life Drain', icon: '🩸', mana: 18, hits: 8, desc: 'siphon the life from every foe near you' },
-  arrowstorm:    { name: 'Arrow Storm', icon: '🌪', mana: 20, hits: 8, desc: 'a fan of seven arrows in one draw' },
-  frostwave:     { name: 'Frost Wave', icon: '❄️', mana: 20, hits: 8, desc: 'a freezing cone that chills all it touches' },
-  shadowflurry:  { name: 'Shadow Flurry', icon: '🌑', mana: 22, hits: 9, desc: 'blink between the three nearest foes, striking each' },
-  earthsplitter: { name: 'Earthsplitter', icon: '⛰', mana: 24, hits: 10, desc: 'a rupturing line of stone spikes ahead of you' },
-  dragonsbreath: { name: "Dragon's Breath", icon: '🐉', mana: 24, hits: 10, desc: 'exhale a cone of dragonfire that keeps burning' },
+  radiantbeam:   { name: 'Lance Array', icon: '🌟', mana: 20, hits: 8, desc: 'a piercing energy lance burns through everything in a line' },
+  firenova:      { name: 'Core Burst', icon: '💥', mana: 22, hits: 9, desc: 'your power core vents — plasma ignites the pack around you' },
+  thunderclap:   { name: 'Concussion Pulse', icon: '🌩', mana: 22, hits: 9, desc: 'a stunning shockwave slams outward from your frame' },
+  voidrip:       { name: 'Singularity', icon: '🕳', mana: 25, hits: 10, desc: 'collapse a hungry gravity well at your crosshair' },
+  lifedrain:     { name: 'Leech Field', icon: '🩸', mana: 18, hits: 8, desc: 'siphon power from every hostile near you' },
+  arrowstorm:    { name: 'Full Auto', icon: '🌪', mana: 20, hits: 8, desc: 'a fan of seven bolts in one trigger pull' },
+  frostwave:     { name: 'Cryo Sweep', icon: '❄️', mana: 20, hits: 8, desc: 'a coolant flood that chills all it touches' },
+  shadowflurry:  { name: 'Ghost Protocol', icon: '🌑', mana: 22, hits: 9, desc: 'phase-skip between the three nearest hostiles, striking each' },
+  earthsplitter: { name: 'Seismic Line', icon: '⛰', mana: 24, hits: 10, desc: 'a rupturing line of deck plating ahead of you' },
+  dragonsbreath: { name: 'Promethium Burn', icon: '🐉', mana: 24, hits: 10, desc: 'a cone of promethium fire that keeps burning' },
 };
 export const OFFHAND_TYPES = {
   knight: { noun: 'Shield', meshes: ['Round_Shield', 'Badge_Shield', 'Spike_Shield'], models: ['shield_round', 'shield_badge', 'shield_spikes'], stat: 'armor' },
@@ -238,39 +233,49 @@ export const TRINKET_STATS = [
 // ---------------- enemies ----------------
 // animation-name maps for the Quaternius monster rigs (KayKit rigs use defaults)
 const QA = 'CharacterArmature|';
+// sci-fi rigs (no armature prefix on their clips)
+export const ANIM_ROBOT = { idle: 'Idle', walk: 'Walking', run: 'Running', attack: ['Punch'], hit: 'No', death: 'Death' };
+export const ANIM_MECH = { idle: 'Idle', walk: 'Walk', run: 'Run', attack: ['Kick', 'Punch', 'SwordSlash'], hit: 'HitRecieve_1', death: 'Death' };
+export const ANIM_TROOP = { idle: 'Idle', walk: 'Walk', run: 'Run_Gun', attack: ['Idle_Shoot', 'Punch'], hit: 'HitReact', death: 'Death' };
+export const ANIM_VOID = { idle: 'Flying_Idle', walk: 'Fast_Flying', run: 'Fast_Flying', attack: ['Headbutt', 'Punch'], hit: 'HitReact', death: 'Death' };
 export const ANIM_GROUND = { idle: QA + 'Idle', walk: QA + 'Walk', run: QA + 'Run', attack: [QA + 'Punch', QA + 'Weapon'], hit: QA + 'HitReact', death: QA + 'Death' };
 export const ANIM_CRITTER = { idle: QA + 'Idle', walk: QA + 'Walk', run: QA + 'Walk', attack: [QA + 'Bite_Front'], hit: QA + 'HitRecieve', death: QA + 'Death' };
 export const ANIM_FLYER = { idle: QA + 'Flying_Idle', walk: QA + 'Fast_Flying', run: QA + 'Fast_Flying', attack: [QA + 'Headbutt', QA + 'Punch'], hit: QA + 'HitReact', death: QA + 'Death' };
 export const ENEMIES = {
-  minion:   { model: 'Skeleton_Minion',  hp: 32, dmg: 9,  speed: 4.8, range: 2.2, xp: 12, gold: [2, 7],  attackTime: 0.9, aggro: 11, scale: 1 },
-  rogue:    { model: 'Skeleton_Rogue',   hp: 26, dmg: 7,  speed: 6.6, range: 2.1, xp: 15, gold: [3, 8],  attackTime: 0.7, aggro: 13, scale: 1 },
-  warrior:  { model: 'Skeleton_Warrior', hp: 62, dmg: 14, speed: 3.9, range: 2.4, xp: 24, gold: [5, 12], attackTime: 1.1, aggro: 10, scale: 1.08 },
-  mage:     { model: 'Skeleton_Mage',    hp: 38, dmg: 11, speed: 3.6, range: 14,  xp: 26, gold: [6, 12], attackTime: 1.4, aggro: 15, scale: 1, ranged: true },
-  bomber:   { model: 'Skeleton_Minion',  hp: 24, dmg: 22, speed: 6.6, range: 1.8, xp: 20, gold: [4, 9],  attackTime: 0.4, aggro: 13, scale: 0.95, tint: 0x77ff55, explode: 3.6 },
-  frostmage:{ model: 'Skeleton_Mage',    hp: 40, dmg: 9,  speed: 3.4, range: 14,  xp: 30, gold: [7, 14], attackTime: 1.5, aggro: 15, scale: 1, ranged: true, tint: 0x77bbff, slowBolt: true },
-  ghost:    { model: 'Skeleton_Minion',  hp: 34, dmg: 13, speed: 3.1, range: 2.0, xp: 32, gold: [8, 15], attackTime: 0.9, aggro: 17, scale: 1.05, ghost: true },
-  shade:    { model: 'Skeleton_Rogue',   hp: 28, dmg: 10, speed: 5.4, range: 2.0, xp: 34, gold: [8, 16], attackTime: 0.6, aggro: 18, scale: 1, ghost: true, tint: 0x334455 },
-  necromancer: { model: 'Skeleton_Mage', hp: 46, dmg: 10, speed: 3.2, range: 13, xp: 42, gold: [10, 20], attackTime: 1.5, aggro: 15, scale: 1.1, ranged: true, tint: 0xbb66ff, summons: true, summonEvery: 12, summonType: 'minion', summonCount: 1 },
-  berserker:{ model: 'Skeleton_Rogue',   hp: 44, dmg: 11, speed: 5.6, range: 2.2, xp: 36, gold: [8, 16], attackTime: 0.55, aggro: 14, scale: 1.05, tint: 0xff5544, enrage: true },
-  juggernaut:{ model: 'Skeleton_Warrior', hp: 120, dmg: 18, speed: 2.7, range: 2.6, xp: 55, gold: [14, 26], attackTime: 1.3, aggro: 10, scale: 1.28, tint: 0x666677, stalwart: true },
-  plaguebearer:{ model: 'Skeleton_Minion', hp: 38, dmg: 8, speed: 4.4, range: 2.2, xp: 38, gold: [9, 17], attackTime: 0.95, aggro: 12, scale: 1.05, tint: 0x66aa44, plague: { dps: 4, dur: 4 }, deathCloud: 3.2 },
-  sniper:   { model: 'Skeleton_Rogue',   hp: 26, dmg: 13, speed: 4.5, range: 18,  xp: 34, gold: [8, 15], attackTime: 1.7, aggro: 20, scale: 1, ranged: true, tint: 0xccbb88, boltSpeed: 24, heldModel: 'crossbow_1handed', boltVis: 'arrow' },
-  brute:    { model: 'Skeleton_Minion',  hp: 55, dmg: 15, speed: 4.0, range: 2.4, xp: 30, gold: [7, 14], attackTime: 1.1, aggro: 11, scale: 1.3, tint: 0xcc9966, kbHit: 7 },
-  // ---- the greenskin & monster menagerie (Quaternius rigs) ----
-  goblin:   { model: 'Goblin', hp: 20, dmg: 6, speed: 6.8, range: 1.9, xp: 10, gold: [2, 5], attackTime: 0.7, aggro: 13, scale: 0.55, animMap: 'critter', trio: true },
-  orcwar:   { model: 'Orc', hp: 55, dmg: 13, speed: 5.2, range: 2.4, xp: 26, gold: [6, 12], attackTime: 0.95, aggro: 12, scale: 0.8, animMap: 'ground' },
-  ogre:     { model: 'Ogre', hp: 140, dmg: 24, speed: 3.4, range: 2.9, xp: 60, gold: [15, 28], attackTime: 1.5, aggro: 11, scale: 1.3, animMap: 'ground', stalwart: true, kbHit: 8 },
-  imp:      { model: 'Imp', hp: 30, dmg: 10, speed: 5.5, range: 9, xp: 28, gold: [7, 13], attackTime: 1.3, aggro: 15, scale: 0.55, animMap: 'flyer', fly: true, ranged: true, boltVis: 'wisp' },
-  slime:    { model: 'Slime', hp: 40, dmg: 8, speed: 3.4, range: 2.0, xp: 24, gold: [5, 10], attackTime: 1.0, aggro: 11, scale: 0.7, animMap: 'critter', splitInto: 'slimelet' },
-  slimelet: { model: 'Slime', hp: 14, dmg: 5, speed: 5.4, range: 1.7, xp: 8, gold: [1, 3], attackTime: 0.8, aggro: 14, scale: 0.4, animMap: 'critter' },
-  glub:     { model: 'Glub', hp: 34, dmg: 11, speed: 4.6, range: 2.2, xp: 30, gold: [8, 14], attackTime: 1.0, aggro: 15, scale: 0.62, animMap: 'flyer', fly: true },
-  drake:    { model: 'Drake', hp: 90, dmg: 18, speed: 6.0, range: 10, xp: 70, gold: [20, 35], attackTime: 1.4, aggro: 18, scale: 1.0, animMap: 'flyer', fly: true, ranged: true, boltVis: 'fireball', boltSpeed: 15 },
-  // bosses (floor 3/6 rolls one archetype; floor 9 is always the Bone King)
-  boss:     { model: 'Skeleton_Warrior', hp: 380, dmg: 22, speed: 4.6, range: 3.4, xp: 170, gold: [60, 90], attackTime: 1.1, aggro: 30, scale: 1.65, boss: true, bossName: 'GRAVEBOUND CHAMPION', stalwart: true },
-  necrolord:{ model: 'Skeleton_Mage',    hp: 300, dmg: 18, speed: 3.8, range: 15, xp: 180, gold: [60, 95], attackTime: 1.3, aggro: 30, scale: 1.6, boss: true, ranged: true, tint: 0xbb66ff, summons: true, summonEvery: 8, summonType: 'minion', summonCount: 2, bossName: 'THE NECROLORD', bossMsg: 'raises the dead' },
-  reaper:   { model: 'Skeleton_Rogue',   hp: 320, dmg: 20, speed: 6.8, range: 2.8, xp: 180, gold: [60, 95], attackTime: 0.6, aggro: 32, scale: 1.55, boss: true, ghost: true, tint: 0x223344, bossName: 'THE PALE REAPER' },
-  boneking: { model: 'Skeleton_Mage',    hp: 620, dmg: 26, speed: 4.2, range: 16,  xp: 420, gold: [150, 220], attackTime: 1.3, aggro: 40, scale: 1.9, ranged: true, boss: true, summons: true, summonEvery: 9, summonType: 'minion', summonCount: 2, bossName: 'THE BONE KING' },
-  mushking: { model: 'MushroomKing', hp: 350, dmg: 20, speed: 4.4, range: 3.0, xp: 190, gold: [70, 100], attackTime: 1.2, aggro: 30, scale: 1.35, animMap: 'ground', boss: true, stalwart: true, summons: true, summonEvery: 10, summonType: 'slimelet', summonCount: 3, bossName: 'THE MYCELIC KING', bossMsg: 'spawns spores' },
+  // ---- the hulk's machine crew (RobotExpressive family: one rig, many frames) ----
+  minion:   { name: 'Scrap Drone', model: 'RobotExpressive', animMap: 'robot', hp: 32, dmg: 9,  speed: 4.8, range: 2.2, xp: 12, gold: [2, 7],  attackTime: 0.9, aggro: 11, scale: 0.42, tint: 0x9aa4ad },
+  rogue:    { name: 'Scuttle Unit', model: 'RobotExpressive', animMap: 'robot', hp: 26, dmg: 7,  speed: 6.6, range: 2.1, xp: 15, gold: [3, 8],  attackTime: 0.7, aggro: 13, scale: 0.36, tint: 0x5fd8d0 },
+  warrior:  { name: 'Warframe', model: 'RobotExpressive', animMap: 'robot', hp: 62, dmg: 14, speed: 3.9, range: 2.4, xp: 24, gold: [5, 12], attackTime: 1.1, aggro: 10, scale: 0.5, tint: 0x676f8a },
+  bomber:   { name: 'Volatile Cell', model: 'RobotExpressive', animMap: 'robot', hp: 24, dmg: 22, speed: 6.6, range: 1.8, xp: 20, gold: [4, 9],  attackTime: 0.4, aggro: 13, scale: 0.34, tint: 0x8aff55, explode: 3.6 },
+  berserker:{ name: 'Berserk Frame', model: 'RobotExpressive', animMap: 'robot', hp: 44, dmg: 11, speed: 5.6, range: 2.2, xp: 36, gold: [8, 16], attackTime: 0.55, aggro: 14, scale: 0.48, tint: 0xff5544, enrage: true },
+  brute:    { name: 'Loader Frame', model: 'RobotExpressive', animMap: 'robot', hp: 55, dmg: 15, speed: 4.0, range: 2.4, xp: 30, gold: [7, 14], attackTime: 1.1, aggro: 11, scale: 0.6, tint: 0xd8913c, kbHit: 7 },
+  goblin:   { name: 'Scuttle Swarm', model: 'RobotExpressive', animMap: 'robot', hp: 20, dmg: 6, speed: 6.8, range: 1.9, xp: 10, gold: [2, 5], attackTime: 0.7, aggro: 13, scale: 0.28, tint: 0x66e0b8, trio: true },
+  orcwar:   { name: 'Salvager', model: 'RobotExpressive', animMap: 'robot', hp: 55, dmg: 13, speed: 5.2, range: 2.4, xp: 26, gold: [6, 12], attackTime: 0.95, aggro: 12, scale: 0.55, tint: 0x7c8f4e },
+  // ---- the scavenger crews still living aboard (toon-shooter rigs, guns baked in) ----
+  mage:     { name: 'Hull Raider', model: 'Character_Enemy', animMap: 'troop', hp: 38, dmg: 11, speed: 3.6, range: 14,  xp: 26, gold: [6, 12], attackTime: 1.4, aggro: 15, scale: 0.85, ranged: true, boltVis: 'laser', boltColor: 0xff5533 },
+  frostmage:{ name: 'Cryo Raider', model: 'Character_Enemy', animMap: 'troop', hp: 40, dmg: 9,  speed: 3.4, range: 14,  xp: 30, gold: [7, 14], attackTime: 1.5, aggro: 15, scale: 0.85, ranged: true, tint: 0x77bbff, slowBolt: true, boltVis: 'laser', boltColor: 0x77ddff },
+  sniper:   { name: 'Marksman Unit', model: 'Character_Enemy', animMap: 'troop', hp: 26, dmg: 13, speed: 4.5, range: 18,  xp: 34, gold: [8, 15], attackTime: 1.7, aggro: 20, scale: 0.85, ranged: true, tint: 0xccbb88, boltSpeed: 24, boltVis: 'laser', boltColor: 0xffe14d },
+  // ---- corrupted holograms: the ship remembers its crew ----
+  ghost:    { name: 'Echo', model: 'RobotExpressive', animMap: 'robot', hp: 34, dmg: 13, speed: 3.1, range: 2.0, xp: 32, gold: [8, 15], attackTime: 0.9, aggro: 17, scale: 0.5, ghost: true },
+  shade:    { name: 'Phantom Signal', model: 'Character_Enemy', animMap: 'troop', hp: 28, dmg: 10, speed: 5.4, range: 2.0, xp: 34, gold: [8, 16], attackTime: 0.6, aggro: 18, scale: 0.85, ghost: true, tint: 0x334455 },
+  // ---- fabrication: the hulk prints its own defenders ----
+  necromancer: { name: 'Fabricator Unit', model: 'Leela', animMap: 'mech', hp: 46, dmg: 10, speed: 3.2, range: 13, xp: 42, gold: [10, 20], attackTime: 1.5, aggro: 15, scale: 0.5, ranged: true, tint: 0xbb66ff, boltVis: 'wisp', boltColor: 0xbb66ff, summons: true, summonEvery: 12, summonType: 'minion', summonCount: 1 },
+  plaguebearer:{ name: 'Blight Drifter', model: 'Enemy_Flying', animMap: 'void', hp: 38, dmg: 8, speed: 4.4, range: 2.2, xp: 38, gold: [9, 17], attackTime: 0.95, aggro: 12, scale: 0.6, fly: true, tint: 0x66aa44, plague: { dps: 4, dur: 4 }, deathCloud: 3.2 },
+  juggernaut:{ name: 'Siegewalker', model: 'Mike', animMap: 'mech', hp: 120, dmg: 18, speed: 2.7, range: 2.6, xp: 55, gold: [14, 26], attackTime: 1.3, aggro: 10, scale: 0.55, tint: 0x666677, stalwart: true },
+  ogre:     { name: 'Wrecking Frame', model: 'Stan', animMap: 'mech', hp: 140, dmg: 24, speed: 3.4, range: 2.9, xp: 60, gold: [15, 28], attackTime: 1.5, aggro: 11, scale: 0.58, stalwart: true, kbHit: 8 },
+  // ---- void vermin: what got in through the breaches ----
+  imp:      { name: 'Spark Mote', model: 'Enemy_ExtraSmall', animMap: 'void', hp: 30, dmg: 10, speed: 5.5, range: 9, xp: 28, gold: [7, 13], attackTime: 1.3, aggro: 15, scale: 0.85, fly: true, ranged: true, boltVis: 'wisp', boltColor: 0x88ccff },
+  slime:    { name: 'Spore Cluster', model: 'Enemy_Small', animMap: 'void', hp: 40, dmg: 8, speed: 3.4, range: 2.0, xp: 24, gold: [5, 10], attackTime: 1.0, aggro: 11, scale: 0.8, fly: true, splitInto: 'slimelet' },
+  slimelet: { name: 'Sporeling', model: 'Enemy_ExtraSmall', animMap: 'void', hp: 14, dmg: 5, speed: 5.4, range: 1.7, xp: 8, gold: [1, 3], attackTime: 0.8, aggro: 14, scale: 0.6, fly: true, tint: 0x77cc66 },
+  glub:     { name: 'Void Drifter', model: 'Enemy_Flying', animMap: 'void', hp: 34, dmg: 11, speed: 4.6, range: 2.2, xp: 30, gold: [8, 14], attackTime: 1.0, aggro: 15, scale: 0.55, fly: true },
+  drake:    { name: 'Plasma Wraith', model: 'Enemy_Flying', animMap: 'void', hp: 90, dmg: 18, speed: 6.0, range: 10, xp: 70, gold: [20, 35], attackTime: 1.4, aggro: 18, scale: 0.85, fly: true, ranged: true, tint: 0xdd5544, boltVis: 'fireball', boltSpeed: 15 },
+  // bosses (deck 3/6 rolls one archetype; deck 9 is still the old god below)
+  boss:     { model: 'George', animMap: 'mech', hp: 380, dmg: 22, speed: 4.6, range: 3.4, xp: 170, gold: [60, 90], attackTime: 1.1, aggro: 30, scale: 0.62, boss: true, bossName: 'THE HULK WARDEN', stalwart: true },
+  necrolord:{ model: 'Leela', animMap: 'mech', hp: 300, dmg: 18, speed: 3.8, range: 15, xp: 180, gold: [60, 95], attackTime: 1.3, aggro: 30, scale: 0.68, boss: true, ranged: true, tint: 0xbb66ff, boltVis: 'wisp', boltColor: 0xbb66ff, summons: true, summonEvery: 8, summonType: 'minion', summonCount: 2, bossName: 'FABRICATOR PRIME', bossMsg: 'prints fresh frames' },
+  reaper:   { model: 'Character_Enemy', animMap: 'troop', hp: 320, dmg: 20, speed: 6.8, range: 2.8, xp: 180, gold: [60, 95], attackTime: 0.6, aggro: 32, scale: 1.3, boss: true, ghost: true, tint: 0x223344, bossName: 'THE SILENT PROTOCOL' },
+  boneking: { model: 'George', animMap: 'mech', hp: 620, dmg: 26, speed: 4.2, range: 16,  xp: 420, gold: [150, 220], attackTime: 1.3, aggro: 40, scale: 0.8, ranged: true, boltVis: 'laser', boltColor: 0xff3322, boss: true, summons: true, summonEvery: 9, summonType: 'minion', summonCount: 2, tint: 0xaa3322, bossName: 'THE FOUNDRY TYRANT' },
+  mushking: { model: 'Mike', animMap: 'mech', hp: 350, dmg: 20, speed: 4.4, range: 3.0, xp: 190, gold: [70, 100], attackTime: 1.2, aggro: 30, scale: 0.68, boss: true, stalwart: true, tint: 0x66aa44, summons: true, summonEvery: 10, summonType: 'slimelet', summonCount: 3, bossName: 'THE SPORE ENGINE', bossMsg: 'vents spores' },
+  // deck 9: the old god of the reactor — still the dragon, pending its own rebuild
   // solidR = her TORSO: you must walk around it. bodyR (4.5) is her whole reach,
   // wings and tail included — those you can duck under.
   dragon:   { model: 'proc', hp: 2400, dmg: 24, speed: 5.5, range: 30, xp: 900, gold: [340, 480], attackTime: 1.2, aggro: 55, scale: 1.7, bodyR: 4.5, solidR: 2.2, procDragon: true, boss: true, dragon: true, stalwart: true, bossName: 'EMBERWING THE UNDYING' },
@@ -392,6 +397,7 @@ export const SHOP_TABLES = {
 
 // Weapon-ish meshes we hide by default; equipment then re-shows its kit.
 export const WEAPON_MESHES = [
+  'Pistol', // Ultimate Space Kit astronauts carry a toggleable sidearm mesh
   '1H_Sword', '1H_Sword_Offhand', '2H_Sword', 'Badge_Shield', 'Rectangle_Shield', 'Round_Shield', 'Spike_Shield',
   '1H_Axe', '1H_Axe_Offhand', '2H_Axe', 'Barbarian_Round_Shield', 'Mug',
   'Spellbook', 'Spellbook_open', '1H_Wand', '2H_Staff',
