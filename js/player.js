@@ -31,7 +31,7 @@ export function createPlayer(classId, name) {
   obj.visible = false; // first person: own body hidden until death cam
   G.scene.add(obj);
   // warm lantern glow that follows the hero
-  const lantern = new THREE.PointLight(0xffb066, 14, 13, 1.7);
+  const lantern = new THREE.PointLight(0xe6f0fa, 24, 18, 1.5); // shoulder lamp, not a torch
   lantern.position.set(0, 2.4, 0);
   obj.add(lantern);
   const p = {

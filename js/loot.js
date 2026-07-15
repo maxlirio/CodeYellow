@@ -14,6 +14,74 @@ function baseY(kind) {
   return (kind === 'coin' || kind === 'key' || kind === 'potion' || kind === 'item') ? 0.55 : 0;
 }
 
+
+// ---- sci-fi loot bodies (branch: scifi). Mechanics untouched — these are the
+// same pickups the fantasy game had, wearing ship-tech shells. ----
+const lootSteel = () => new THREE.MeshStandardMaterial({ color: 0x5b6470, metalness: 0.5, roughness: 0.55 });
+const lootGlow = (c) => new THREE.MeshStandardMaterial({ color: 0x111111, emissive: new THREE.Color(c), emissiveIntensity: 1.7, toneMapped: false });
+function buildSupplyPod(vault) {
+  // a squat supply pod; the vault variant is bigger with amber warning bands
+  const g = new THREE.Group();
+  const w = vault ? 2.0 : 1.5, h = vault ? 1.35 : 1.0, d = vault ? 1.4 : 1.05;
+  const body = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), lootSteel());
+  body.position.y = h / 2;
+  g.add(body);
+  const lid = new THREE.Mesh(new THREE.BoxGeometry(w + 0.12, 0.16, d + 0.12),
+    new THREE.MeshStandardMaterial({ color: 0x394049, metalness: 0.55, roughness: 0.5 }));
+  lid.position.y = h - 0.08;
+  g.add(lid);
+  const seam = new THREE.Mesh(new THREE.BoxGeometry(w + 0.02, 0.09, d + 0.02), lootGlow(vault ? 0xffb02e : 0x59c7ff));
+  seam.position.y = h * 0.62;
+  g.add(seam);
+  const panel = new THREE.Mesh(new THREE.BoxGeometry(0.34, 0.24, 0.04), lootGlow(vault ? 0xffb02e : 0x59c7ff));
+  panel.position.set(0, h * 0.4, d / 2 + 0.02);
+  g.add(panel);
+  g.userData.podLid = lid;
+  return g;
+}
+function buildCreditChip() {
+  const g = new THREE.Group();
+  const chip = new THREE.Mesh(new THREE.CylinderGeometry(0.22, 0.22, 0.06, 6), lootGlow(0xffd23e));
+  chip.position.y = 0.3;
+  g.add(chip);
+  return g;
+}
+function buildChipStack(n) {
+  const g = new THREE.Group();
+  for (let i = 0; i < n + 1; i++) {
+    const chip = new THREE.Mesh(new THREE.CylinderGeometry(0.24, 0.24, 0.07, 6), lootGlow(0xffd23e));
+    chip.position.set((i % 2) * 0.16 - 0.08, 0.06 + i * 0.09, ((i * 7) % 3) * 0.1 - 0.1);
+    chip.rotation.y = i * 0.6;
+    g.add(chip);
+  }
+  return g;
+}
+function buildStim() {
+  // an autoinjector: canister + green charge window + plunger
+  const g = new THREE.Group();
+  const can = new THREE.Mesh(new THREE.CylinderGeometry(0.11, 0.11, 0.5, 8), lootSteel());
+  can.position.y = 0.45;
+  g.add(can);
+  const window_ = new THREE.Mesh(new THREE.CylinderGeometry(0.115, 0.115, 0.2, 8), lootGlow(0x4dff7c));
+  window_.position.y = 0.45;
+  g.add(window_);
+  const cap = new THREE.Mesh(new THREE.CylinderGeometry(0.06, 0.06, 0.14, 8),
+    new THREE.MeshStandardMaterial({ color: 0xd8dee6, metalness: 0.3, roughness: 0.5 }));
+  cap.position.y = 0.77;
+  g.add(cap);
+  return g;
+}
+function buildKeycard() {
+  const g = new THREE.Group();
+  const card = new THREE.Mesh(new THREE.BoxGeometry(0.4, 0.03, 0.58), lootSteel());
+  card.position.y = 0.35;
+  g.add(card);
+  const stripe = new THREE.Mesh(new THREE.BoxGeometry(0.4, 0.035, 0.14), lootGlow(0xffe14d));
+  stripe.position.set(0, 0.35, 0.14);
+  g.add(stripe);
+  return g;
+}
+
 export function spawnLootsForFloor(fs) {
   fs.lootGroup = new THREE.Group();
   fs.lootGroup.visible = false;
@@ -30,12 +98,12 @@ function addLootEntity(fs, s, id) {
   };
   let obj;
   switch (s.kind) {
-    case 'chest': obj = makePiece('chest'); obj.rotation.y = s.yaw || 0; break;
-    case 'goldchest': obj = makePiece('chest_gold'); obj.rotation.y = s.yaw || 0; break;
-    case 'coin': obj = makePiece('coin'); obj.scale.setScalar(1.8); loot.spin = true; break;
-    case 'coinstack': obj = makePiece(['coin_stack_small', 'coin_stack_medium', 'coin_stack_large'][id % 3]); obj.scale.setScalar(0.8); break;
-    case 'potion': obj = makePiece('bottle_A_green'); obj.scale.setScalar(1.5); loot.spin = true; break;
-    case 'key': obj = makePiece('key'); obj.scale.setScalar(2.0); loot.spin = true; break;
+    case 'chest': obj = buildSupplyPod(false); obj.rotation.y = s.yaw || 0; break;
+    case 'goldchest': obj = buildSupplyPod(true); obj.rotation.y = s.yaw || 0; break;
+    case 'coin': obj = buildCreditChip(); obj.scale.setScalar(1.4); loot.spin = true; break;
+    case 'coinstack': obj = buildChipStack(1 + (id % 3)); break;
+    case 'potion': obj = buildStim(); loot.spin = true; break;
+    case 'key': obj = buildKeycard(); loot.spin = true; break;
     case 'item': obj = makeWeaponModel(s.item.model); obj.scale.setScalar(1.25); loot.spin = true; break;
   }
   obj.position.set(s.x, loot.baseH + baseY(s.kind), s.z);
@@ -217,17 +285,10 @@ function hideLoot(l) {
 }
 
 function openChestVisual(l) {
-  l.opened = true;
-  if (l.kind === 'goldchest') {
-    // the chest_gold mesh has the treasure pile baked in — swap for an emptied chest
-    const old = l.obj;
-    const empty = makePiece('chest');
-    empty.position.copy(old.position);
-    empty.rotation.copy(old.rotation);
-    old.parent.add(empty);
-    old.parent.remove(old);
-    l.obj = empty;
-  }
-  const lid = l.obj.getObjectByName('chest_lid');
-  if (lid) lid.rotation.x = -Math.PI * 0.55;
+  // the pod pops its lid and vents — no medieval hinge to swing
+  const lid = l.obj?.userData?.podLid;
+  if (lid) { lid.position.y += 0.42; lid.rotation.z = 0.5; lid.rotation.x = 0.18; }
+  l.obj?.traverse?.((n) => {
+    if (n.material?.emissive) { n.material = n.material.clone(); n.material.emissiveIntensity = 0.4; }
+  });
 }

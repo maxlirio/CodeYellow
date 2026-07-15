@@ -44,6 +44,7 @@ export function spawnEnemy(fs, type, x, z, { y = 0, elite = false, id = null } =
   // models whose pose dips below their origin get lifted clear of the floor
   if (cfg.meshY) for (const c of [...obj.children]) c.position.y += cfg.meshY / scale; // meshY is world units
   if (cfg.tint) tintCharacter(obj, cfg.tint);
+  if (cfg.paint) tintCharacter(obj, cfg.paint, { only: /^Main$/ }); // robot body panels only
   if (cfg.ghost) tintCharacter(obj, 0xcfe8ff, { ghost: true });
   if (elite) tintCharacter(obj, 0xffcc66, { emissive: 0x662200 });
   if (cfg.dragon) {

@@ -37,24 +37,24 @@ function makeMats(accent, facility = false) {
         metalness: 0, roughness: 1, toneMapped: false,
       }),
       lightPanel: new THREE.MeshStandardMaterial({
-        color: 0x222222, emissive: 0xbfd9e8, emissiveIntensity: 0.9, roughness: 1,
+        color: 0x222222, emissive: 0xd9ecf6, emissiveIntensity: 1.25, roughness: 1,
       }),
     };
   }
   return {
-    floorA: new THREE.MeshStandardMaterial({ color: 0x59626d, metalness: 0.25, roughness: 0.8 }),
-    floorB: new THREE.MeshStandardMaterial({ color: 0x4c545e, metalness: 0.25, roughness: 0.85 }),
-    wall: new THREE.MeshStandardMaterial({ color: 0x6a7380, metalness: 0.3, roughness: 0.75 }),
-    frame: new THREE.MeshStandardMaterial({ color: 0x363c44, metalness: 0.4, roughness: 0.7 }),
-    dark: new THREE.MeshStandardMaterial({ color: 0x2a2f36, metalness: 0.3, roughness: 0.9 }),
-    crate: new THREE.MeshStandardMaterial({ color: 0x7a7462, metalness: 0.15, roughness: 0.9 }),
-    machine: new THREE.MeshStandardMaterial({ color: 0x59626f, metalness: 0.45, roughness: 0.6 }),
+    floorA: new THREE.MeshStandardMaterial({ color: 0x6c7683, metalness: 0.25, roughness: 0.8 }),
+    floorB: new THREE.MeshStandardMaterial({ color: 0x5d6672, metalness: 0.25, roughness: 0.85 }),
+    wall: new THREE.MeshStandardMaterial({ color: 0x7b8593, metalness: 0.3, roughness: 0.75 }),
+    frame: new THREE.MeshStandardMaterial({ color: 0x4d5560, metalness: 0.4, roughness: 0.7 }),
+    dark: new THREE.MeshStandardMaterial({ color: 0x3f4750, metalness: 0.3, roughness: 0.9 }),
+    crate: new THREE.MeshStandardMaterial({ color: 0x8d8774, metalness: 0.15, roughness: 0.9 }),
+    machine: new THREE.MeshStandardMaterial({ color: 0x6b7483, metalness: 0.45, roughness: 0.6 }),
     accent: new THREE.MeshStandardMaterial({
       color: 0x111111, emissive: new THREE.Color(accent), emissiveIntensity: 1.6,
       metalness: 0, roughness: 1, toneMapped: false,
     }),
     lightPanel: new THREE.MeshStandardMaterial({
-      color: 0x222222, emissive: 0xbfd9e8, emissiveIntensity: 0.9, roughness: 1,
+      color: 0x222222, emissive: 0xd9ecf6, emissiveIntensity: 1.25, roughness: 1,
     }),
   };
 }
@@ -94,7 +94,7 @@ export function buildShipStatic(fs) {
       // ceiling slab + occasional light panel (open-sky grids skip the roof)
       if (!g.noCeil) {
         box('dark', x, CEIL_H + 0.15, z, CELL, 0.3, CELL);
-        if (h % 6 === 0) box('lightPanel', x, CEIL_H - 0.02, z, 2.2, 0.06, 2.2);
+        if (h % 3 === 0) box('lightPanel', x, CEIL_H - 0.02, z, 2.4, 0.06, 2.4);
       }
 
       // bulkhead faces toward solid neighbours
@@ -257,10 +257,10 @@ export function buildShipStatic(fs) {
   }
 
   // sparse room lights: the ceiling panels are fake — a few real points sell it
-  const rooms = g.noCeil ? [] : (g.rooms || []).slice(0, 8);
+  const rooms = g.noCeil ? [] : (g.rooms || []).slice(0, 10);
   for (const r of rooms) {
     // physical lighting units (r155+): match the portal light's scale (18)
-    const pl = new THREE.PointLight(0xdfeaf2, 15, 32, 1.5);
+    const pl = new THREE.PointLight(0xe6f0f8, 22, 38, 1.4);
     pl.position.set(r.cx * CELL, CEIL_H - 1.4, r.cy * CELL);
     group.add(pl);
   }

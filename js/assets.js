@@ -195,10 +195,14 @@ export function setEquipMeshes(obj, meshes) {
 }
 
 // tint every mesh of a rig (elite/ghost/monster variants)
-export function tintCharacter(obj, color, { ghost = false, emissive = 0 } = {}) {
+export function tintCharacter(obj, color, { ghost = false, emissive = 0, only = null } = {}) {
   obj.traverse((n) => {
     if (!n.isMesh && !n.isSkinnedMesh) return;
     if (n.material.isMeshBasicMaterial) return; // blob shadows / glows — no emissive uniform
+    // `only`: paint just the matching material (e.g. RobotExpressive's 'Main'
+    // body panels) and leave the trim alone — replacing EVERY material's color
+    // flattened whole rigs to one clay hue
+    if (only && !(n.material.name || '').match(only)) return;
     n.material = n.material.clone();
     if (color) n.material.color = new THREE.Color(color);
     if (emissive) { n.material.emissive = new THREE.Color(emissive); n.material.emissiveIntensity = 0.55; }
@@ -410,6 +414,33 @@ function dressBlaster(obj, name) {
 export function makeWeaponModel(name) {
   if (name === 'bow') return buildBowModel();
   if (ENERGY_WEAPONS[name]) return buildEnergyBlade(name);
+  if (name === 'riotplate') {
+    // a curved riot plate with an energy edge
+    const g = new THREE.Group();
+    const plate = new THREE.Mesh(new THREE.CylinderGeometry(0.55, 0.62, 0.9, 10, 1, true, 0, Math.PI * 1.15),
+      new THREE.MeshStandardMaterial({ color: 0x5b6470, metalness: 0.5, roughness: 0.5, side: THREE.DoubleSide }));
+    plate.position.y = 0.45;
+    g.add(plate);
+    const edge = new THREE.Mesh(new THREE.TorusGeometry(0.56, 0.03, 6, 14, Math.PI * 1.15),
+      new THREE.MeshStandardMaterial({ color: 0x111111, emissive: 0x59c7ff, emissiveIntensity: 1.6, toneMapped: false }));
+    edge.rotation.x = Math.PI / 2;
+    edge.position.y = 0.9;
+    g.add(edge);
+    return g;
+  }
+  if (name === 'implant') {
+    // a data implant: chip + glowing traces
+    const g = new THREE.Group();
+    const chip = new THREE.Mesh(new THREE.BoxGeometry(0.34, 0.08, 0.34),
+      new THREE.MeshStandardMaterial({ color: 0x3a4048, metalness: 0.55, roughness: 0.45 }));
+    chip.position.y = 0.2;
+    g.add(chip);
+    const core = new THREE.Mesh(new THREE.BoxGeometry(0.14, 0.1, 0.14),
+      new THREE.MeshStandardMaterial({ color: 0x111111, emissive: 0xbb66ff, emissiveIntensity: 1.8, toneMapped: false }));
+    core.position.y = 0.22;
+    g.add(core);
+    return g;
+  }
   if (name === 'breachmaul') return buildBreachMaul();
   if (name === 'monoscythe') return buildMonoScythe();
   if (name === 'skullstaff' || name === 'crystalscepter') return buildComposedStaff(name);

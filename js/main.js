@@ -499,7 +499,7 @@ function applyThemeAtmosphere(fs) {
   G.lights.hemi.color.setHex(th.hemi);
   G.lights.amb.color.setHex(th.amb);
   const dark = fs.mutator?.torchMult ?? 1;
-  const sunny = th.sun ? 1.35 : 1;
+  const sunny = (th.sun ? 1.35 : 1) * (th.boost || 1); // ship decks carry their own brightness boost
   G.lights.hemi.intensity = 0.85 * (dark < 1 ? 0.55 : 1) * sunny;
   G.lights.amb.intensity = 0.7 * (dark < 1 ? 0.55 : 1) * sunny;
   G.lights.sun.intensity = th.sun ? 1.2 : 0; // daylight only above ground

@@ -39,23 +39,23 @@ const SOLID = 0, FLOOR = 1, STAIRS = 3, TRAP = 4, RAMP = 6;
 // Sightlines are the point of a boarding action, so fog stays thin.
 export const SHIP_THEMES = [
   {
-    id: 'cargo', name: 'The Cargo Decks', fog: 0x0a0d12, density: 0.012,
-    hemi: 0xffcf9a, amb: 0x8f8168, torch: 0xffb35c, accent: 0xffa028,
+    id: 'cargo', name: 'The Cargo Decks', fog: 0x0a0d12, density: 0.0066,
+    hemi: 0xfff0dd, amb: 0xbcae92, torch: 0xffb35c, accent: 0xffa028, boost: 1.45,
     tiles: ['floor_tile_large'], props: [], banners: [], bias: [],
   },
   {
-    id: 'hab', name: 'The Habitation Ring', fog: 0x0a1214, density: 0.011,
-    hemi: 0xc2eef0, amb: 0x6f979c, torch: 0x9fe8ec, accent: 0x2fd6c8,
+    id: 'hab', name: 'The Habitation Ring', fog: 0x0a1214, density: 0.0060,
+    hemi: 0xe6fbfc, amb: 0x9fc4c9, torch: 0x9fe8ec, accent: 0x2fd6c8, boost: 1.45,
     tiles: ['floor_tile_large'], props: [], banners: [], bias: [],
   },
   {
-    id: 'engineering', name: 'The Engineering Decks', fog: 0x120a08, density: 0.014,
-    hemi: 0xffb090, amb: 0x9a6a60, torch: 0xff8050, accent: 0xff4a1f,
+    id: 'engineering', name: 'The Engineering Decks', fog: 0x120a08, density: 0.0077,
+    hemi: 0xffd8c4, amb: 0xc09488, torch: 0xff8050, accent: 0xff4a1f, boost: 1.45,
     tiles: ['floor_tile_large'], props: [], banners: [], bias: [],
   },
   {
-    id: 'command', name: 'The Command Spire', fog: 0x0e0a16, density: 0.011,
-    hemi: 0xd0bfff, amb: 0x7d72ac, torch: 0xb090ff, accent: 0x8a5cff,
+    id: 'command', name: 'The Command Spire', fog: 0x0e0a16, density: 0.0060,
+    hemi: 0xeae2ff, amb: 0xa79cd4, torch: 0xb090ff, accent: 0x8a5cff, boost: 1.45,
     tiles: ['floor_tile_large'], props: [], banners: [], bias: [],
   },
 ];

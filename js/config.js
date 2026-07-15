@@ -205,22 +205,22 @@ export const SIGNATURES = {
   dragonsbreath: { name: 'Promethium Burn', icon: '🐉', mana: 24, hits: 10, desc: 'a cone of promethium fire that keeps burning' },
 };
 export const OFFHAND_TYPES = {
-  knight: { noun: 'Shield', meshes: ['Round_Shield', 'Badge_Shield', 'Spike_Shield'], models: ['shield_round', 'shield_badge', 'shield_spikes'], stat: 'armor' },
-  barbarian: { noun: 'Shield', meshes: ['Barbarian_Round_Shield'], models: ['shield_round'], stat: 'armor' },
-  rogue: { noun: 'Offhand Blade', meshes: ['Knife_Offhand'], models: ['dagger'], stat: 'crit' },
-  mage: { noun: 'Spellbook', meshes: ['Spellbook'], models: ['wand'], stat: 'mregen' },
-  ranger: { noun: 'Hunting Knife', meshes: ['Knife_Offhand'], models: ['dagger'], stat: 'crit' },
-  necromancer: { noun: 'Phylactery', meshes: [], models: ['Skull'], stat: 'mregen' },
+  knight: { noun: 'Riot Plate', meshes: [], models: ['riotplate'], stat: 'armor' },
+  barbarian: { noun: 'Blast Shield', meshes: [], models: ['riotplate'], stat: 'armor' },
+  rogue: { noun: 'Holdout Blade', meshes: [], models: ['vibro'], stat: 'crit' },
+  mage: { noun: 'Capacitor Bank', meshes: [], models: ['blaster-b'], stat: 'mregen' },
+  ranger: { noun: 'Combat Knife', meshes: [], models: ['vibro'], stat: 'crit' },
+  necromancer: { noun: 'Nanite Core', meshes: [], models: ['implant'], stat: 'mregen' },
 };
 
 export const NAME_PREFIX = {
-  common: ['Rusty', 'Worn', 'Plain', 'Chipped'],
-  fine: ['Sturdy', 'Polished', 'Keen', 'Balanced'],
-  rare: ['Cruel', 'Gleaming', 'Runed', 'Vicious'],
-  epic: ['Bonewrought', 'Gravechilled', 'Sinister', 'Marrowbane'],
-  legendary: ['Kingsbane', 'Doomforged', 'Eternal', 'Bonelord’s'],
+  common: ['Rusty', 'Salvaged', 'Surplus', 'Dented'],
+  fine: ['Tuned', 'Milspec', 'Keen', 'Balanced'],
+  rare: ['Cruel', 'Overclocked', 'Etched', 'Vicious'],
+  epic: ['Voidwrought', 'Cryoforged', 'Sinister', 'Hullbane'],
+  legendary: ['Wardenbane', 'Doomforged', 'Eternal', 'Tyrant’s'],
 };
-export const NAME_SUFFIX = ['', '', 'of Embers', 'of the Crypt', 'of Marrow', 'of the Deep', 'of Echoes', 'of the Fallen King'];
+export const NAME_SUFFIX = ['', '', 'of Embers', 'of the Hold', 'of the Core', 'of the Deep Void', 'of Echoes', 'of the Fallen Fleet'];
 export const TRINKET_NAMES = ['Ring', 'Amulet', 'Charm', 'Talisman', 'Signet'];
 export const TRINKET_STATS = [
   { stat: 'crit', min: 4, max: 12, label: '% crit chance', icon: '🎯' },
@@ -237,26 +237,27 @@ const QA = 'CharacterArmature|';
 export const ANIM_ROBOT = { idle: 'Idle', walk: 'Walking', run: 'Running', attack: ['Punch'], hit: 'No', death: 'Death' };
 export const ANIM_MECH = { idle: 'Idle', walk: 'Walk', run: 'Run', attack: ['Kick', 'Punch', 'SwordSlash'], hit: 'HitRecieve_1', death: 'Death' };
 export const ANIM_TROOP = { idle: 'Idle', walk: 'Walk', run: 'Run_Gun', attack: ['Idle_Shoot', 'Punch'], hit: 'HitReact', death: 'Death' };
+export const ANIM_HUSK = { idle: 'Idle', walk: 'Walk', run: 'Run', attack: ['Punch'], hit: 'HitReact', death: 'Death' };
 export const ANIM_VOID = { idle: 'Flying_Idle', walk: 'Fast_Flying', run: 'Fast_Flying', attack: ['Headbutt', 'Punch'], hit: 'HitReact', death: 'Death' };
 export const ANIM_GROUND = { idle: QA + 'Idle', walk: QA + 'Walk', run: QA + 'Run', attack: [QA + 'Punch', QA + 'Weapon'], hit: QA + 'HitReact', death: QA + 'Death' };
 export const ANIM_CRITTER = { idle: QA + 'Idle', walk: QA + 'Walk', run: QA + 'Walk', attack: [QA + 'Bite_Front'], hit: QA + 'HitRecieve', death: QA + 'Death' };
 export const ANIM_FLYER = { idle: QA + 'Flying_Idle', walk: QA + 'Fast_Flying', run: QA + 'Fast_Flying', attack: [QA + 'Headbutt', QA + 'Punch'], hit: QA + 'HitReact', death: QA + 'Death' };
 export const ENEMIES = {
   // ---- the hulk's machine crew (RobotExpressive family: one rig, many frames) ----
-  minion:   { name: 'Scrap Drone', model: 'RobotExpressive', animMap: 'robot', hp: 32, dmg: 9,  speed: 4.8, range: 2.2, xp: 12, gold: [2, 7],  attackTime: 0.9, aggro: 11, scale: 0.42, tint: 0x9aa4ad },
-  rogue:    { name: 'Scuttle Unit', model: 'RobotExpressive', animMap: 'robot', hp: 26, dmg: 7,  speed: 6.6, range: 2.1, xp: 15, gold: [3, 8],  attackTime: 0.7, aggro: 13, scale: 0.36, tint: 0x5fd8d0 },
-  warrior:  { name: 'Warframe', model: 'RobotExpressive', animMap: 'robot', hp: 62, dmg: 14, speed: 3.9, range: 2.4, xp: 24, gold: [5, 12], attackTime: 1.1, aggro: 10, scale: 0.5, tint: 0x676f8a },
-  bomber:   { name: 'Volatile Cell', model: 'RobotExpressive', animMap: 'robot', hp: 24, dmg: 22, speed: 6.6, range: 1.8, xp: 20, gold: [4, 9],  attackTime: 0.4, aggro: 13, scale: 0.34, tint: 0x8aff55, explode: 3.6 },
-  berserker:{ name: 'Berserk Frame', model: 'RobotExpressive', animMap: 'robot', hp: 44, dmg: 11, speed: 5.6, range: 2.2, xp: 36, gold: [8, 16], attackTime: 0.55, aggro: 14, scale: 0.48, tint: 0xff5544, enrage: true },
-  brute:    { name: 'Loader Frame', model: 'RobotExpressive', animMap: 'robot', hp: 55, dmg: 15, speed: 4.0, range: 2.4, xp: 30, gold: [7, 14], attackTime: 1.1, aggro: 11, scale: 0.6, tint: 0xd8913c, kbHit: 7 },
-  goblin:   { name: 'Scuttle Swarm', model: 'RobotExpressive', animMap: 'robot', hp: 20, dmg: 6, speed: 6.8, range: 1.9, xp: 10, gold: [2, 5], attackTime: 0.7, aggro: 13, scale: 0.28, tint: 0x66e0b8, trio: true },
-  orcwar:   { name: 'Salvager', model: 'RobotExpressive', animMap: 'robot', hp: 55, dmg: 13, speed: 5.2, range: 2.4, xp: 26, gold: [6, 12], attackTime: 0.95, aggro: 12, scale: 0.55, tint: 0x7c8f4e },
+  minion:   { name: 'Scrap Drone', model: 'RobotExpressive', animMap: 'robot', hp: 32, dmg: 9,  speed: 4.8, range: 2.2, xp: 12, gold: [2, 7],  attackTime: 0.9, aggro: 11, scale: 0.42, paint: 0x4aa8ff },
+  rogue:    { name: 'Scuttle Unit', model: 'RobotExpressive', animMap: 'robot', hp: 26, dmg: 7,  speed: 6.6, range: 2.1, xp: 15, gold: [3, 8],  attackTime: 0.7, aggro: 13, scale: 0.36, paint: 0x2fe8d0 },
+  warrior:  { name: 'Warframe', model: 'Leela', animMap: 'mech', hp: 62, dmg: 14, speed: 3.9, range: 2.4, xp: 24, gold: [5, 12], attackTime: 1.1, aggro: 10, scale: 0.4 },
+  bomber:   { name: 'Volatile Cell', model: 'RobotExpressive', animMap: 'robot', hp: 24, dmg: 22, speed: 6.6, range: 1.8, xp: 20, gold: [4, 9],  attackTime: 0.4, aggro: 13, scale: 0.34, paint: 0x8aff2e, explode: 3.6 },
+  berserker:{ name: 'Feral Husk', model: 'Enemy_Large', animMap: 'husk', hp: 44, dmg: 11, speed: 5.6, range: 2.2, xp: 36, gold: [8, 16], attackTime: 0.55, aggro: 14, scale: 0.7, tint: 0xffb4a4, enrage: true },
+  brute:    { name: 'Loader Frame', model: 'RobotExpressive', animMap: 'robot', hp: 55, dmg: 15, speed: 4.0, range: 2.4, xp: 30, gold: [7, 14], attackTime: 1.1, aggro: 11, scale: 0.6, paint: 0xff9226, kbHit: 7 },
+  goblin:   { name: 'Scuttle Swarm', model: 'RobotExpressive', animMap: 'robot', hp: 20, dmg: 6, speed: 6.8, range: 1.9, xp: 10, gold: [2, 5], attackTime: 0.7, aggro: 13, scale: 0.28, paint: 0xd6ff2e, trio: true },
+  orcwar:   { name: 'Vault Scavenger', model: 'Character_Hazmat', animMap: 'troop', hp: 55, dmg: 13, speed: 5.2, range: 2.4, xp: 26, gold: [6, 12], attackTime: 0.95, aggro: 12, scale: 0.85 },
   // ---- the scavenger crews still living aboard (toon-shooter rigs, guns baked in) ----
   mage:     { name: 'Hull Raider', model: 'Character_Enemy', animMap: 'troop', hp: 38, dmg: 11, speed: 3.6, range: 14,  xp: 26, gold: [6, 12], attackTime: 1.4, aggro: 15, scale: 0.85, ranged: true, boltVis: 'laser', boltColor: 0xff5533 },
   frostmage:{ name: 'Cryo Raider', model: 'Character_Enemy', animMap: 'troop', hp: 40, dmg: 9,  speed: 3.4, range: 14,  xp: 30, gold: [7, 14], attackTime: 1.5, aggro: 15, scale: 0.85, ranged: true, slowBolt: true, boltVis: 'laser', boltColor: 0x77ddff },
   sniper:   { name: 'Marksman Unit', model: 'Character_Enemy', animMap: 'troop', hp: 26, dmg: 13, speed: 4.5, range: 18,  xp: 34, gold: [8, 15], attackTime: 1.7, aggro: 20, scale: 0.85, ranged: true, boltSpeed: 24, boltVis: 'laser', boltColor: 0xffe14d },
   // ---- corrupted holograms: the ship remembers its crew ----
-  ghost:    { name: 'Echo', model: 'RobotExpressive', animMap: 'robot', hp: 34, dmg: 13, speed: 3.1, range: 2.0, xp: 32, gold: [8, 15], attackTime: 0.9, aggro: 17, scale: 0.5, ghost: true },
+  ghost:    { name: 'Echo', model: 'Astronaut_RaeTheRedPanda', animMap: 'troop', hp: 34, dmg: 13, speed: 3.1, range: 2.0, xp: 32, gold: [8, 15], attackTime: 0.9, aggro: 17, scale: 0.62, ghost: true },
   shade:    { name: 'Phantom Signal', model: 'Character_Enemy', animMap: 'troop', hp: 28, dmg: 10, speed: 5.4, range: 2.0, xp: 34, gold: [8, 16], attackTime: 0.6, aggro: 18, scale: 0.85, ghost: true },
   // ---- fabrication: the hulk prints its own defenders ----
   necromancer: { name: 'Fabricator Unit', model: 'Leela', animMap: 'mech', hp: 46, dmg: 10, speed: 3.2, range: 13, xp: 42, gold: [10, 20], attackTime: 1.5, aggro: 15, scale: 0.5, ranged: true, tint: 0xddaaff, boltVis: 'wisp', boltColor: 0xbb66ff, summons: true, summonEvery: 12, summonType: 'minion', summonCount: 1 },
@@ -265,8 +266,8 @@ export const ENEMIES = {
   ogre:     { name: 'Wrecking Frame', model: 'Stan', animMap: 'mech', hp: 140, dmg: 24, speed: 3.4, range: 2.9, xp: 60, gold: [15, 28], attackTime: 1.5, aggro: 11, scale: 0.58, stalwart: true, kbHit: 8 },
   // ---- void vermin: what got in through the breaches ----
   imp:      { name: 'Spark Mote', model: 'Enemy_ExtraSmall', animMap: 'void', hp: 30, dmg: 10, speed: 5.5, range: 9, xp: 28, gold: [7, 13], attackTime: 1.3, aggro: 15, scale: 0.85, fly: true, ranged: true, boltVis: 'wisp', boltColor: 0x88ccff },
-  slime:    { name: 'Spore Cluster', model: 'Enemy_Small', animMap: 'void', hp: 40, dmg: 8, speed: 3.4, range: 2.0, xp: 24, gold: [5, 10], attackTime: 1.0, aggro: 11, scale: 0.8, fly: true, splitInto: 'slimelet' },
-  slimelet: { name: 'Sporeling', model: 'Enemy_ExtraSmall', animMap: 'void', hp: 14, dmg: 5, speed: 5.4, range: 1.7, xp: 8, gold: [1, 3], attackTime: 0.8, aggro: 14, scale: 0.6, fly: true, tint: 0xccffbb },
+  slime:    { name: 'Nanite Mass', model: 'Slime', animMap: 'critter', hp: 40, dmg: 8, speed: 3.4, range: 2.0, xp: 24, gold: [5, 10], attackTime: 1.0, aggro: 11, scale: 0.7, tint: 0xa8fff0, splitInto: 'slimelet' },
+  slimelet: { name: 'Nanite Glob', model: 'Slime', animMap: 'critter', hp: 14, dmg: 5, speed: 5.4, range: 1.7, xp: 8, gold: [1, 3], attackTime: 0.8, aggro: 14, scale: 0.4, tint: 0xd0fff6 },
   glub:     { name: 'Void Drifter', model: 'Enemy_Flying', animMap: 'void', hp: 34, dmg: 11, speed: 4.6, range: 2.2, xp: 30, gold: [8, 14], attackTime: 1.0, aggro: 15, scale: 0.55, fly: true },
   drake:    { name: 'Plasma Wraith', model: 'Enemy_Flying', animMap: 'void', hp: 90, dmg: 18, speed: 6.0, range: 10, xp: 70, gold: [20, 35], attackTime: 1.4, aggro: 18, scale: 0.85, fly: true, ranged: true, tint: 0xffb0a0, boltVis: 'fireball', boltSpeed: 15 },
   // bosses (deck 3/6 rolls one archetype; deck 9 is still the old god below)
@@ -274,7 +275,7 @@ export const ENEMIES = {
   necrolord:{ model: 'Leela', animMap: 'mech', hp: 300, dmg: 18, speed: 3.8, range: 15, xp: 180, gold: [60, 95], attackTime: 1.3, aggro: 30, scale: 0.68, boss: true, ranged: true, tint: 0xddaaff, boltVis: 'wisp', boltColor: 0xbb66ff, summons: true, summonEvery: 8, summonType: 'minion', summonCount: 2, bossName: 'FABRICATOR PRIME', bossMsg: 'prints fresh frames' },
   reaper:   { model: 'Character_Enemy', animMap: 'troop', hp: 320, dmg: 20, speed: 6.8, range: 2.8, xp: 180, gold: [60, 95], attackTime: 0.6, aggro: 32, scale: 1.3, boss: true, ghost: true, bossName: 'THE SILENT PROTOCOL' },
   boneking: { model: 'George', animMap: 'mech', hp: 620, dmg: 26, speed: 4.2, range: 16,  xp: 420, gold: [150, 220], attackTime: 1.3, aggro: 40, scale: 0.8, ranged: true, boltVis: 'laser', boltColor: 0xff3322, boss: true, summons: true, summonEvery: 9, summonType: 'minion', summonCount: 2, tint: 0xffb8a8, bossName: 'THE FOUNDRY TYRANT' },
-  mushking: { model: 'Mike', animMap: 'mech', hp: 350, dmg: 20, speed: 4.4, range: 3.0, xp: 190, gold: [70, 100], attackTime: 1.2, aggro: 30, scale: 0.68, boss: true, stalwart: true, tint: 0xb8f0a0, summons: true, summonEvery: 10, summonType: 'slimelet', summonCount: 3, bossName: 'THE SPORE ENGINE', bossMsg: 'vents spores' },
+  mushking: { model: 'MushroomKing', animMap: 'ground', hp: 350, dmg: 20, speed: 4.4, range: 3.0, xp: 190, gold: [70, 100], attackTime: 1.2, aggro: 30, scale: 1.35, boss: true, stalwart: true, tint: 0xc0ffd0, summons: true, summonEvery: 10, summonType: 'slimelet', summonCount: 3, bossName: 'THE SPORE ENGINE', bossMsg: 'vents spores' },
   // deck 9: the old god of the reactor — still the dragon, pending its own rebuild
   // solidR = her TORSO: you must walk around it. bodyR (4.5) is her whole reach,
   // wings and tail included — those you can duck under.

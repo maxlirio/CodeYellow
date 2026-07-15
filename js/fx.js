@@ -99,6 +99,19 @@ export function buildTorchFx() {
     G.scene.add(l);
     torchLights.push(l);
   }
+  // ship decks hang LAMPS, not flames: an emissive bar per anchor, no fire
+  if (G.grid?.ship) {
+    const lampGroup = new THREE.Group();
+    const mat = new THREE.MeshBasicMaterial({ color: G.torchColor ?? 0x9fd8ec, toneMapped: false });
+    for (const t of G.torches) {
+      const bar = new THREE.Mesh(new THREE.BoxGeometry(0.9, 0.12, 0.12), mat);
+      bar.position.set(t.x, t.y + 0.4, t.z);
+      lampGroup.add(bar);
+    }
+    G.scene.add(lampGroup);
+    torchFlames = lampGroup; // reuse the flame slot so floor swaps clean it up
+    return;
+  }
   // one sprite per torch (cheap)
   const n = G.torches.length;
   if (!n) return;
@@ -135,7 +148,7 @@ export function updateFx(dt) {
       } else l.intensity = 0;
     }
   }
-  if (torchFlames) {
+  if (torchFlames && torchFlames.isPoints) { // ship decks hang lamp GROUPS — no flicker size
     torchFlames.material.size = 1.05 + Math.sin(t * 11) * 0.12;
   }
   // damage numbers

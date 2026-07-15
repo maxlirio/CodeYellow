@@ -89,7 +89,7 @@ export function rollTrinket(floor, luck = 0) {
   const t = pick(TRINKET_STATS);
   const val = +(t.min + (t.max - t.min) * Math.random() * rarity.mult * 0.75).toFixed(1);
   return {
-    uid: uidCounter++, slot: 'trinket', classId: null, mesh: [], model: 'keyring',
+    uid: uidCounter++, slot: 'trinket', classId: null, mesh: [], model: 'implant',
     name: itemName(rarity, pick(TRINKET_NAMES)), rarity: rarity.id, icon: t.icon,
     stats: { [t.stat]: t.stat === 'hp' || t.stat === 'armor' ? Math.round(val) : val },
   };

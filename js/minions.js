@@ -15,16 +15,16 @@ export const minions = []; // {id, owner, kind, floor, obj, anim, hp, maxHp, dmg
 let nextMinionId = 1;
 
 const KINDS = {
-  sword: { model: 'RobotExpressive', mscale: 0.46, show: [], held: 'arcblade', hp: 90, dmg: 12, speed: 7.5, range: 2.6, atkTime: 0.8, name: 'Blade Trooper' },
+  sword: { model: 'RobotExpressive', mscale: 0.46, paint: 0x59c7ff, show: [], held: 'arcblade', hp: 90, dmg: 12, speed: 7.5, range: 2.6, atkTime: 0.8, name: 'Blade Trooper' },
   bow: { model: 'Character_Soldier', mscale: 0.85, show: [], hp: 60, dmg: 10, speed: 7.5, range: 13, atkTime: 1.3, ranged: true, name: 'Rifle Trooper' },
   // holo copies of their caster: fast, fragile, and gone in seconds
   phantom: { model: 'Astronaut_FinnTheFrog', mscale: 0.62, show: [], hp: 45, dmg: 8, speed: 9.5, range: 2.6, atkTime: 0.55, name: 'Holo Echo', phantom: true },
   // an inflatable double of the caster: never moves, never fights, soaks aggro
   decoy: { model: 'RobotExpressive', mscale: 0.5, show: [], hp: 140, dmg: 0, speed: 0, range: 0, atkTime: 9, name: 'Dummy Frame', phantom: true, decoy: true },
   // Last Stand only: crews turrets & cannons, doesn't fight back
-  worker: { model: 'RobotExpressive', mscale: 0.4, show: [], hp: 45, dmg: 2, speed: 7.5, range: 2.0, atkTime: 1.2, name: 'Rig Hand', worker: true },
+  worker: { model: 'RobotExpressive', mscale: 0.4, paint: 0xffd23e, show: [], hp: 45, dmg: 2, speed: 7.5, range: 2.0, atkTime: 1.2, name: 'Rig Hand', worker: true },
   // the fabricator's answer to everything: freshly printed frames with blades
-  skeleton: { model: 'RobotExpressive', mscale: 0.42, tint: 0x9fe0a8, show: [], held: 'vibro', hp: 70, dmg: 11, speed: 7.8, range: 2.6, atkTime: 0.85, name: 'Printed Frame', undead: true },
+  skeleton: { model: 'RobotExpressive', mscale: 0.42, paint: 0x6fe07c, show: [], held: 'vibro', hp: 70, dmg: 11, speed: 7.8, range: 2.6, atkTime: 0.85, name: 'Printed Frame', undead: true },
 };
 
 export function clearMinions() {
@@ -42,6 +42,7 @@ export function spawnMinion(kindId, owner, floor, x, z, id = null, broadcast = t
   else if (kind.phantom) tintCharacter(obj, 0xbfe0ff, { ghost: true });
   else if (!kind.undead) applyLook(obj, { cape: true, helmet: true, capeColor: 5 }); // skeleton rigs have no cape/helmet meshes
   if (kind.tint) tintCharacter(obj, kind.tint);
+  if (kind.paint) tintCharacter(obj, kind.paint, { only: /^Main$/ });
   if (kind.mscale) obj.scale.setScalar(kind.mscale * (opts.scale || 1));
   else if (opts.scale) obj.scale.setScalar(opts.scale);
   if (kind.held) {
