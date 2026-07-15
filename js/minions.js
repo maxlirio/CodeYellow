@@ -15,16 +15,16 @@ export const minions = []; // {id, owner, kind, floor, obj, anim, hp, maxHp, dmg
 let nextMinionId = 1;
 
 const KINDS = {
-  sword: { model: 'Knight', show: ['1H_Sword', 'Round_Shield'], hp: 90, dmg: 12, speed: 7.5, range: 2.6, atkTime: 0.8, name: 'Sellsword' },
-  bow: { model: 'Rogue', show: ['2H_Crossbow'], hp: 60, dmg: 10, speed: 7.5, range: 13, atkTime: 1.3, ranged: true, name: 'Marksman' },
-  // spectral copies of their caster: fast, fragile, and gone in seconds
-  phantom: { model: 'Mage', show: [], hp: 45, dmg: 8, speed: 9.5, range: 2.6, atkTime: 0.55, name: 'Phantom', phantom: true },
-  // a straw scarecrow of the caster: never moves, never fights, soaks aggro
-  decoy: { model: 'Knight', show: [], hp: 140, dmg: 0, speed: 0, range: 0, atkTime: 9, name: 'Straw Double', phantom: true, decoy: true },
+  sword: { model: 'RobotExpressive', mscale: 0.46, show: [], held: 'arcblade', hp: 90, dmg: 12, speed: 7.5, range: 2.6, atkTime: 0.8, name: 'Blade Trooper' },
+  bow: { model: 'Character_Soldier', mscale: 0.85, show: [], hp: 60, dmg: 10, speed: 7.5, range: 13, atkTime: 1.3, ranged: true, name: 'Rifle Trooper' },
+  // holo copies of their caster: fast, fragile, and gone in seconds
+  phantom: { model: 'Astronaut_FinnTheFrog', mscale: 0.62, show: [], hp: 45, dmg: 8, speed: 9.5, range: 2.6, atkTime: 0.55, name: 'Holo Echo', phantom: true },
+  // an inflatable double of the caster: never moves, never fights, soaks aggro
+  decoy: { model: 'RobotExpressive', mscale: 0.5, show: [], hp: 140, dmg: 0, speed: 0, range: 0, atkTime: 9, name: 'Dummy Frame', phantom: true, decoy: true },
   // Last Stand only: crews turrets & cannons, doesn't fight back
-  worker: { model: 'Rogue', show: [], hp: 45, dmg: 2, speed: 7.5, range: 2.0, atkTime: 1.2, name: 'Worker', worker: true },
-  // the necromancer's answer to everything: dead men with swords
-  skeleton: { model: 'Skeleton_Warrior', show: [], held: 'Skeleton_Blade', hp: 70, dmg: 11, speed: 7.8, range: 2.6, atkTime: 0.85, name: 'Risen', undead: true },
+  worker: { model: 'RobotExpressive', mscale: 0.4, show: [], hp: 45, dmg: 2, speed: 7.5, range: 2.0, atkTime: 1.2, name: 'Rig Hand', worker: true },
+  // the fabricator's answer to everything: freshly printed frames with blades
+  skeleton: { model: 'RobotExpressive', mscale: 0.42, tint: 0x9fe0a8, show: [], held: 'vibro', hp: 70, dmg: 11, speed: 7.8, range: 2.6, atkTime: 0.85, name: 'Printed Frame', undead: true },
 };
 
 export function clearMinions() {
@@ -41,9 +41,13 @@ export function spawnMinion(kindId, owner, floor, x, z, id = null, broadcast = t
   if (kind.decoy) tintCharacter(obj, 0xd9b36c, { ghost: false });
   else if (kind.phantom) tintCharacter(obj, 0xbfe0ff, { ghost: true });
   else if (!kind.undead) applyLook(obj, { cape: true, helmet: true, capeColor: 5 }); // skeleton rigs have no cape/helmet meshes
+  if (kind.tint) tintCharacter(obj, kind.tint);
+  if (kind.mscale) obj.scale.setScalar(kind.mscale * (opts.scale || 1));
+  else if (opts.scale) obj.scale.setScalar(opts.scale);
   if (kind.held) {
     let hand = null;
-    obj.traverse((nd) => { if (!hand && (nd.name === 'handslot.r' || nd.name === 'handslotr')) hand = nd; });
+    // KayKit rigs use handslotr; RobotExpressive has Palm bones instead
+    obj.traverse((nd) => { if (!hand && /^(handslot\.?r|Palm2R)$/.test(nd.name)) hand = nd; });
     if (hand) {
       const held = makeWeaponModel(kind.held);
       held.rotation.set(0, Math.PI / 2, 0);

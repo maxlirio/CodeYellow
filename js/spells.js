@@ -507,7 +507,7 @@ export function castSpell(slot, effectiveDamage) {
       sfx.levelup(); sfx.dodge();
       const count = sp.count || 2;
       const o = {
-        model: p.cls.model, show: p.cls.show,
+        model: p.cls.model, show: p.cls.show, scale: p.cls.scale,
         dmg: Math.max(3, Math.round(effectiveDamage() * sp.dmgMult)), life: sp.dur,
       };
       for (let i = 0; i < count; i++) {
@@ -879,7 +879,7 @@ export function castSpell(slot, effectiveDamage) {
     case 'decoy': {
       // STRAW DOUBLE: a scarecrow of yourself soaks the aggro
       sfx.bones(); sfx.dodge();
-      const o = { model: p.cls.model, show: p.cls.show, dmg: 0, life: sp.dur, hp: sp.hp };
+      const o = { model: p.cls.model, show: p.cls.show, scale: p.cls.scale, dmg: 0, life: sp.dur, hp: sp.hp };
       // the decoy never moves, so a wall-buried one just draws the room to grind
       // against the stone forever
       const sp3 = safeSpawn(origin.x + dir.x * 2, origin.z + dir.z * 2, origin.y) || { x: origin.x, z: origin.z };

@@ -200,6 +200,35 @@ try {
   assert(w.workPost, 'worker claimed by turret: ' + JSON.stringify(w.workPost));
   assert(e3.hp < e3hp, 'manned turret fires: enemy ' + e3hp + ' → ' + e3.hp);
 
+  // --- sci-fi branch: ship decks + staging bay ---
+  const { generateShipDeck } = await import('./js/ship.js');
+  const { generateBayData } = await import('./js/bay.js');
+  for (const fl of [1, 4, 7]) {
+    const fsx = generateShipDeck('testseed', fl);
+    const g2 = fsx.grid;
+    assert(g2.ship && g2.cells.length === g2.w * g2.h, `deck ${fl}: ship grid shaped`);
+    // flood fill: spawn reaches the lift
+    const idx = (x, y) => y * g2.w + x;
+    const open = (c) => c === 1 || c === 3 || c === 4 || c === 6;
+    const seen = new Uint8Array(g2.w * g2.h);
+    const q = [[Math.round(g2.spawn.x / 4), Math.round(g2.spawn.z / 4)]];
+    seen[idx(q[0][0], q[0][1])] = 1;
+    while (q.length) {
+      const [x, y] = q.pop();
+      for (const [dx, dy] of [[1,0],[-1,0],[0,1],[0,-1]]) {
+        const nx = x + dx, ny = y + dy;
+        if (nx < 0 || ny < 0 || nx >= g2.w || ny >= g2.h) continue;
+        if (seen[idx(nx, ny)] || !open(g2.cells[idx(nx, ny)])) continue;
+        seen[idx(nx, ny)] = 1; q.push([nx, ny]);
+      }
+    }
+    assert(seen[idx(g2.stairs.cx, g2.stairs.cy)] === 1, `deck ${fl}: lift reachable from the breach`);
+    assert(fsx.enemySpawns.length > 5, `deck ${fl}: crew aboard (${fsx.enemySpawns.length})`);
+  }
+  const bay = generateBayData();
+  assert(bay.grid.bay && bay.npcs.length >= 6, 'staging bay: grid + crew present');
+  assert(bay.grid.colliders.every(c => c.noMesh), 'staging bay: prop colliders are noMesh');
+
   document.title = out.some(l => l.startsWith('FAIL') || l.startsWith('ERROR')) ? 'FAILED' : 'PASSED';
 } catch (e) {
   log('ERROR ' + (e.stack || e.message));
