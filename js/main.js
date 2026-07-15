@@ -15,6 +15,7 @@ import { castSpell, castSignature, updateSpells, updateBeams, resetCooldowns, co
 import { giveStartingGear, equipItem, salvageItem, rollTrinket, rollWeapon, rollOffhand, addToBag, rarityOf } from './items.js';
 import { SPELLS, SHOP_TABLES, ENEMIES, RARITIES } from './config.js';
 import { generateTownData, generateArenaData, spawnTownNpcs, updateTownNpcs } from './town.js';
+import { generateBayData } from './bay.js';
 import { initViewmodel, updateViewmodel } from './viewmodel.js';
 import { updateWalls, clearWalls } from './walls.js';
 import { initFloorTraps, updateTraps } from './traps.js';
@@ -420,8 +421,8 @@ function startRun(seed, mode = 'campaign') {
     addMsg('⚔ DUEL — build with B, fight your rivals. Gold trickles in over time.', 'gold');
   } else {
     setLocalFloor(0);
-    addMsg('Welcome to Emberlight Village. The dungeon gate is in the north wall.', 'gold');
-    addMsg('Visit the shops — then descend and slay the dragon Emberwing on floor 9.');
+    addMsg('Forward Staging Bay secured. The breach chute is in the north wall.', 'gold');
+    addMsg('Gear up at the bay terminals — then take the breach chute and cut down to the reactor on deck 9.');
   }
   spawnRemoteAvatars();
   refreshRemoteVisibility();
@@ -437,7 +438,7 @@ function startRun(seed, mode = 'campaign') {
 function ensureFloor(n) {
   const fs = floorState(n);
   if (!fs.grid) {
-    if (n === 0) Object.assign(fs, generateTownData());
+    if (n === 0) Object.assign(fs, generateBayData());
     else if (runMode !== 'campaign') Object.assign(fs, generateArenaData());
     else Object.assign(fs, generateFloorData(G.seed, n));
   }

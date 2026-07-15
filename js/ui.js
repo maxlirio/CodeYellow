@@ -407,6 +407,6 @@ export function runStatsHtml() {
   const mm = Math.floor(secs / 60), ss = (secs % 60).toString().padStart(2, '0');
   return `Floor reached: <b>${G.floor}</b><br>
     Level: <b>${G.run.level}</b> · Kills: <b>${G.run.kills}</b><br>
-    Gold gathered: <b>${G.run.gold}</b> · Chests: <b>${G.run.chests}</b><br>
+    Credits gathered: <b>${G.run.gold}</b> · Chests: <b>${G.run.chests}</b><br>
     Time: <b>${mm}:${ss}</b>`;
 }

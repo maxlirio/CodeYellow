@@ -396,6 +396,7 @@ export function spawnTownNpcs(fs) {
     const { obj, anim } = makeCharacter('char', n.model, n.show || []);
     applyLook(obj, n.look || { cape: true, helmet: true, capeColor: 4 });
     applySkin(obj, n.tints);
+    if (n.mscale) obj.scale.setScalar(n.mscale); // sci-fi rigs are pack-scale
     obj.position.set(n.x, 0, n.z);
     obj.rotation.y = Math.PI;
     obj.add(makeBlobShadow(0.85));

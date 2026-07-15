@@ -376,23 +376,23 @@ export const scaleDmg = (dmg, floor) => Math.round(dmg * (1 + 0.13 * (floor - 1)
 export const XP_FOR_LEVEL = (lv) => Math.round(45 * Math.pow(lv, 1.35));
 
 export const SHOP_ITEMS = [
-  { id: 'potion', icon: '🧪', name: 'Health Potion', desc: 'Restores 45% HP. Drink with Q.', base: 25, grow: 6 },
-  { id: 'atk', icon: '⚔', name: 'Whetstone', desc: '+3 damage for this run.', base: 40, grow: 22 },
-  { id: 'hp', icon: '❤', name: 'Bone Charm', desc: '+20 max HP and heal 20.', base: 40, grow: 22 },
-  { id: 'relic', icon: '💍', name: 'Mystery Relic', desc: 'A random trinket. Rarity scales with depth.', base: 70, grow: 25 },
-  { id: 'tome', icon: '📖', name: 'Spell Tome', desc: 'Replace one of your spells with another from your school.', base: 55, grow: 20 },
-  { id: 'reforge', icon: '🔨', name: 'Reforge Weapon', desc: 'A brand-new random weapon for your class.', base: 60, grow: 18 },
-  { id: 'offhand', icon: '🛡', name: 'Forge Offhand', desc: 'A random offhand item for your class.', base: 45, grow: 15 },
-  { id: 'merc', icon: '🤺', name: 'Hire Mercenary', desc: 'A sellsword or marksman fights beside you until slain.', base: 120, grow: 60 },
-  { id: 'arrows', icon: '🏹', name: 'Bundle of Arrows', desc: '+25 arrows for bows and crossbows.', base: 20, grow: 0 },
+  { id: 'potion', icon: '🧪', name: 'Combat Stim', desc: 'Restores 45% HP. Use with Q.', base: 25, grow: 6 },
+  { id: 'atk', icon: '⚔', name: 'Fire-Control Chip', desc: '+3 damage for this run.', base: 40, grow: 22 },
+  { id: 'hp', icon: '❤', name: 'Dermal Plating', desc: '+20 max HP and heal 20.', base: 40, grow: 22 },
+  { id: 'relic', icon: '💍', name: 'Sealed Requisition', desc: 'A random implant. Rarity scales with depth.', base: 70, grow: 25 },
+  { id: 'tome', icon: '📖', name: 'Firmware Patch', desc: 'Replace one of your abilities with another from your kit.', base: 55, grow: 20 },
+  { id: 'reforge', icon: '🔨', name: 'Refit Weapon', desc: 'A brand-new random weapon for your class.', base: 60, grow: 18 },
+  { id: 'offhand', icon: '🛡', name: 'Fabricate Offhand', desc: 'A random offhand item for your class.', base: 45, grow: 15 },
+  { id: 'merc', icon: '🤺', name: 'Hire Trooper', desc: 'A blade or rifle trooper fights beside you until slain.', base: 120, grow: 60 },
+  { id: 'arrows', icon: '⚡', name: 'Cell Magazine', desc: '+25 cells for your guns.', base: 20, grow: 0 },
 ];
 
 // which building sells what (the old floor-merchant is gone — shop in town)
 export const SHOP_TABLES = {
-  blacksmith: { title: '⚒ The Blacksmith', greet: '“Steel solves most problems.”', items: ['atk', 'reforge', 'offhand', 'arrows'] },
-  alchemist: { title: '🧪 The Alchemist', greet: '“Drink up. Probably not poison.”', items: ['potion', 'hp'] },
-  arcanum: { title: '🔮 The Arcanum', greet: '“Knowledge has a price.”', items: ['tome', 'relic'] },
-  tavern: { title: '🍺 The Cracked Flagon', greet: '“Swords for hire, ale for sale.”', items: ['merc', 'potion', 'arrows'] },
+  blacksmith: { title: '⚒ The Armory', greet: '“Firepower solves most problems.”', items: ['atk', 'reforge', 'offhand', 'arrows'] },
+  alchemist: { title: '🧪 The Med Station', greet: '“Inject it. Probably not coolant.”', items: ['potion', 'hp'] },
+  arcanum: { title: '🔮 Requisitions', greet: '“Exotic hardware has a price.”', items: ['relic', 'potion'] },
+  tavern: { title: '🍺 The Crew Deck', greet: '“Guns for hire, rations for sale.”', items: ['merc', 'potion', 'arrows'] },
 };
 
 // Weapon-ish meshes we hide by default; equipment then re-shows its kit.

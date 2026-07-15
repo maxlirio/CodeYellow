@@ -9,6 +9,7 @@
 import * as THREE from 'three';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import { CELL, PLATFORM_H } from './config.js';
+import { makePiece } from './assets.js';
 
 const WALL_H = 7;    // bulkhead height
 const CEIL_H = 7;    // deck ceiling
@@ -169,8 +170,8 @@ export function buildShipStatic(fs) {
     }
   }
 
-  // ---- the breach (spawn): torn hull + scorch ----
-  if (g.spawn) {
+  // ---- the breach (spawn): torn hull + scorch. Not in the bay — you DOCKED there ----
+  if (g.spawn && !g.bay) {
     const bx = g.spawn.x, bz = g.spawn.z;
     const scorch = new THREE.CircleGeometry(3.2, 9);
     scorch.rotateX(-Math.PI / 2);
@@ -207,6 +208,15 @@ export function buildShipStatic(fs) {
     mesh.matrixAutoUpdate = false;
     group.add(mesh);
     for (const gg of geos) gg.dispose();
+  }
+
+  // dressed props (the staging bay parks real Kenney models — few, unmerged)
+  for (const pr of g.shipProps || []) {
+    const m = makePiece(pr.piece);
+    m.scale.setScalar(pr.scale || 1);
+    m.position.set(pr.x, pr.y || 0, pr.z);
+    m.rotation.y = pr.yaw || 0;
+    group.add(m);
   }
 
   // sparse room lights: the ceiling panels are fake — a few real points sell it

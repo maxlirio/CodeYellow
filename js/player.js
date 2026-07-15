@@ -314,7 +314,7 @@ export function drinkPotion() {
   triggerSwing('drink', 0.6);
   sfx.potion();
   spawnBurst(p.obj.position.clone().setY(p.obj.position.y + 1.4), 0x44ff77, 14, 4, 0.13);
-  addMsg('You drink a potion 🧪');
+  addMsg('You slam a stim 🧪');
   refreshHud();
 }
 
@@ -882,7 +882,7 @@ export function tryAttack() {
   // a foe at knife range means the dagger comes out — no arrow needed
   const daggerReach = !!G.inv.weapon?.ranged && meleeTargetInReach();
   if (G.inv.weapon?.ranged && !daggerReach && (G.run.arrows || 0) <= 0) {
-    addMsg('Out of arrows! Buy more at the blacksmith or tavern.', 'bad');
+    addMsg('Out of cells! Buy more at the Armory or Crew Deck.', 'bad');
     return;
   }
   p.attacking = true;
