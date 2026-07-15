@@ -17,7 +17,7 @@ let baseCtx = null;
 let bossOn = false;
 let unlocked = false;
 let muted = false;
-try { muted = localStorage.getItem('codeorange_music') === 'off'; } catch {}
+try { muted = localStorage.getItem('codeyellow_music') === 'off'; } catch {}
 
 function currentCtx() {
   if (!baseCtx) return null;
@@ -48,7 +48,7 @@ export function stopMusic() { baseCtx = null; bossOn = false; }
 
 export function toggleMusic() {
   muted = !muted;
-  try { localStorage.setItem('codeorange_music', muted ? 'off' : 'on'); } catch {}
+  try { localStorage.setItem('codeyellow_music', muted ? 'off' : 'on'); } catch {}
   return !muted;
 }
 export function musicEnabled() { return !muted; }

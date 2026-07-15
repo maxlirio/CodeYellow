@@ -4,7 +4,7 @@
 // board host leaves, the next visitor claims the id.
 import { G } from './state.js';
 
-const BOARD_ID = 'code-orange-mx2-board0';
+const BOARD_ID = 'code-yellow-mx2-board0';
 const TTL = 90_000;
 
 let peer = null, role = null, conn = null;

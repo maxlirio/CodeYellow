@@ -936,7 +936,7 @@ function updateInteractPrompt() {
   // claimable houses
   const home = nearestHomeDoor(p.obj.position);
   if (home) {
-    const mine = localStorage.getItem('codeorange_home');
+    const mine = localStorage.getItem('codeyellow_home');
     if (mine === null) showPrompt('<b>E</b> — 🏠 Claim this house');
     else if (+mine === home.idx) showPrompt('<b>E</b> — 🏠 Your stash');
     else showPrompt('🏠 A neighbour lives here');

@@ -1,7 +1,7 @@
 * { margin: 0; padding: 0; box-sizing: border-box; }
 :root {
-  --orange: #ff8c1a;
-  --orange-dim: #b35900;
+  --orange: #ffce2e;
+  --orange-dim: #a98a00;
   --bg: #0b0a10;
   --panel: rgba(18, 15, 24, 0.94);
   --border: #3a2f22;
@@ -72,7 +72,7 @@ button.big {
   font-family: inherit; letter-spacing: 1px;
 }
 button.big:hover { border-color: var(--orange-dim); transform: translateY(-1px); }
-button.orange-btn { background: linear-gradient(180deg, #d97613, #a04f00); color: #fff8ec; border-color: #ffab4a; }
+button.orange-btn { background: linear-gradient(180deg, #d9b013, #a07c00); color: #fff8ec; border-color: #ffe14a; }
 button.orange-btn:hover { filter: brightness(1.15); }
 .joinrow { display: flex; gap: 8px; }
 .joinrow button { min-width: 150px; }

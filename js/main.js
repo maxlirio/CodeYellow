@@ -185,8 +185,8 @@ function setupMenu() {
   getClass = buildClassCards(() => { rebuildPreview(); renderSpellPicker(); });
   renderSpellPicker();
   buildLookControls(() => rebuildPreview());
-  $('nameInput').value = localStorage.getItem('codeorange_name') || '';
-  $('nameInput').addEventListener('change', () => localStorage.setItem('codeorange_name', $('nameInput').value));
+  $('nameInput').value = localStorage.getItem('codeyellow_name') || '';
+  $('nameInput').addEventListener('change', () => localStorage.setItem('codeyellow_name', $('nameInput').value));
 
   // game mode selector
   document.querySelectorAll('.modebtn').forEach((el) => {
@@ -333,7 +333,7 @@ function renderLobby() {
 
 // ---------------- run flow ----------------
 // ---- pre-run spell loadout: chosen chips, or fate's random deal ----
-function spellChoiceKey(classId) { return 'codeorange_spells_' + classId; }
+function spellChoiceKey(classId) { return 'codeyellow_spells_' + classId; }
 function loadSpellChoice(classId) {
   try {
     const pool = CLASSES[classId].spellPool;
@@ -559,14 +559,14 @@ function onStairsUsed() {
 // shopkeeper interaction (E in town)
 // claim a house / open your persistent stash
 function loadStash() {
-  try { return JSON.parse(localStorage.getItem('codeorange_stash') || '[]'); } catch { return []; }
+  try { return JSON.parse(localStorage.getItem('codeyellow_stash') || '[]'); } catch { return []; }
 }
-function saveStash(s) { localStorage.setItem('codeorange_stash', JSON.stringify(s)); }
+function saveStash(s) { localStorage.setItem('codeyellow_stash', JSON.stringify(s)); }
 
 function onHomeDoor(home) {
-  const mine = localStorage.getItem('codeorange_home');
+  const mine = localStorage.getItem('codeyellow_home');
   if (mine === null) {
-    localStorage.setItem('codeorange_home', String(home.idx));
+    localStorage.setItem('codeyellow_home', String(home.idx));
     addMsg('🏠 This house is yours now! Your stash lives inside — items stored there survive between runs.', 'gold');
     sfx.chest();
     return;

@@ -1,4 +1,4 @@
-// CodeOrange desktop shell: serves the bundled game over a loopback HTTP
+// CodeYellow desktop shell: serves the bundled game over a loopback HTTP
 // server (ES module imports don't load over file://) and opens it in a
 // Chromium window, which gives us working Pointer Lock for mouse-look.
 const { app, BrowserWindow, shell } = require('electron');
@@ -38,7 +38,7 @@ async function createWindow() {
     height: 900,
     minWidth: 960,
     minHeight: 600,
-    title: 'CodeOrange — Wrath of Emberwing',
+    title: 'CodeYellow — Wrath of Emberwing',
     backgroundColor: '#141420',
     webPreferences: { contextIsolation: true, nodeIntegration: false },
   });

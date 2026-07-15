@@ -156,12 +156,12 @@ export function renderStash({ stash, onToStash, onToBag }) {
 
 // ---------- appearance controls ----------
 export function buildLookControls(onChange) {
-  const saved = localStorage.getItem('codeorange_look');
+  const saved = localStorage.getItem('codeyellow_look');
   if (saved) { try { Object.assign(G.look, JSON.parse(saved)); } catch {} }
   $('lookHelmet').checked = G.look.helmet;
   $('lookCape').checked = G.look.cape;
   const persist = () => {
-    localStorage.setItem('codeorange_look', JSON.stringify(G.look));
+    localStorage.setItem('codeyellow_look', JSON.stringify(G.look));
     onChange?.();
   };
   $('lookHelmet').onchange = (e) => { G.look.helmet = e.target.checked; persist(); };
@@ -305,7 +305,7 @@ export function updateMinimap() {
 export function buildClassCards(onSelect) {
   const wrap = $('classCards');
   wrap.innerHTML = '';
-  let selected = localStorage.getItem('codeorange_class') || 'knight';
+  let selected = localStorage.getItem('codeyellow_class') || 'knight';
   for (const [id, c] of Object.entries(CLASSES)) {
     const div = document.createElement('div');
     div.className = 'ccard' + (id === selected ? ' sel' : '');
@@ -314,7 +314,7 @@ export function buildClassCards(onSelect) {
       wrap.querySelectorAll('.ccard').forEach(el => el.classList.remove('sel'));
       div.classList.add('sel');
       selected = id;
-      localStorage.setItem('codeorange_class', id);
+      localStorage.setItem('codeyellow_class', id);
       onSelect?.(id);
     };
     wrap.appendChild(div);

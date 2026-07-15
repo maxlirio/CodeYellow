@@ -7,7 +7,7 @@ import * as THREE from 'three';
 import { G, floorState } from './state.js';
 import { addMsg } from './ui.js';
 
-const PREFIX = 'code-orange-mx2-';
+const PREFIX = 'code-yellow-mx2-';
 const CODE_CHARS = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
 
 let callbacks = {}; // main.js: onLobbyUpdate, onStart, onGameOver, onVictory, onHostGone, onPartyDeath, onPeerFloor, onFstate, ensureFloorSim
