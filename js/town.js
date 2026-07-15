@@ -268,87 +268,85 @@ export function useDoor(door) {
 
 // ---------------- Last Stand arena ----------------
 export function generateArenaData() {
+  // THE TRAINING FACILITY — a bright, white live-fire deck (think clone-cadet
+  // training halls): a walled rectangle with four deployment doors, corner
+  // observation towers you can climb, a central command platform, and pod
+  // cover. Rendered by the procedural ship renderer in facility (white) trim.
   const w = 26, h = 26;
   const cells = new Uint8Array(w * h);
   const elev = new Uint8Array(w * h);
   const ramps = new Map();
+  const colliders = [];
   const set = (x, y, v) => { cells[y * w + x] = v; };
   const idxOf = (x, y) => y * w + x;
   for (let y = 1; y < h - 1; y++) for (let x = 1; x < w - 1; x++) set(x, y, FLOOR);
 
+  // central command platform (the old keep, in facility whites)
   const kc = 12;
   for (let y = kc; y < kc + 3; y++) for (let x = kc; x < kc + 3; x++) elev[idxOf(x, y)] = 1;
-  // staircase directly against the keep's south face
   set(kc + 1, kc + 3, RAMP);
   ramps.set(idxOf(kc + 1, kc + 3), { dx: 0, dy: -1 });
 
+  // four corner OBSERVATION TOWERS — 2x2 climbable platforms with a ramp each
+  const towers = [
+    { x: 2, y: 2, rx: 4, ry: 3, dx: -1, dy: 0 },
+    { x: 22, y: 2, rx: 21, ry: 3, dx: 1, dy: 0 },
+    { x: 2, y: 22, rx: 4, ry: 22, dx: -1, dy: 0 },
+    { x: 22, y: 22, rx: 21, ry: 22, dx: 1, dy: 0 },
+  ];
+  for (const t of towers) {
+    for (let y = t.y; y < t.y + 2; y++) for (let x = t.x; x < t.x + 2; x++) elev[idxOf(x, y)] = 1;
+    set(t.rx, t.ry, RAMP);
+    ramps.set(idxOf(t.rx, t.ry), { dx: t.dx, dy: t.dy });
+  }
+
+  // deployment doors: waves pour in through the four wall-center gates
   const gates = [
     { x: 13, y: 1 }, { x: 13, y: h - 2 }, { x: 1, y: 13 }, { x: w - 2, y: 13 },
   ];
 
-  const placements = [];
-  const M = new THREE.Matrix4(), Q = new THREE.Quaternion(), V = new THREE.Vector3(), S = new THREE.Vector3();
-  const place = (piece, x, y, z, yaw = 0, scale = 1) => {
-    Q.setFromAxisAngle(V.set(0, 1, 0), yaw);
-    const sv = Array.isArray(scale) ? S.set(scale[0], scale[1], scale[2]) : S.setScalar(scale);
-    M.compose(new THREE.Vector3(x, y, z), Q.clone(), sv.clone());
-    placements.push({ piece, matrix: M.clone() });
-  };
-  const wallDirs = [
-    { dx: 1, dy: 0, yaw: Math.PI / 2 }, { dx: -1, dy: 0, yaw: Math.PI / 2 },
-    { dx: 0, dy: 1, yaw: 0 }, { dx: 0, dy: -1, yaw: 0 },
-  ];
-  const torches = [];
-  const rand = (() => { let s = 777; return () => { s = (s * 16807) % 2147483647; return s / 2147483647; }; })();
-
-  for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) {
-    if (cells[idxOf(x, y)] === SOLID) continue;
-    const wx = x * CELL, wz = y * CELL;
-    // open grassy field with dirt patches
-    if (rand() < 0.3) place(rand() < 0.5 ? 'floor_dirt_small_A' : 'floor_tile_small_weeds_A', wx + (rand() * 2 - 1), 0.01, wz + (rand() * 2 - 1), Math.floor(rand() * 4) * Math.PI / 2);
-    for (const d of wallDirs) {
-      const nx = x + d.dx, ny = y + d.dy;
-      const neighbor = (nx < 0 || ny < 0 || nx >= w || ny >= h) ? SOLID : cells[idxOf(nx, ny)];
-      if (neighbor !== SOLID) continue;
-      const ex = wx + d.dx * CELL / 2, ez = wz + d.dy * CELL / 2;
-      const isGate = gates.some(g => g.x === x && g.y === y);
-      place(isGate ? 'wall_gated' : 'wall', ex, 0, ez, d.yaw);
-      place('wall', ex, PLATFORM_H, ez, d.yaw);
-      if ((x + y * 3) % 4 === 0) {
-        const inx = -d.dx, inz = -d.dy;
-        place('torch_mounted', ex + inx * 0.1, 2.3, ez + inz * 0.1, Math.atan2(inx, inz));
-        torches.push({ x: ex + inx * 0.5, y: 3.15, z: ez + inz * 0.5 });
-      }
+  // pod cover: white cargo pods in a training-course scatter (deterministic),
+  // low enough to mantle, kept clear of the keep, towers, ramps and gates
+  const rand = (() => { let s2 = 4242; return () => { s2 = (s2 * 16807) % 2147483647; return s2 / 2147483647; }; })();
+  const clearOf = (x, y) =>
+    (x >= kc - 1 && x <= kc + 3 && y >= kc - 1 && y <= kc + 4) ||
+    towers.some(t => x >= t.x - 1 && x <= t.x + 2 && y >= t.y - 1 && y <= t.y + 2) ||
+    gates.some(g2 => Math.abs(g2.x - x) + Math.abs(g2.y - y) < 3);
+  for (let i = 0; i < 26; i++) {
+    const x = 3 + Math.floor(rand() * (w - 6)), y = 3 + Math.floor(rand() * (h - 6));
+    if (clearOf(x, y) || elev[idxOf(x, y)] || cells[idxOf(x, y)] !== FLOOR) continue;
+    const hgt = rand() < 0.3 ? 2.0 : rand() < 0.6 ? 1.5 : 1.2;
+    colliders.push({
+      x: x * CELL + (rand() * 1.6 - 0.8), z: y * CELL + (rand() * 1.6 - 0.8),
+      hx: 0.9 + rand() * 0.5, hz: 0.9 + rand() * 0.5, y0: 0, h: hgt,
+    });
+  }
+  // energy pylons flanking each door (columns — my renderer draws them)
+  for (const g2 of gates) {
+    const horiz = g2.y === 1 || g2.y === h - 2;
+    const ox = horiz ? 1 : 0, oz = horiz ? 0 : 1;
+    for (const s3 of [-1, 1]) {
+      colliders.push({ x: (g2.x + ox * s3 * 1) * CELL + (horiz ? s3 * 1.2 : 0), z: (g2.y + oz * s3 * 1) * CELL + (horiz ? 0 : s3 * 1.2), r: 0.55, y0: 0, h: 5.5 });
     }
   }
-  for (let y = kc; y < kc + 3; y++) for (let x = kc; x < kc + 3; x++) {
-    place('floor_tile_large', x * CELL, PLATFORM_H, y * CELL);
-    for (const d of wallDirs) {
-      const nx = x + d.dx, ny = y + d.dy;
-      const plat = nx >= kc && nx < kc + 3 && ny >= kc && ny < kc + 3;
-      const isRamp = nx === kc + 1 && ny === kc + 3;
-      if (plat || isRamp) continue;
-      place('barrier', x * CELL + d.dx * CELL / 2, PLATFORM_H, y * CELL + d.dy * CELL / 2, d.yaw);
-    }
-    if ((x + y) % 2 === 0) place('pillar', x * CELL, 0, y * CELL);
-  }
-  // stairs top edge sits flush with the keep's south face
-  place('stairs', (kc + 1) * CELL, 0, (kc + 3) * CELL - CELL / 2, Math.atan2(0, 1), [0.8, PLATFORM_H / 5.1, 1]);
 
   const grid = {
-    w, h, cells, elev, ramps, colliders: [],
+    w, h, cells, elev, ramps, colliders,
+    ship: true, facility: true, noCeil: true,
     rooms: [{ x: 2, y: 2, w: w - 4, h: h - 4, cx: 13, cy: 13 }],
-    spawn: { x: 13 * CELL, z: 17 * CELL }, // open field south of the keep stairs
+    spawn: { x: 13 * CELL, z: 17 * CELL },
     stairs: { x: -999, z: -999, cx: -99, cy: -99 },
     stairsLocked: false,
     portal: { dx: 0, dy: -1, yaw: 0 },
-    arena: true, gates, town: false, lawn: true,
+    arena: true, gates, town: false, lawn: false,
   };
   return {
-    grid, torches, traps: [], ropes: [{ x: 13 * CELL + 2, z: 13 * CELL - 6, ay: 7.4, len: 5.0 }],
-    placements, enemySpawns: [], lootSpawns: [],
+    grid, torches: [], traps: [], ropes: [],
+    placements: [], enemySpawns: [], lootSpawns: [],
     explored: new Uint8Array(w * h), hadBoss: false,
-    theme: { id: 'arena', name: 'THE LAST STAND', fog: 0x8fb3d9, density: 0.006, hemi: 0xf2f7ff, amb: 0x9aa4bb, torch: 0xffcf99, sun: true, tiles: [], props: [], banners: [], bias: [] },
+    theme: { id: 'arena', name: 'THE TRAINING FACILITY', fog: 0xc5d6e6, density: 0.004,
+      hemi: 0xffffff, amb: 0xb6c2d4, torch: 0x9fd8ec, accent: 0x3f9dff, portal: 0x3f9dff,
+      sun: true, tiles: [], props: [], banners: [], bias: [] },
     mutator: null, layoutId: 'arena',
   };
 }

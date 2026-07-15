@@ -18,8 +18,8 @@ import { minions } from './minions.js';
 
 const CELL = 4;
 export const MACHINES = [
-  { id: 'turret', label: 'Bolt Turret', cost: 90, icon: '🏹', hp: 120, dmg: 9, range: 16, rate: 0.75, hint: 'fast bolts — needs a worker at the crank' },
-  { id: 'cannon', label: 'Cannon', cost: 160, icon: '💣', hp: 160, dmg: 26, range: 22, rate: 3.0, aoe: 3.4, hint: 'slow & splashy — needs a worker' },
+  { id: 'turret', label: 'Laser Turret', cost: 90, icon: '⚡', hp: 120, dmg: 9, range: 16, rate: 0.75, hint: 'fast pulses — needs a rig hand at the console' },
+  { id: 'cannon', label: 'Laser Cannon', cost: 160, icon: '💥', hp: 160, dmg: 26, range: 22, rate: 3.0, aoe: 3.4, hint: 'slow & splashy plasma — needs a rig hand' },
 ];
 
 export const machineState = { on: false, idx: 0, ghost: null, ghostKey: '', valid: false, target: null };
@@ -39,55 +39,65 @@ export function machineByKey(key) { return machines.find(m => m.key === key); }
 // ---------- placement ----------
 function buildMachineVisual(kind) {
   const g = new THREE.Group();
+  const steel = new THREE.MeshStandardMaterial({ color: 0x4a525c, metalness: 0.55, roughness: 0.5 });
+  const trim = new THREE.MeshStandardMaterial({ color: 0x2b3138, metalness: 0.6, roughness: 0.45 });
+  const glow = (c) => new THREE.MeshStandardMaterial({
+    color: 0x111111, emissive: new THREE.Color(c), emissiveIntensity: 1.8, toneMapped: false,
+  });
   if (kind === 'turret') {
-    const base = makePiece('barrel_large');
-    base.scale.setScalar(1.15);
-    g.add(base);
+    // LASER TURRET: tripod pedestal, twin emitter barrels, charge ring
+    const pedestal = new THREE.Mesh(new THREE.CylinderGeometry(0.42, 0.62, 1.2, 8), steel);
+    pedestal.position.y = 0.6;
+    g.add(pedestal);
+    const ring = new THREE.Mesh(new THREE.TorusGeometry(0.46, 0.05, 8, 16), glow(0x66d9ff));
+    ring.rotation.x = Math.PI / 2;
+    ring.position.y = 1.16;
+    g.add(ring);
     const head = new THREE.Group();
-    const bow = makeWeaponModel('crossbow_2handed');
-    bow.scale.setScalar(2.2);
-    bow.rotation.set(0, Math.PI, 0);
-    head.add(bow);
-    head.position.y = 1.35;
+    const housing = new THREE.Mesh(new THREE.BoxGeometry(0.62, 0.42, 0.7), trim);
+    head.add(housing);
+    for (const side of [-1, 1]) {
+      const barrel = new THREE.Mesh(new THREE.CylinderGeometry(0.06, 0.075, 1.0, 8), steel);
+      barrel.rotation.x = Math.PI / 2;
+      barrel.position.set(side * 0.17, 0.04, 0.62);
+      head.add(barrel);
+      const tip = new THREE.Mesh(new THREE.CylinderGeometry(0.045, 0.045, 0.12, 8), glow(0x8fe4ff));
+      tip.rotation.x = Math.PI / 2;
+      tip.position.set(side * 0.17, 0.04, 1.14);
+      head.add(tip);
+    }
+    head.position.y = 1.5;
     g.add(head);
     g.userData.head = head;
   } else {
-    const base = makePiece('box_large');
-    base.scale.set(1.2, 0.9, 1.2);
+    // LASER CANNON: broad emplacement base, one heavy emitter with charge coils
+    const base = new THREE.Mesh(new THREE.BoxGeometry(1.5, 0.7, 1.5), steel);
+    base.position.y = 0.35;
     g.add(base);
+    const skirt = new THREE.Mesh(new THREE.BoxGeometry(1.7, 0.18, 1.7), trim);
+    skirt.position.y = 0.09;
+    g.add(skirt);
     const head = new THREE.Group();
-    const barrel = new THREE.Mesh(
-      new THREE.CylinderGeometry(0.26, 0.34, 1.9, 10),
-      new THREE.MeshStandardMaterial({ color: 0x2e2e34, roughness: 0.55, metalness: 0.5 })
-    );
+    const cradle = new THREE.Mesh(new THREE.BoxGeometry(0.8, 0.5, 0.8), trim);
+    head.add(cradle);
+    const barrel = new THREE.Mesh(new THREE.CylinderGeometry(0.16, 0.22, 1.9, 10), steel);
     barrel.rotation.x = Math.PI / 2 - 0.22; // muzzle up
     barrel.position.set(0, 0.25, 0.55);
     head.add(barrel);
-    const hoop = new THREE.Mesh(
-      new THREE.TorusGeometry(0.36, 0.06, 8, 14),
-      new THREE.MeshStandardMaterial({ color: 0x777788, roughness: 0.4, metalness: 0.7 })
-    );
-    hoop.rotation.x = Math.PI / 2;
-    hoop.position.y = 0.25;
-    head.add(hoop);
+    for (const t of [0.35, 0.7, 1.05]) {
+      const coil = new THREE.Mesh(new THREE.TorusGeometry(0.24, 0.04, 8, 12), glow(0xff9a5e));
+      coil.rotation.x = -0.22;
+      coil.position.set(0, 0.25 + Math.sin(0.22) * t * 0 + t * Math.sin(Math.PI / 2 - 0.22) * 0.21, 0.55 + t * 0.9 * 0.5);
+      // place coils along the barrel axis
+      coil.position.set(0, 0.25 + t * Math.cos(Math.PI / 2 - 0.22) * 0, 0.55);
+      coil.position.z = 0.55 + t * Math.sin(Math.PI / 2 - 0.22) * 0.95;
+      coil.position.y = 0.25 + t * Math.cos(Math.PI / 2 - 0.22) * 0.95;
+      head.add(coil);
+    }
     head.position.y = 1.0;
     g.add(head);
     g.userData.head = head;
   }
-  // "needs a worker" flag
-  const c = document.createElement('canvas');
-  c.width = 192; c.height = 44;
-  const cx2 = c.getContext('2d');
-  cx2.font = 'bold 26px Trebuchet MS'; cx2.textAlign = 'center';
-  cx2.strokeStyle = '#000'; cx2.lineWidth = 5;
-  cx2.strokeText('⚠ no worker', 96, 30);
-  cx2.fillStyle = '#ffcc55';
-  cx2.fillText('⚠ no worker', 96, 30);
-  const flag = new THREE.Sprite(new THREE.SpriteMaterial({ map: new THREE.CanvasTexture(c), transparent: true, depthTest: false }));
-  flag.scale.set(2.0, 0.45, 1);
-  flag.position.y = 2.5;
-  g.add(flag);
-  g.userData.flag = flag;
   return g;
 }
 
@@ -273,7 +283,7 @@ export function updateMachines(dt) {
     const to = target.obj.position;
     if (m.kind === 'turret') {
       const dir = new THREE.Vector3(to.x - from.x, to.y + 1.1 - from.y, to.z - from.z).normalize();
-      const bolt = { x: from.x + dir.x * 0.8, y: from.y, z: from.z + dir.z * 0.8, dirX: dir.x, dirY: dir.y, dirZ: dir.z, speed: 30, dmg: 0, owner: 'fx', vis: 'arrow', color: 0xddcc99 };
+      const bolt = { x: from.x + dir.x * 0.8, y: from.y, z: from.z + dir.z * 0.8, dirX: dir.x, dirY: dir.y, dirZ: dir.z, speed: 30, dmg: 0, owner: 'fx', vis: 'laser', color: 0x8fe4ff };
       if (m.f === G.floor) { spawnBolt(bolt); sfx.bolt(); }
       netSend({ t: 'bolt', f: m.f, b: bolt });
       damageEnemy(target, m.cfg.dmg, Math.random() < 0.08, false, 'none');
@@ -282,7 +292,7 @@ export function updateMachines(dt) {
       const dur = Math.max(0.5, dist / 16);
       shells.push({ f: m.f, tx: to.x, tz: to.z, t: 0, dur, cfg: m.cfg });
       const dir = new THREE.Vector3(to.x - from.x, 3.5, to.z - from.z).normalize();
-      const bolt = { x: from.x, y: from.y, z: from.z, dirX: dir.x, dirY: dir.y, dirZ: dir.z, speed: dist / dur * 0.9, dmg: 0, owner: 'fx', vis: 'fireball', size: 0.8, color: 0x332222 };
+      const bolt = { x: from.x, y: from.y, z: from.z, dirX: dir.x, dirY: dir.y, dirZ: dir.z, speed: dist / dur * 0.9, dmg: 0, owner: 'fx', vis: 'fireball', size: 0.8, color: 0xff7733 };
       if (m.f === G.floor) { spawnBolt(bolt); sfx.cannon(); }
       netSend({ t: 'bolt', f: m.f, b: bolt });
     }

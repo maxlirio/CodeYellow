@@ -21,7 +21,26 @@ const cellHash = (cx, cy) => {
   return (h ^ (h >> 16)) >>> 0;
 };
 
-function makeMats(accent) {
+function makeMats(accent, facility = false) {
+  if (facility) {
+    // training-facility whites: bright composite panels, blue trim
+    return {
+      floorA: new THREE.MeshStandardMaterial({ color: 0xcfd6de, metalness: 0.1, roughness: 0.7 }),
+      floorB: new THREE.MeshStandardMaterial({ color: 0xbfc8d2, metalness: 0.1, roughness: 0.75 }),
+      wall: new THREE.MeshStandardMaterial({ color: 0xe4e9ef, metalness: 0.12, roughness: 0.65 }),
+      frame: new THREE.MeshStandardMaterial({ color: 0x9aa6b4, metalness: 0.35, roughness: 0.6 }),
+      dark: new THREE.MeshStandardMaterial({ color: 0xaab4c0, metalness: 0.2, roughness: 0.8 }),
+      crate: new THREE.MeshStandardMaterial({ color: 0xdde3ea, metalness: 0.1, roughness: 0.8 }),
+      machine: new THREE.MeshStandardMaterial({ color: 0xc4ccd6, metalness: 0.3, roughness: 0.6 }),
+      accent: new THREE.MeshStandardMaterial({
+        color: 0x111111, emissive: new THREE.Color(accent), emissiveIntensity: 1.5,
+        metalness: 0, roughness: 1, toneMapped: false,
+      }),
+      lightPanel: new THREE.MeshStandardMaterial({
+        color: 0x222222, emissive: 0xbfd9e8, emissiveIntensity: 0.9, roughness: 1,
+      }),
+    };
+  }
   return {
     floorA: new THREE.MeshStandardMaterial({ color: 0x59626d, metalness: 0.25, roughness: 0.8 }),
     floorB: new THREE.MeshStandardMaterial({ color: 0x4c545e, metalness: 0.25, roughness: 0.85 }),
@@ -43,7 +62,7 @@ function makeMats(accent) {
 export function buildShipStatic(fs) {
   const g = fs.grid;
   const accent = fs.theme?.accent ?? 0xffa63d;
-  const mats = makeMats(accent);
+  const mats = makeMats(accent, !!g.facility);
   const buckets = new Map(); // matKey -> geometries[]
   const add = (matKey, geo, x, y, z, rotY = 0) => {
     if (rotY) geo.rotateY(rotY);
@@ -72,9 +91,11 @@ export function buildShipStatic(fs) {
         if (h % 23 === 0) box('accent', x, 0.011, z, 0.5, 0.012, CELL * 0.9); // guide strip
       }
 
-      // ceiling slab + occasional light panel
-      box('dark', x, CEIL_H + 0.15, z, CELL, 0.3, CELL);
-      if (h % 6 === 0) box('lightPanel', x, CEIL_H - 0.02, z, 2.2, 0.06, 2.2);
+      // ceiling slab + occasional light panel (open-sky grids skip the roof)
+      if (!g.noCeil) {
+        box('dark', x, CEIL_H + 0.15, z, CELL, 0.3, CELL);
+        if (h % 6 === 0) box('lightPanel', x, CEIL_H - 0.02, z, 2.2, 0.06, 2.2);
+      }
 
       // bulkhead faces toward solid neighbours
       for (const [dx, dy] of DIRS) {
@@ -210,6 +231,22 @@ export function buildShipStatic(fs) {
     for (const gg of geos) gg.dispose();
   }
 
+  // deployment doors: glowing frames where the waves come in
+  for (const gt of g.gates || []) {
+    const gx = gt.x * CELL, gz = gt.y * CELL;
+    // which border is this door against?
+    const dx = gt.x <= 1 ? -1 : gt.x >= g.w - 2 ? 1 : 0;
+    const dy = dx !== 0 ? 0 : (gt.y <= 1 ? -1 : 1);
+    const wx = gx + dx * (CELL / 2 - 0.05), wz = gz + dy * (CELL / 2 - 0.05);
+    const along = dx !== 0;
+    box('accent', wx, 2.9, wz, along ? 0.12 : CELL * 0.9, 0.2, along ? CELL * 0.9 : 0.12);
+    for (const sside of [-1, 1]) {
+      const px = along ? wx : wx + sside * CELL * 0.45;
+      const pz = along ? wz + sside * CELL * 0.45 : wz;
+      box('accent', px, 1.5, pz, 0.12, 3.0, 0.12);
+    }
+  }
+
   // dressed props (the staging bay parks real Kenney models — few, unmerged)
   for (const pr of g.shipProps || []) {
     const m = makePiece(pr.piece);
@@ -220,7 +257,7 @@ export function buildShipStatic(fs) {
   }
 
   // sparse room lights: the ceiling panels are fake — a few real points sell it
-  const rooms = (g.rooms || []).slice(0, 8);
+  const rooms = g.noCeil ? [] : (g.rooms || []).slice(0, 8);
   for (const r of rooms) {
     // physical lighting units (r155+): match the portal light's scale (18)
     const pl = new THREE.PointLight(0xdfeaf2, 15, 32, 1.5);

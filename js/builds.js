@@ -193,6 +193,75 @@ function collapseStorey(fs, cx, cy, h) {
   }
 }
 
+
+// ---- steel construction kit (branch: scifi) ----
+// The Fortnite-style pieces used to be wood-and-stone dungeon models; a breach
+// crew prints alloy. Shapes and footprints are IDENTICAL to the old pieces —
+// colliders and placement never changed, only the look.
+function steelMat() { return new THREE.MeshStandardMaterial({ color: 0x5b6470, metalness: 0.5, roughness: 0.55 }); }
+function trimMat() { return new THREE.MeshStandardMaterial({ color: 0x333a43, metalness: 0.55, roughness: 0.5 }); }
+function glowMat() {
+  return new THREE.MeshStandardMaterial({ color: 0x111111, emissive: 0x59c7ff, emissiveIntensity: 1.4, toneMapped: false });
+}
+function buildSteelPiece(kind) {
+  const g = new THREE.Group();
+  if (kind === 'post') {
+    const col = new THREE.Mesh(new THREE.BoxGeometry(0.55, PLATFORM_H, 0.55), steelMat());
+    col.position.y = PLATFORM_H / 2;
+    g.add(col);
+    const band = new THREE.Mesh(new THREE.BoxGeometry(0.6, 0.12, 0.6), glowMat());
+    band.position.y = PLATFORM_H - 0.35;
+    g.add(band);
+  } else if (kind === 'floor') {
+    const slab = new THREE.Mesh(new THREE.BoxGeometry(4, 0.28, 4), steelMat());
+    slab.position.y = -0.14;
+    g.add(slab);
+    for (const [ex, ez] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
+      const edge = new THREE.Mesh(new THREE.BoxGeometry(ex ? 0.14 : 4, 0.1, ez ? 0.14 : 4), trimMat());
+      edge.position.set(ex * 1.94, -0.03, ez * 1.94);
+      g.add(edge);
+    }
+  } else if (kind === 'ramp') {
+    const ang = Math.atan2(PLATFORM_H, 4);
+    const len = Math.hypot(PLATFORM_H, 4) + 0.3;
+    const slab = new THREE.Mesh(new THREE.BoxGeometry(3.2, 0.3, len), steelMat());
+    slab.rotation.x = -ang;
+    slab.position.set(0, PLATFORM_H / 2 - 0.15, 0);
+    g.add(slab);
+    for (const side of [-1, 1]) {
+      const rail = new THREE.Mesh(new THREE.BoxGeometry(0.12, 0.25, len), glowMat());
+      rail.rotation.x = -ang;
+      rail.position.set(side * 1.55, PLATFORM_H / 2 - 0.02, 0);
+      g.add(rail);
+    }
+  } else if (kind === 'wall') {
+    const panel = new THREE.Mesh(new THREE.BoxGeometry(4, PLATFORM_H, 0.45), steelMat());
+    panel.position.y = PLATFORM_H / 2;
+    g.add(panel);
+    const stripe = new THREE.Mesh(new THREE.BoxGeometry(3.7, 0.14, 0.5), glowMat());
+    stripe.position.y = 2.4;
+    g.add(stripe);
+    for (const side of [-1, 1]) {
+      const rib = new THREE.Mesh(new THREE.BoxGeometry(0.3, PLATFORM_H, 0.55), trimMat());
+      rib.position.set(side * 1.85, PLATFORM_H / 2, 0);
+      g.add(rib);
+    }
+  } else {
+    // barricade: a stack of alloy pods
+    const a = new THREE.Mesh(new THREE.BoxGeometry(2.6, 1.15, 1.5), steelMat());
+    a.position.y = 0.58;
+    g.add(a);
+    const b = new THREE.Mesh(new THREE.BoxGeometry(1.5, 1.0, 1.2), trimMat());
+    b.position.set(-0.35, 1.65, 0.05);
+    b.rotation.y = 0.2;
+    g.add(b);
+    const tag = new THREE.Mesh(new THREE.BoxGeometry(0.5, 0.3, 0.05), glowMat());
+    tag.position.set(0.6, 0.7, 0.78);
+    g.add(tag);
+  }
+  return g;
+}
+
 export function clearBuilds() {
   buildState.on = false;
   if (buildState.ghost) { G.scene.remove(buildState.ghost); buildState.ghost = null; }
@@ -323,8 +392,7 @@ export function applyBuild(m, broadcast = true) {
     const top = m.base + LVL;
     if (b.posts.get(key).has(top)) return false;
     b.posts.get(key).add(top);
-    const obj = makePiece('pillar');
-    obj.scale.set(0.55, 1, 0.55);
+    const obj = buildSteelPiece('post'); // built at final size — no model rescale
     obj.position.set(m.x, m.base, m.z);
     group.add(obj);
     const col = { x: m.x, z: m.z, r: 0.42, y0: m.base, h: m.base + LVL };
@@ -335,7 +403,7 @@ export function applyBuild(m, broadcast = true) {
     if (!b.floors.has(idx)) b.floors.set(idx, []);
     if (b.floors.get(idx).includes(m.h)) return false;
     b.floors.get(idx).push(m.h);
-    const obj = makePiece('floor_wood_large');
+    const obj = buildSteelPiece('floor');
     obj.position.set(m.x, m.h, m.z);
     group.add(obj);
     b.pieces.push({ key: floorKey(idx, m.h), kind: 'floor', f: m.f ?? G.floor, idx, h: m.h, x: m.x, z: m.z, hp: BUILD_HP.floor, maxHp: BUILD_HP.floor, obj, cols: [] });
@@ -343,16 +411,17 @@ export function applyBuild(m, broadcast = true) {
     const idx = m.cy * fs.grid.w + m.cx;
     if (b.ramps.has(idx)) return false;
     b.ramps.set(idx, { dx: m.dir.dx, dy: m.dir.dy, base: m.base });
-    const obj = makePiece('stairs');
-    obj.scale.set(0.8, PLATFORM_H / 5.1, 1);
-    obj.position.set(m.x + m.dir.dx * CELL / 2, m.base, m.z + m.dir.dy * CELL / 2);
-    obj.rotation.y = Math.atan2(-m.dir.dx, -m.dir.dy);
+    // the steel wedge is CENTERED on the cell and rises toward its local +z
+    // (the old stairs model was edge-origined and rose the other way)
+    const obj = buildSteelPiece('ramp');
+    obj.position.set(m.x, m.base, m.z);
+    obj.rotation.y = Math.atan2(m.dir.dx, m.dir.dy);
     group.add(obj);
     b.pieces.push({ key: rampKey(idx), kind: 'ramp', f: m.f ?? G.floor, idx, base: m.base, x: m.x, z: m.z, hp: BUILD_HP.ramp, maxHp: BUILD_HP.ramp, obj, cols: [] });
   } else if (m.kind === 'wall') {
     if (b.walls.has(m.key)) return false;
     b.walls.add(m.key);
-    const obj = makePiece('wall');
+    const obj = buildSteelPiece('wall');
     obj.position.set(m.x, m.base, m.z);
     obj.rotation.y = m.yaw;
     group.add(obj);
@@ -393,11 +462,11 @@ export function cycleBuildPiece(dir) {
 
 function makeGhostFor(plan) {
   let obj;
-  if (plan.kind === 'post') { obj = makePiece('pillar'); obj.scale.set(0.55, 1, 0.55); }
-  else if (plan.kind === 'floor') obj = makePiece('floor_wood_large');
-  else if (plan.kind === 'ramp') { obj = makePiece('stairs'); obj.scale.set(0.8, PLATFORM_H / 5.1, 1); }
-  else if (plan.kind === 'wall') obj = makePiece('wall');
-  else { obj = makePiece('crates_stacked'); obj.scale.set(1.25, 1.15, 1.25); }
+  if (plan.kind === 'post') { obj = buildSteelPiece('post'); }
+  else if (plan.kind === 'floor') obj = buildSteelPiece('floor');
+  else if (plan.kind === 'ramp') { obj = buildSteelPiece('ramp'); }
+  else if (plan.kind === 'wall') obj = buildSteelPiece('wall');
+  else { obj = buildSteelPiece('barricade'); }
   obj.traverse((n) => {
     if (n.isMesh) {
       n.material = n.material.clone();
@@ -427,8 +496,8 @@ export function updateBuildGhost() {
   if (plan.kind === 'post') g.position.set(plan.x, plan.base, plan.z);
   else if (plan.kind === 'floor') g.position.set(plan.x, plan.h, plan.z);
   else if (plan.kind === 'ramp') {
-    g.position.set(plan.x + plan.dir.dx * CELL / 2, plan.base, plan.z + plan.dir.dy * CELL / 2);
-    g.rotation.y = Math.atan2(-plan.dir.dx, -plan.dir.dy);
+    g.position.set(plan.x, plan.base, plan.z); // centered steel wedge
+    g.rotation.y = Math.atan2(plan.dir.dx, plan.dir.dy);
   } else if (plan.kind === 'wall') {
     g.position.set(plan.x, plan.base, plan.z);
     g.rotation.y = plan.yaw;
