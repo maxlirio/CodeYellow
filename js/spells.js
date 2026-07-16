@@ -736,7 +736,7 @@ export function castSpell(slot, effectiveDamage) {
       G.banners.push(zone);
       banners.push({ t: sp.dur, obj, zone });
       announceZone('banner', origin.x, gy, origin.z, 0, sp.dur);
-      addMsg('🚩 The banner is planted — fight beside it!', 'gold');
+      addMsg('The banner is planted — fight beside it!', 'gold');
       netSend({ t: 'fx', f: G.floor, x: origin.x, y: 1.5, z: origin.z, color: 0xff6644 });
       break;
     }
@@ -760,7 +760,7 @@ export function castSpell(slot, effectiveDamage) {
       const dx = origin.x - target.obj.position.x, dz = origin.z - target.obj.position.z;
       const d = Math.max(0.1, Math.hypot(dx, dz));
       damageEnemy(target, dmg, false, false, 'local', { kb: { x: dx / d * 22, z: dz / d * 22 }, stun: sp.stun });
-      addMsg('⛓ Get over here!', 'gold');
+      addMsg('Get over here!', 'gold');
       break;
     }
     case 'lash': {
@@ -773,7 +773,7 @@ export function castSpell(slot, effectiveDamage) {
         p.lash = { up: true, g: { x: 0, z: 0 }, vel: 0, grounded: false };
         p.vy = 0;
         drawLightning(from, from.clone().add(new THREE.Vector3(0, 6, 0)));
-        addMsg('🧲 GRAVITY INVERTS — you fall into the sky. Mana burns until you release (SPACE).', 'gold');
+        addMsg('GRAVITY INVERTS — you fall into the sky. Mana burns until you release (SPACE).', 'gold');
         break;
       }
       // the ray sees BOTH dungeon walls and solid structures (houses, keeps)
@@ -793,7 +793,7 @@ export function castSpell(slot, effectiveDamage) {
       p.lash = { g: g2, vel: 0, grounded: false };
       p.vy = 0;
       drawLightning(from, from.clone().add(new THREE.Vector3(g2.x * 6, 0, g2.z * 6)));
-      addMsg('🧲 GRAVITY TURNS — you fall toward it. No mana returns until you do (SPACE).', 'gold');
+      addMsg('GRAVITY TURNS — you fall toward it. No mana returns until you do (SPACE).', 'gold');
       break;
     }
     case 'trap': {
@@ -821,7 +821,7 @@ export function castSpell(slot, effectiveDamage) {
       G.scene.add(obj);
       const zid = announceZone('trap', obj.position.x, 0, obj.position.z, 0, 120);
       sTraps.push({ x: obj.position.x, z: obj.position.z, f: G.floor, dmg, root: sp.root, obj, zid });
-      addMsg('🪤 Trap set.');
+      addMsg('Trap set.');
       break;
     }
     case 'freeze': {
@@ -845,7 +845,7 @@ export function castSpell(slot, effectiveDamage) {
         applyEnemyVfx(e, 'freeze', sp.dur);
         netSend({ t: 'evfx', f: G.floor, id: e.id, kind: 'freeze', dur: sp.dur });
       }
-      addMsg('⏳ Time crawls to a halt.', 'gold');
+      addMsg('Time crawls to a halt.', 'gold');
       break;
     }
     case 'swap': {
@@ -873,7 +873,7 @@ export function castSpell(slot, effectiveDamage) {
       p.iframes = Math.max(p.iframes, 0.4);
       spawnBurst(origin.clone().setY(origin.y + 1), 0x442266, 14, 4, 0.13, 0.5);
       netSend({ t: 'fx', f: G.floor, x: origin.x, y: origin.y + 1, z: origin.z, color: 0x442266 });
-      addMsg('🌑 Behind you. Your next strike lands twice as hard.', 'gold');
+      addMsg('Behind you. Your next strike lands twice as hard.', 'gold');
       break;
     }
     case 'decoy': {
@@ -887,7 +887,7 @@ export function castSpell(slot, effectiveDamage) {
       if (isAuthority()) spawnMinion('decoy', myId(), G.floor, px, pz, null, true, o);
       else netSend({ t: 'hire', kind: 'decoy', f: G.floor, x: px, z: pz, o });
       spawnBurst(new THREE.Vector3(px, 1.2, pz), 0xd9b36c, 16, 4, 0.13, 0.5);
-      addMsg('🎭 The straw double takes your place.', 'gold');
+      addMsg('The straw double takes your place.', 'gold');
       break;
     }
     case 'prison': {
@@ -907,20 +907,20 @@ export function castSpell(slot, effectiveDamage) {
       damageEnemy(target, 1, false, false, 'local', { stun: sp.dur, vuln: sp.vuln });
       applyEnemyVfx(target, 'ice', sp.dur);
       netSend({ t: 'evfx', f: G.floor, id: target.id, kind: 'ice', dur: sp.dur });
-      addMsg('🧊 Frozen solid — and brittle.', 'gold');
+      addMsg('Frozen solid — and brittle.', 'gold');
       break;
     }
     case 'sight': {
       sfx.key();
       G.truesightT = sp.dur;
-      addMsg('👁 You see every heartbeat through the stone.', 'gold');
+      addMsg('You see every heartbeat through the stone.', 'gold');
       break;
     }
     case 'levitate': {
       sfx.dodge(); sfx.levelup();
       p.levitateT = sp.dur;
       spawnBurst(origin.clone().setY(origin.y + 0.5), 0xccaaff, 18, 4, 0.14, 0.7);
-      addMsg('🎈 You rise above the ground.', 'gold');
+      addMsg('You rise above the ground.', 'gold');
       break;
     }
     case 'trail': {
@@ -928,7 +928,7 @@ export function castSpell(slot, effectiveDamage) {
       p.trailT = sp.dur;
       p.trailDropAt = null;
       p.trailDmg = dmg;
-      addMsg('🔥 The ground ignites in your wake — run!', 'gold');
+      addMsg('The ground ignites in your wake — run!', 'gold');
       break;
     }
     case 'sanctuary': {
@@ -947,7 +947,7 @@ export function castSpell(slot, effectiveDamage) {
       domes.push({ t: sp.dur, obj: dome, sanctuary: true, zone });
       announceZone('sanctuary', origin.x, gy, origin.z, sp.radius, sp.dur, 0xffe9a0);
       netSend({ t: 'fx', f: G.floor, x: origin.x, y: gy + 1, z: origin.z, color: 0xffe9a0, big: 1 });
-      addMsg('🛡 No arrow nor bolt may enter.', 'gold');
+      addMsg('No arrow nor bolt may enter.', 'gold');
       break;
     }
     case 'chain': {

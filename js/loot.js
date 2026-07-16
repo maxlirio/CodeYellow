@@ -216,13 +216,13 @@ export function takeLoot(f, id, by, fromNet = false) {
       break;
     }
     case 'potion':
-      give(() => { G.run.potions++; addMsg('Picked up a health potion 🧪'); });
+      give(() => { G.run.potions++; addMsg('Picked up a health potion'); });
       if (isMine) sfx.potion();
       fx(0x44ff77);
       hideLoot(l);
       break;
     case 'key':
-      give(() => { G.run.keys++; addMsg('Found a golden key! 🔑', 'gold'); });
+      give(() => { G.run.keys++; addMsg('Found a golden key!', 'gold'); });
       if (isMine) sfx.key();
       fx(0xffee66, 12, 4);
       hideLoot(l);
@@ -253,13 +253,13 @@ export function takeLoot(f, id, by, fromNet = false) {
         } else {
           const roll = Math.random();
           if (roll < 0.35) { const g = 12 + Math.floor(Math.random() * 15) + f * 4; G.run.gold += g; addMsg(`Chest: +${g} gold`, 'gold'); }
-          else if (roll < 0.6) { G.run.potions++; addMsg('Chest: a health potion 🧪'); }
+          else if (roll < 0.6) { G.run.potions++; addMsg('Chest: a health potion'); }
           else if (roll < 0.85) {
             const item = rollAnyItem(G.player.classId, f, 0.1);
             if (addToBag(item)) addMsg(`Chest: <span style="color:${rarityOf(item).color}">${item.name}</span> — Tab to equip`, 'gold');
             else { G.run.gold += 20; addMsg('Chest: +20 gold (bag full)', 'gold'); }
           }
-          else { G.run.keys++; addMsg('Chest: a golden key! 🔑', 'gold'); }
+          else { G.run.keys++; addMsg('Chest: a golden key!', 'gold'); }
         }
       }
       fx(0xffcc55, 16, 4.5);

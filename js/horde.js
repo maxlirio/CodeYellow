@@ -16,7 +16,7 @@ export function startHorde() {
   horde.wave = 0;
   horde.phase = 'build';
   horde.t = FIRST_BUILD;
-  addMsg('🏰 LAST STAND — build barricades (B), hire mercenaries (H), survive.', 'gold');
+  addMsg('LAST STAND — build barricades (B), hire mercenaries (H), survive.', 'gold');
   addMsg(`First wave in ${FIRST_BUILD}s. Gold buys walls (${BARRICADE_COST}g) and sellswords (${MERC_COST}g).`);
 }
 export function stopHorde() { horde.active = false; }
@@ -86,7 +86,7 @@ export function updateHorde(dt) {
       horde.t = BUILD_TIME;
       const bonus = 20 + horde.wave * 10;
       G.run.gold += bonus;
-      addMsg(`🌊 Wave ${horde.wave} cleared! +${bonus}g — next wave in ${BUILD_TIME}s`, 'gold');
+      addMsg(`Wave ${horde.wave} cleared! +${bonus}g — next wave in ${BUILD_TIME}s`, 'gold');
       netSend({ t: 'wave', n: horde.wave, phase: 'build', t: BUILD_TIME, bonus });
       refreshHud();
       sfx.victory();
@@ -100,7 +100,7 @@ export function applyWaveMsg(m) {
   horde.phase = m.phase;
   if (m.t) horde.t = m.t;
   if (m.phase === 'combat') { showWaveBanner(m.n); sfx.bossroar(); }
-  else if (m.bonus) { G.run.gold += m.bonus; addMsg(`🌊 Wave ${m.n} cleared! +${m.bonus}g`, 'gold'); refreshHud(); }
+  else if (m.bonus) { G.run.gold += m.bonus; addMsg(`Wave ${m.n} cleared! +${m.bonus}g`, 'gold'); refreshHud(); }
 }
 
 // H: hire a mercenary (also sold at the tavern in campaign mode).
@@ -119,8 +119,8 @@ export function tryHireMerc(kind = null) {
   } else {
     netSend({ t: 'hire', kind: k, f: G.floor, x: p.x + 1.5, z: p.z + 1.5 });
   }
-  addMsg(k === 'worker' ? `🔧 A worker signs on! Stand them near a machine. (-${cost}g)`
-    : `🤺 A ${k === 'sword' ? 'sellsword' : 'marksman'} joins you! (-${cost}g)`, 'gold');
+  addMsg(k === 'worker' ? `A worker signs on! Stand them near a machine. (-${cost}g)`
+    : `A ${k === 'sword' ? 'sellsword' : 'marksman'} joins you! (-${cost}g)`, 'gold');
   refreshHud();
   return true;
 }

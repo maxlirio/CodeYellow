@@ -58,7 +58,7 @@ export function updateTraps(dt) {
           t.state = 'arming';
           t.t = 0.45;
           sfx.key(); // metallic click
-          addMsg('⚠ *click* — a pressure plate!', 'bad');
+          addMsg('*click* — a pressure plate!', 'bad');
         }
         break;
       case 'arming':

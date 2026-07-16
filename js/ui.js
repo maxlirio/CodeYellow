@@ -95,7 +95,7 @@ function itemStatsHtml(item) {
     const label = { dmg: 'damage', armor: '% dmg reduction', crit: '% crit', speed: ' speed', hp: ' max HP', mregen: ' mana/s' }[k] || k;
     bits.push(`${k === 'dmg' ? '' : '+'}${v}${label === 'damage' ? ' damage' : label}`);
   }
-  return bits.join(' · ');
+  return bits.join(' ·');
 }
 function itemHtml(item) {
   const r = rarityOf(item);
@@ -360,8 +360,8 @@ export function updateWaveHud(horde) {
   if (!horde.active) { el.classList.add('hidden'); return; }
   el.classList.remove('hidden');
   el.textContent = horde.phase === 'build'
-    ? `🔨 BUILD — wave ${horde.wave + 1} in ${Math.max(0, Math.ceil(horde.t))}s · B barricade · H hire`
-    : `🌊 WAVE ${horde.wave} — hold the line!`;
+    ? `BUILD — wave ${horde.wave + 1} in ${Math.max(0, Math.ceil(horde.t))}s · B barricade · H hire`
+    : `WAVE ${horde.wave} — hold the line!`;
 }
 
 // ---------- tavern board ----------
@@ -376,7 +376,7 @@ export function renderBoardList(games, onJoin) {
     const div = document.createElement('div');
     div.className = 'board-game';
     div.innerHTML = `<div><div class="bg-name">${escapeHtml(g.name || 'Adventurer')}'s party</div>
-      <div class="bg-meta">${g.mode === 'horde' ? '🏰 Last Stand' : g.mode === 'duel' ? '⚔ Duel (PvP)' : '⚔ Campaign'} · code ${g.code}</div></div>`;
+      <div class="bg-meta">${g.mode === 'horde' ? 'Last Stand' : g.mode === 'duel' ? 'Duel (PvP)' : 'Campaign'} · code ${g.code}</div></div>`;
     const btn = document.createElement('button');
     btn.textContent = 'Join';
     btn.onclick = () => onJoin(g.code);
@@ -390,7 +390,7 @@ export function showTransition(floor, cb, subtitle = null, warning = null) {
   const t = $('transition');
   $('transTitle').textContent = floor === 0 ? 'HOMEWARD' : floor <= 9 ? `FLOOR ${floor}` : `FLOOR ${floor} — THE ENDLESS DARK`;
   $('transSub').innerHTML = (subtitle || 'Deeper still…') +
-    (warning ? `<br><span style="color:#ff8c4a;letter-spacing:4px">⚠ ${warning}</span>` : '');
+    (warning ? `<br><span style="color:#ff8c4a;letter-spacing:4px">${warning}</span>` : '');
   t.classList.remove('hidden');
   t.style.opacity = '1';
   setTimeout(() => {

@@ -241,7 +241,7 @@ export function gainXp(amount) {
     p.maxHp = effectiveMaxHp();
     p.hp = p.maxHp;
     sfx.levelup();
-    addMsg(`⭐ Level ${G.run.level}! Fully healed.`, 'gold');
+    addMsg(`Level ${G.run.level}! Fully healed.`, 'gold');
     spawnBurst(p.obj.position.clone().setY(p.obj.position.y + 1.2), 0xffd35c, 24, 6, 0.16, 0.9);
   }
   refreshHud();
@@ -266,7 +266,7 @@ export function damageLocalPlayer(amount, effects = null) {
   if (effects?.shake) G.shake = Math.max(G.shake || 0, effects.shake);
   if (effects?.lashbreak && p.lash) {
     releaseLash(p);
-    addMsg('💥 The blow hammers you off the wall!', 'bad');
+    addMsg('The blow hammers you off the wall!', 'bad');
   }
   sfx.hurt();
   flashVignette();
@@ -314,7 +314,7 @@ export function drinkPotion() {
   triggerSwing('drink', 0.6);
   sfx.potion();
   spawnBurst(p.obj.position.clone().setY(p.obj.position.y + 1.4), 0x44ff77, 14, 4, 0.13);
-  addMsg('You slam a stim 🧪');
+  addMsg('You slam a stim');
   refreshHud();
 }
 
@@ -351,7 +351,7 @@ function trackWedge(p, dt, movedNow) {
   p.vy = 0; p.kbX = 0; p.kbZ = 0;
   spawnBurst(pos.clone().setY(pos.y + 1), 0xffaa55, 14, 4, 0.13, 0.5);
   sfx.dodge(); sfx.hurt();
-  addMsg(`⚠ You were wedged in the world — pulled free to open ground (−${cost} HP)`, 'bad');
+  addMsg(`You were wedged in the world — pulled free to open ground (−${cost} HP)`, 'bad');
   refreshHud();
   sendPos(true);
 }
@@ -516,7 +516,7 @@ export function updatePlayer(dt) {
             p.lash.grounded = true;
             p.lash.vel = 0;
             sfx.hit();
-            addMsg('🧲 You stand on the sky — WASD walks the vault, SPACE lets go.');
+            addMsg('You stand on the sky — WASD walks the vault, SPACE lets go.');
           }
         } else {
           // falling ALONG the new gravity
@@ -526,7 +526,7 @@ export function updatePlayer(dt) {
             p.lash.grounded = true;
             p.lash.vel = 0;
             sfx.hit();
-            addMsg('🧲 You land on the surface — WASD walks it, SPACE lets go.');
+            addMsg('You land on the surface — WASD walks it, SPACE lets go.');
           }
         }
         // AIR CONTROL: steer while falling, like any other fall. Runs AFTER the
@@ -937,9 +937,9 @@ function updateInteractPrompt() {
   const home = nearestHomeDoor(p.obj.position);
   if (home) {
     const mine = localStorage.getItem('codeyellow_home');
-    if (mine === null) showPrompt('<b>E</b> — 🏠 Claim this house');
-    else if (+mine === home.idx) showPrompt('<b>E</b> — 🏠 Your stash');
-    else showPrompt('🏠 A neighbour lives here');
+    if (mine === null) showPrompt('<b>E</b> — Claim this house');
+    else if (+mine === home.idx) showPrompt('<b>E</b> — Your stash');
+    else showPrompt('A neighbour lives here');
     if (mine === null || +mine === home.idx) {
       interactTarget = { kind: 'home', home };
       return;
@@ -955,7 +955,7 @@ function updateInteractPrompt() {
   const s = G.grid.stairs;
   if (p.obj.position.y < 1 && Math.hypot(p.obj.position.x - s.x, p.obj.position.z - s.z) < 2.6) {
     if (G.grid.stairsLocked) {
-      showPrompt('🔒 Defeat the boss to descend');
+      showPrompt('Defeat the boss to descend');
     } else {
       showPrompt(G.grid.town ? '<b>E</b> — Enter the dungeon' : '<b>E</b> — The way onward');
       interactTarget = { kind: 'stairs' };
@@ -964,7 +964,7 @@ function updateInteractPrompt() {
   }
   const chest = nearestChest(p.obj.position);
   if (chest) {
-    if (chest.kind === 'goldchest' && G.run.keys < 1) showPrompt('🔒 Golden chest — needs a key');
+    if (chest.kind === 'goldchest' && G.run.keys < 1) showPrompt('Golden chest — needs a key');
     else showPrompt(`<b>E</b> — Open ${chest.kind === 'goldchest' ? 'golden ' : ''}chest`);
     interactTarget = { kind: 'chest', chest };
     return;

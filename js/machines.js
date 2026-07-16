@@ -18,8 +18,8 @@ import { minions } from './minions.js';
 
 const CELL = 4;
 export const MACHINES = [
-  { id: 'turret', label: 'Laser Turret', cost: 90, icon: '⚡', hp: 120, dmg: 9, range: 16, rate: 0.75, hint: 'fast pulses — needs a rig hand at the console' },
-  { id: 'cannon', label: 'Laser Cannon', cost: 160, icon: '💥', hp: 160, dmg: 26, range: 22, rate: 3.0, aoe: 3.4, hint: 'slow & splashy plasma — needs a rig hand' },
+  { id: 'turret', label: 'Laser Turret', cost: 90, icon: '', hp: 120, dmg: 9, range: 16, rate: 0.75, hint: 'fast pulses — needs a rig hand at the console' },
+  { id: 'cannon', label: 'Laser Cannon', cost: 160, icon: '', hp: 160, dmg: 26, range: 22, rate: 3.0, aoe: 3.4, hint: 'slow & splashy plasma — needs a rig hand' },
 ];
 
 export const machineState = { on: false, idx: 0, ghost: null, ghostKey: '', valid: false, target: null };
@@ -155,7 +155,7 @@ function removeMachine(rec) {
   rec.obj?.parent?.remove(rec.obj);
   // free its worker for the next machine
   for (const mn of minions) if (mn.workPost && mn.workPost.key === rec.key) mn.workPost = null;
-  if (rec.f === G.floor) addMsg('💥 A war machine is destroyed!', 'bad');
+  if (rec.f === G.floor) addMsg('A war machine is destroyed!', 'bad');
 }
 
 // ---------- machine-build mode (V) ----------
@@ -166,7 +166,7 @@ export function toggleMachineMode(force = null) {
   if (!want && machineState.ghost) { G.scene.remove(machineState.ghost); machineState.ghost = null; }
   if (want) {
     const mc = MACHINES[machineState.idx];
-    addMsg(`⚙ MACHINES — ${mc.label} (${mc.cost}g): ${mc.hint}. Scroll to switch, click to place, V to exit.`);
+    addMsg(`MACHINES — ${mc.label} (${mc.cost}g): ${mc.hint}. Scroll to switch, click to place, V to exit.`);
   }
 }
 
@@ -175,7 +175,7 @@ export function cycleMachine(dir) {
   machineState.idx = (machineState.idx + dir + MACHINES.length) % MACHINES.length;
   if (machineState.ghost) { G.scene.remove(machineState.ghost); machineState.ghost = null; }
   const mc = MACHINES[machineState.idx];
-  addMsg(`⚙ ${mc.label} — ${mc.cost}g · ${mc.hint}`);
+  addMsg(`${mc.label} — ${mc.cost}g · ${mc.hint}`);
 }
 
 export function updateMachineGhost() {

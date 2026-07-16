@@ -20,13 +20,13 @@ export const TOWN_THEME = {
 
 // the four shops: exterior building model + a furnished interior room
 const SHOPS = [
-  { type: 'blacksmith', label: '⚒ Enter the Blacksmith', piece: 'town_blacksmith', scale: 8.5,
+  { type: 'blacksmith', label: 'Enter the Blacksmith', piece: 'town_blacksmith', scale: 8.5,
     at: [7, 10], door: [7, 12], keeper: { model: 'Barbarian', name: 'Ragna the Smith', show: ['1H_Axe'], look: { helmet: false, cape: false, capeColor: 0 }, tints: [['Body', 0x6b4a2f], ['Leg', 0x3a2d20], ['Arm', 0x8a6a4a]] } },
-  { type: 'tavern', label: '🍺 Enter the Cracked Flagon', piece: 'town_tavern', scale: 8.5,
+  { type: 'tavern', label: 'Enter the Cracked Flagon', piece: 'town_tavern', scale: 8.5,
     at: [22, 10], door: [22, 12], keeper: { model: 'Knight', name: 'Innkeep Bors', show: [], look: { helmet: false, cape: false, capeColor: 0 }, tints: [['Body', 0x9c6b3d], ['Leg', 0x5e4327], ['Arm', 0xb98a58]] } },
-  { type: 'alchemist', label: '🧪 Enter the Alchemist', piece: 'town_home_green2', scale: 8,
+  { type: 'alchemist', label: 'Enter the Alchemist', piece: 'town_home_green2', scale: 8,
     at: [7, 18], door: [7, 20], keeper: { model: 'Rogue_Hooded', name: 'Vex the Alchemist', show: ['Throwable'], look: { helmet: true, cape: true, capeColor: 2 }, tints: [['Body', 0x39543a], ['Hood', 0x2c4030], ['Cape', 0x2c4030]] } },
-  { type: 'arcanum', label: '🔮 Enter the Arcanum', piece: 'town_church', scale: 7,
+  { type: 'arcanum', label: 'Enter the Arcanum', piece: 'town_church', scale: 7,
     at: [22, 18], door: [22, 20], keeper: { model: 'Mage', name: 'Sage Elowen', show: ['Spellbook_open'], look: { helmet: true, cape: true, capeColor: 3 }, tints: [['Body', 0x46307a], ['Hat', 0x37245e]] } },
 ];
 
@@ -180,9 +180,9 @@ export function generateTownData() {
       place('bottle_A_brown', (x0 + 3.4) * CELL, 1.05, 33.7 * CELL, 1);
       colliders.push(...pieceColliders('barrel_large', { x: (x0 + 4.2) * CELL, z: 35.8 * CELL }));
       // the public-games notice board hangs by the door
-      npcs.push({ model: null, noModel: true, name: 'Notice Board', shop: 'board', label: '📜 Public Games board', x: (x0 + 4) * CELL, z: 36 * CELL });
+      npcs.push({ model: null, noModel: true, name: 'Notice Board', shop: 'board', label: 'Public Games board', x: (x0 + 4) * CELL, z: 36 * CELL });
       // the wayfarer post: change ventures without losing your character
-      npcs.push({ model: null, noModel: true, name: 'Wayfarer Post', shop: 'mode', label: '⚔ Change Venture', x: (x0 + 1.4) * CELL, z: 36 * CELL });
+      npcs.push({ model: null, noModel: true, name: 'Wayfarer Post', shop: 'mode', label: 'Change Venture', x: (x0 + 1.4) * CELL, z: 36 * CELL });
       place('banner_patternA_blue', (x0 + 4) * CELL, 3.0, 36.4 * CELL, Math.PI);
     }
     colliders.push(...pieceColliders('town_cabinet', { x: (x0 + 0.6) * CELL, z: 33.4 * CELL, yaw: Math.PI / 2, scale: 2.6 }));
@@ -199,20 +199,20 @@ export function generateTownData() {
     // door pair: street door → interior; interior south wall → back to street
     const outX = shop.door[0] * CELL, outZ = shop.door[1] * CELL;
     doors.push({ x: outX, z: outZ - 1.5, label: shop.label, tx: cx, tz: 35.5 * CELL, tyaw: Math.PI });
-    doors.push({ x: cx, z: 36.5 * CELL, label: '🚪 Leave the shop', tx: outX, tz: outZ + 2, tyaw: Math.PI });
+    doors.push({ x: cx, z: 36.5 * CELL, label: 'Leave the shop', tx: outX, tz: outZ + 2, tyaw: Math.PI });
   });
 
   // the training corner by the square: exact numbers, no rumors
   npcs.push({
     model: 'Knight', name: 'Drillmaster Otho', shop: 'codex',
-    label: '⚔ Talk to Drillmaster Otho — your EXACT attack numbers',
+    label: 'Talk to Drillmaster Otho — your EXACT attack numbers',
     show: ['1H_Sword'], look: { helmet: true, cape: true, capeColor: 0 },
     tints: [['Body', 0x7a3030], ['Leg', 0x40282a]],
     x: 13 * CELL, z: 12.2 * CELL,
   });
   npcs.push({
     model: 'Rogue_Hooded', name: 'Maren the Hunter', shop: 'bestiary',
-    label: '🏹 Talk to Maren the Hunter — know every monster',
+    label: 'Talk to Maren the Hunter — know every monster',
     show: ['2H_Crossbow'], look: { helmet: true, cape: true, capeColor: 2 },
     tints: [['Body', 0x3a4a2f], ['Hood', 0x2c3a28], ['Cape', 0x2c3a28]],
     x: 17 * CELL, z: 12.2 * CELL,

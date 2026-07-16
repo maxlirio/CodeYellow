@@ -61,21 +61,21 @@ export function generateBayData() {
   // ---- the crew (reuses the town shop/dialog ids wholesale) ----
   const npcs = [
     { model: 'RobotExpressive', name: 'Quartermaster BRASS-9', shop: 'blacksmith', mscale: 0.5,
-      label: '⚒ Armory', tints: [], x: 8 * CELL, z: 6 * CELL },
+      label: 'Armory', tints: [], x: 8 * CELL, z: 6 * CELL },
     { model: 'Character_Hazmat', name: 'Medtech Sova', shop: 'alchemist', mscale: 0.85,
-      label: '🧪 Med Station', tints: [], x: 13.5 * CELL, z: 6 * CELL },
+      label: 'Med Station', tints: [], x: 13.5 * CELL, z: 6 * CELL },
     { model: 'Astronaut_FinnTheFrog', name: 'Artificer Hale', shop: 'arcanum', mscale: 0.62,
-      label: '🔮 Requisitions', tints: [], x: 16 * CELL, z: 8.5 * CELL },
+      label: 'Requisitions', tints: [], x: 16 * CELL, z: 8.5 * CELL },
     { model: 'Character_Soldier', name: 'Sgt. Vasquez', shop: 'tavern', mscale: 0.85,
-      label: '🍺 Crew Deck', tints: [], x: 10 * CELL, z: 12 * CELL },
+      label: 'Crew Deck', tints: [], x: 10 * CELL, z: 12 * CELL },
     { model: null, noModel: true, name: 'Mission Console', shop: 'board',
-      label: '📡 Mission Console', x: 17.8 * CELL, z: 14.8 * CELL },
+      label: 'Mission Console', x: 17.8 * CELL, z: 14.8 * CELL },
     { model: null, noModel: true, name: 'Sim Pods', shop: 'mode',
-      label: '⚔ Change Venture', x: 14.5 * CELL, z: 14.8 * CELL },
+      label: 'Change Venture', x: 14.5 * CELL, z: 14.8 * CELL },
     { model: 'Astronaut_BarbaraTheBee', name: 'Drill Instructor Okoye', shop: 'codex', mscale: 0.62,
-      label: '📖 Combat numbers', tints: [], x: 6.5 * CELL, z: 14.5 * CELL },
+      label: 'Combat numbers', tints: [], x: 6.5 * CELL, z: 14.5 * CELL },
     { model: 'RobotExpressive', name: 'Threat Analyst VIGIL', shop: 'bestiary', mscale: 0.44,
-      label: '👁 Threat catalog', tints: [], x: 8.2 * CELL, z: 14.8 * CELL },
+      label: 'Threat catalog', tints: [], x: 8.2 * CELL, z: 14.8 * CELL },
   ];
 
   const grid = {

@@ -123,7 +123,7 @@ async function boot() {
       G.player.hp = G.player.maxHp;
       G.player.mana = G.player.maxMana;
       refreshHud();
-      addMsg(`⚔ Playtest kit: Lv10, ${w.name}`, 'gold');
+      addMsg(`Playtest kit: Lv10, ${w.name}`, 'gold');
       setTimeout(() => descendTo(9), 800);
       if (params.get('spectate')) {
         G.spectate = true;
@@ -132,7 +132,7 @@ async function boot() {
           if (!d || G.floor !== 9) return;
           clearInterval(placeChampion);
           G.player.obj.position.set(d.obj.position.x, 0, d.obj.position.z + 14);
-          addMsg('🎬 Spectating: the Champion duels EMBERWING', 'gold');
+          addMsg('Spectating: the Champion duels EMBERWING', 'gold');
         }, 500);
       }
     }
@@ -236,7 +236,7 @@ function setupMenu() {
     } catch (e) {
       addMsg('Could not open a room (signaling server unreachable).', 'bad');
     }
-    $('btnHost').textContent = '🕸 Host Co-op';
+    $('btnHost').textContent = 'Host Co-op';
   };
 
   $('btnJoin').onclick = async () => {
@@ -326,7 +326,7 @@ function renderLobby() {
   for (const [pid, p] of G.net.players) {
     const li = document.createElement('li');
     const cls = p.classId || 'knight';
-    li.textContent = `${pid === 'host' ? '👑 ' : ''}${p.name} — ${cls[0].toUpperCase() + cls.slice(1)}`;
+    li.textContent = `${pid === 'host' ? '' : ''}${p.name} — ${cls[0].toUpperCase() + cls.slice(1)}`;
     ul.appendChild(li);
   }
 }
@@ -418,7 +418,7 @@ function startRun(seed, mode = 'campaign') {
   } else if (mode === 'duel') {
     G.run.gold = 300;
     setLocalFloor(1);
-    addMsg('⚔ DUEL — build with B, fight your rivals. Gold trickles in over time.', 'gold');
+    addMsg('DUEL — build with B, fight your rivals. Gold trickles in over time.', 'gold');
   } else {
     setLocalFloor(0);
     addMsg('Forward Staging Bay secured. The breach chute is in the north wall.', 'gold');
@@ -481,7 +481,7 @@ function setLocalFloor(n) {
   if (G.net.role !== 'guest') moveMinionsToFloor(myId(), n);
   refreshBossBarForFloor();
   refreshHud();
-  if (fs.mutator) addMsg(`⚠ ${fs.mutator.name}: ${fs.mutator.desc}`, 'bad');
+  if (fs.mutator) addMsg(`${fs.mutator.name}: ${fs.mutator.desc}`, 'bad');
   sendPos(true);
   netSend({ t: 'pfloor', n });
   if (G.net.role === 'guest') netSend({ t: 'freq', n });
@@ -567,7 +567,7 @@ function onHomeDoor(home) {
   const mine = localStorage.getItem('codeyellow_home');
   if (mine === null) {
     localStorage.setItem('codeyellow_home', String(home.idx));
-    addMsg('🏠 This house is yours now! Your stash lives inside — items stored there survive between runs.', 'gold');
+    addMsg('This house is yours now! Your stash lives inside — items stored there survive between runs.', 'gold');
     sfx.chest();
     return;
   }
@@ -627,7 +627,7 @@ function openFloorSelect() {
     const btn = document.createElement('button');
     btn.className = 'floorbtn';
     const boss = n === 3 || n === 6 || n === 9 || (n > 9 && n % 3 === 0);
-    btn.innerHTML = `<b>Floor ${n}</b><span>${themeFor(G.seed, n).name}${boss ? ' · 💀 boss' : ''}${n === maxPick && n > (G.run.deepest || 0) ? ' · unexplored' : ''}</span>`;
+    btn.innerHTML = `<b>Floor ${n}</b><span>${themeFor(G.seed, n).name}${boss ? ' · boss' : ''}${n === maxPick && n > (G.run.deepest || 0) ? ' · unexplored' : ''}</span>`;
     btn.onclick = () => { hide('floorSelect'); descendTo(n); };
     wrap.appendChild(btn);
   }
@@ -701,7 +701,7 @@ function spellDetail(sp, dmg, p) {
     case 'trail': bits.push(`your footsteps burn for ${sp.dur}s — <b>${sd}</b> dmg to pursuers`); break;
     case 'sanctuary': bits.push(`a dome (${sp.radius}u) that blocks all enemy projectiles for ${sp.dur}s`); break;
   }
-  return bits.join(' · ');
+  return bits.join(' ·');
 }
 
 function openCodex() {
@@ -743,7 +743,7 @@ function openCodex() {
       + statLine('Effect', spellDetail(sp, dmg, p))
       + '</div></div>';
   }
-  $('codexTitle').textContent = '⚔ Drillmaster Otho';
+  $('codexTitle').textContent = 'Drillmaster Otho';
   $('codexSub').textContent = '“No rumors here. These are your numbers, exactly as they land.”';
   $('codexBody').innerHTML = html;
   show('codexDialog');
@@ -787,10 +787,10 @@ function openBestiary() {
     if (e.boss) continue;
     html += `<div class="codex-entry"><h3>${MONSTER_NAMES[id] || id}</h3><div class="codex-stats">`
       + statLine('Stats', `<b>${e.hp}</b> HP · speed ${e.speed} · notices you at ${e.aggro}u · ${e.xp} XP · ${e.gold[0]}–${e.gold[1]}g`)
-      + statLine('Behavior', monsterTraits(e).join(' · '))
+      + statLine('Behavior', monsterTraits(e).join(' ·'))
       + '</div></div>';
   }
-  $('codexTitle').textContent = '🏹 Maren the Hunter';
+  $('codexTitle').textContent = 'Maren the Hunter';
   $('codexSub').textContent = '“Know a beast and it is already half dead.”';
   $('codexBody').innerHTML = html;
   show('codexDialog');
@@ -832,7 +832,7 @@ function applyModeSwitch(mode) {
   G.player.hp = G.player.maxHp;
   updateSpellBar(cooldowns);
   refreshHud();
-  addMsg('⚔ Venture changed — your gold, gear and levels travelled with you.', 'gold');
+  addMsg('Venture changed — your gold, gear and levels travelled with you.', 'gold');
 }
 
 function onShopOpened(type) {
@@ -909,7 +909,7 @@ function buyItem(id, price) {
     if (G.run.gold < price) { addMsg('Not enough gold.', 'bad'); return; }
     G.run.gold -= price;
     G.run.arrows = (G.run.arrows || 0) + 25;
-    addMsg('+25 arrows 🏹', 'gold');
+    addMsg('+25 arrows', 'gold');
     sfx.coin();
     refreshHud();
     return;
@@ -953,7 +953,7 @@ function gameOver(fromNet = false) {
   if (G.net.role === 'host' && !fromNet) netSend({ t: 'gover' });
   document.exitPointerLock?.();
   $('deadTitle').textContent = G.net.role === 'solo' ? 'You have fallen…' : 'The whole party has fallen…';
-  $('deadStats').innerHTML = (horde.active ? `🌊 Waves survived: <b>${Math.max(0, horde.wave - (horde.phase === 'combat' ? 1 : 0))}</b><br>` : '') + runStatsHtml();
+  $('deadStats').innerHTML = (horde.active ? `Waves survived: <b>${Math.max(0, horde.wave - (horde.phase === 'combat' ? 1 : 0))}</b><br>` : '') + runStatsHtml();
   setHidden('respawnMsg', true);
   setHidden('btnRestart', false);
   show('dead');
@@ -969,10 +969,10 @@ function checkAllDead() {
 
 // ---------------- inventory ----------------
 function invStatsHtml() {
-  return `⚔ Damage: <b>${effectiveDamage()}</b><br>` +
-    `🎯 Crit: <b>${Math.round(effectiveCrit() * 100)}%</b> · 🛡 Reduction: <b>${Math.round(effectiveArmor() * 100)}%</b><br>` +
-    `👢 Speed: <b>${effectiveSpeed().toFixed(1)}</b> · 🔮 Mana/s: <b>${effectiveManaRegen().toFixed(1)}</b><br>` +
-    `❤ Max HP: <b>${effectiveMaxHp()}</b>`;
+  return `Damage: <b>${effectiveDamage()}</b><br>` +
+    `Crit: <b>${Math.round(effectiveCrit() * 100)}%</b> · Reduction: <b>${Math.round(effectiveArmor() * 100)}%</b><br>` +
+    `Speed: <b>${effectiveSpeed().toFixed(1)}</b> · Mana/s: <b>${effectiveManaRegen().toFixed(1)}</b><br>` +
+    `Max HP: <b>${effectiveMaxHp()}</b>`;
 }
 function rerenderInventory() {
   renderInventory({
@@ -1060,9 +1060,9 @@ function setupInput() {
       // commander view between waves & in duels; music toggle everywhere else
       if (commander.open) { closeCommandMap(); G.mode = 'playing'; lockPointer(); }
       else if ((horde.active && horde.phase === 'build') || G.runMode === 'duel') openCommandMap();
-      else addMsg(toggleMusic() ? '🎵 Music on' : '🔇 Music off');
+      else addMsg(toggleMusic() ? 'Music on' : 'Music off');
     }
-    if (e.code === 'KeyN') { const m = toggleMute(); addMsg(m ? 'Muted 🔇' : 'Sound on 🔊'); }
+    if (e.code === 'KeyN') { const m = toggleMute(); addMsg(m ? 'Muted ' : 'Sound on'); }
     if (e.code === 'KeyP' && (horde.active || G.runMode === 'duel')) buyItem('arrows', 20);
     if (e.code === 'Digit1') castSpell(0, effectiveDamage);
     if (e.code === 'Digit2') castSpell(1, effectiveDamage);
@@ -1176,7 +1176,7 @@ function loop(t) {
       }
       const wh = document.getElementById('waveHud');
       wh.classList.remove('hidden');
-      wh.textContent = '⚔ DUEL — B build · P arrows · last one standing';
+      wh.textContent = 'DUEL — B build · P arrows · last one standing';
     }
     updateNet(dt);
     updateMusic(dt);

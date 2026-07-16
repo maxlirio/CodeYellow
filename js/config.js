@@ -5,7 +5,7 @@ export const PLATFORM_H = 4;        // height of climbable platforms
 
 export const CLASSES = {
   knight: {
-    name: 'Breacher', icon: '🛡', model: 'Astronaut_BarbaraTheBee', scale: 0.62,
+    name: 'Breacher', icon: '', model: 'Astronaut_BarbaraTheBee', scale: 0.62,
     desc: 'Point of the spear. Arc-blade and riot plate — first through the hull.',
     physical: true,
     hp: 125, dmg: 16, speed: 8.2, crit: 0.06, attackAnims: ['1H_Melee_Attack_Slice_Horizontal', '1H_Melee_Attack_Chop'],
@@ -14,7 +14,7 @@ export const CLASSES = {
     spellPool: ['shieldbash', 'warcry', 'bulwark', 'bullcharge', 'warbanner', 'executioner', 'chainhook'],
   },
   barbarian: {
-    name: 'Wrecker', icon: '🪓', model: 'Astronaut_FernandoTheFlamingo', scale: 0.62,
+    name: 'Wrecker', icon: '', model: 'Astronaut_FernandoTheFlamingo', scale: 0.62,
     desc: 'Salvage-crew muscle. Two-handed plasma render — walls optional.',
     physical: true,
     hp: 150, dmg: 26, speed: 7.7, crit: 0.1, attackAnims: ['2H_Melee_Attack_Chop', '2H_Melee_Attack_Slice'],
@@ -23,7 +23,7 @@ export const CLASSES = {
     spellPool: ['axethrow', 'groundslam', 'rage', 'whirlwind', 'leap', 'bloodlust', 'bullcharge', 'sunderstomp', 'chainhook', 'executioner'],
   },
   rogue: {
-    name: 'Splicer', icon: '🗡', model: 'Astronaut_RaeTheRedPanda', scale: 0.62,
+    name: 'Splicer', icon: '', model: 'Astronaut_RaeTheRedPanda', scale: 0.62,
     desc: 'Twin vibro-blades. Fast, fragile, deadly crits.',
     hp: 92, dmg: 11, speed: 9.4, crit: 0.28, attackAnims: ['Dualwield_Melee_Attack_Slice', 'Dualwield_Melee_Attack_Stab'],
     attackTime: 0.44, attackRange: 2.6, attackArc: 1.0, mana: 70, manaRegen: 2.5,
@@ -31,7 +31,7 @@ export const CLASSES = {
     spellPool: ['knifefan', 'shadowstep', 'venomvial', 'smokebomb', 'deathmark', 'shurikenstorm', 'bonewall', 'mirrorimage', 'ricochet', 'shadowswap', 'decoy', 'beartrap', 'embertrail'],
   },
   mage: {
-    name: 'Technician', icon: '⚡', model: 'Astronaut_FinnTheFrog', scale: 0.62,
+    name: 'Technician', icon: '', model: 'Astronaut_FinnTheFrog', scale: 0.62,
     desc: 'Arc projector. Bolts burn energy — they hit like a cannon when your capacitors are full.',
     hp: 84, dmg: 26, speed: 8.4, crit: 0.08, attackAnims: ['Spellcast_Shoot'],
     attackTime: 0.55, attackRange: 26, attackArc: 0, mana: 110, manaRegen: 3.5, manaAttack: 0.2,
@@ -39,7 +39,7 @@ export const CLASSES = {
     spellPool: ['fireball', 'frostshard', 'chainlightning', 'meteor', 'blizzard', 'arcaneorb', 'bonewall', 'stormlance', 'mirrorimage', 'gravitywell', 'ricochet', 'gravitylash', 'chronobubble', 'frostprison', 'levitate', 'sanctuary'],
   },
   ranger: {
-    name: 'Marksman', icon: '🎯', model: 'Character_Soldier', scale: 0.85,
+    name: 'Marksman', icon: '', model: 'Character_Soldier', scale: 0.85,
     desc: 'Ship-security veteran. Pulse rifles fire where you aim — count your cells.',
     hp: 95, dmg: 14, speed: 9.0, crit: 0.15, attackAnims: ['2H_Ranged_Shoot'],
     attackTime: 0.95, attackRange: 28, attackArc: 0, mana: 80, manaRegen: 2.5,
@@ -47,7 +47,7 @@ export const CLASSES = {
     spellPool: ['powershot', 'multishot', 'rainarrows', 'shadowstep', 'smokebomb', 'bonewall', 'lifeward', 'beartrap', 'truesight', 'decoy', 'embertrail', 'sanctuary'],
   },
   necromancer: {
-    name: 'Fabricator', icon: '🤖', model: 'Character_Hazmat', scale: 0.85,
+    name: 'Fabricator', icon: '', model: 'Character_Hazmat', scale: 0.85,
     desc: 'Nanite engineer. Corrosive bolts, dark bargains with the machine — and the scrap answers when called.',
     hp: 80, dmg: 19, speed: 8.2, crit: 0.06, attackAnims: ['Spellcast_Shoot'],
     attackTime: 0.6, attackRange: 24, attackArc: 0, mana: 120, manaRegen: 3.5, manaAttack: 0.14,
@@ -59,68 +59,68 @@ export const CLASSES = {
 // ---------------- spells (each run deals you a random 3 from your class pool) ----------------
 export const SPELLS = {
   // knight
-  holybolt:   { name: 'Holy Bolt', icon: '✨', mana: 18, cd: 3,  type: 'proj', dmgMult: 1.35, speed: 24, color: 0xffe08a, size: 1.1, vis: 'holy' },
-  shieldbash: { name: 'Shield Bash', icon: '🛡', mana: 22, cd: 6, type: 'cone', dmgMult: 1.0, range: 4.5, arc: 1.2, knockback: 9, stun: 1.2 },
-  warcry:     { name: 'Warcry', icon: '❤️‍🔥', mana: 38, cd: 18, type: 'heal', frac: 0.35, radius: 9 },
-  judgement:  { name: 'Judgement', icon: '⚖️', mana: 30, cd: 8, type: 'targetaoe', dmgMult: 1.6, radius: 3.2, range: 20, delay: 0.5, color: 0xffe08a },
-  consecrate: { name: 'Consecrate', icon: '🕯️', mana: 27, cd: 10, type: 'aoe', dmgMult: 0.7, radius: 5, burn: { mult: 0.35, dur: 4 }, color: 0xffcc66 },
-  bulwark:    { name: 'Bulwark', icon: '🧱', mana: 24, cd: 14, type: 'buff', armorAdd: 0.5, dmgMult: 1, speedMult: 1, dur: 5 },
+  holybolt:   { name: 'Holy Bolt', icon: '', mana: 18, cd: 3,  type: 'proj', dmgMult: 1.35, speed: 24, color: 0xffe08a, size: 1.1, vis: 'holy' },
+  shieldbash: { name: 'Shield Bash', icon: '', mana: 22, cd: 6, type: 'cone', dmgMult: 1.0, range: 4.5, arc: 1.2, knockback: 9, stun: 1.2 },
+  warcry:     { name: 'Warcry', icon: '', mana: 38, cd: 18, type: 'heal', frac: 0.35, radius: 9 },
+  judgement:  { name: 'Judgement', icon: '', mana: 30, cd: 8, type: 'targetaoe', dmgMult: 1.6, radius: 3.2, range: 20, delay: 0.5, color: 0xffe08a },
+  consecrate: { name: 'Consecrate', icon: '', mana: 27, cd: 10, type: 'aoe', dmgMult: 0.7, radius: 5, burn: { mult: 0.35, dur: 4 }, color: 0xffcc66 },
+  bulwark:    { name: 'Bulwark', icon: '', mana: 24, cd: 14, type: 'buff', armorAdd: 0.5, dmgMult: 1, speedMult: 1, dur: 5 },
   // barbarian
-  axethrow:   { name: 'Axe Throw', icon: '🪓', mana: 18, cd: 4,  type: 'proj', dmgMult: 1.8, speed: 18, color: 0xff8844, size: 1.5, vis: 'axe', phys: true },
-  groundslam: { name: 'Ground Slam', icon: '💥', mana: 27, cd: 8, type: 'aoe', dmgMult: 1.3, radius: 5.5, stun: 1.0 },
-  rage:       { name: 'Battle Rage', icon: '😤', mana: 30, cd: 16, type: 'buff', dmgMult: 1.45, speedMult: 1.25, dur: 6 },
-  whirlwind:  { name: 'Whirlwind', icon: '🌪️', mana: 30, cd: 7, type: 'aoe', dmgMult: 1.7, radius: 4.2, color: 0xffbb66 },
-  leap:       { name: 'Savage Leap', icon: '🦵', mana: 24, cd: 9, type: 'blink', dist: 10, landAoe: { dmgMult: 1.1, radius: 4, stun: 0.6 } },
-  bloodlust:  { name: 'Bloodlust', icon: '🩸', mana: 33, cd: 18, type: 'buff', dmgMult: 1.15, speedMult: 1.1, lifesteal: 0.25, dur: 7 },
+  axethrow:   { name: 'Axe Throw', icon: '', mana: 18, cd: 4,  type: 'proj', dmgMult: 1.8, speed: 18, color: 0xff8844, size: 1.5, vis: 'axe', phys: true },
+  groundslam: { name: 'Ground Slam', icon: '', mana: 27, cd: 8, type: 'aoe', dmgMult: 1.3, radius: 5.5, stun: 1.0 },
+  rage:       { name: 'Battle Rage', icon: '', mana: 30, cd: 16, type: 'buff', dmgMult: 1.45, speedMult: 1.25, dur: 6 },
+  whirlwind:  { name: 'Whirlwind', icon: '', mana: 30, cd: 7, type: 'aoe', dmgMult: 1.7, radius: 4.2, color: 0xffbb66 },
+  leap:       { name: 'Savage Leap', icon: '', mana: 24, cd: 9, type: 'blink', dist: 10, landAoe: { dmgMult: 1.1, radius: 4, stun: 0.6 } },
+  bloodlust:  { name: 'Bloodlust', icon: '', mana: 33, cd: 18, type: 'buff', dmgMult: 1.15, speedMult: 1.1, lifesteal: 0.25, dur: 7 },
   // rogue
-  knifefan:   { name: 'Fan of Knives', icon: '🔪', mana: 21, cd: 5, type: 'proj', dmgMult: 0.65, speed: 21, color: 0xcccccc, count: 5, spread: 0.55, vis: 'knife' },
-  shadowstep: { name: 'Shadow Step', icon: '🌀', mana: 18, cd: 7, type: 'blink', dist: 9 },
-  venomvial:  { name: 'Venom Vial', icon: '☠️', mana: 24, cd: 8, type: 'proj', dmgMult: 0.5, speed: 15, color: 0x66ff44, aoe: 2.8, poison: { mult: 0.45, dur: 5 }, vis: 'vial' },
-  smokebomb:  { name: 'Smoke Bomb', icon: '💨', mana: 22, cd: 12, type: 'aoe', dmgMult: 0, radius: 6, stun: 2.2, selfIframes: 1.2, color: 0x99aabb },
-  deathmark:  { name: 'Death Mark', icon: '🎯', mana: 21, cd: 10, type: 'mark', range: 22, vuln: 1.5, dur: 6 },
-  shurikenstorm: { name: 'Shuriken Storm', icon: '✴️', mana: 30, cd: 9, type: 'proj', dmgMult: 0.45, speed: 19, color: 0xbbccdd, count: 9, spread: 1.6, vis: 'knife' },
+  knifefan:   { name: 'Fan of Knives', icon: '', mana: 21, cd: 5, type: 'proj', dmgMult: 0.65, speed: 21, color: 0xcccccc, count: 5, spread: 0.55, vis: 'knife' },
+  shadowstep: { name: 'Shadow Step', icon: '', mana: 18, cd: 7, type: 'blink', dist: 9 },
+  venomvial:  { name: 'Venom Vial', icon: '', mana: 24, cd: 8, type: 'proj', dmgMult: 0.5, speed: 15, color: 0x66ff44, aoe: 2.8, poison: { mult: 0.45, dur: 5 }, vis: 'vial' },
+  smokebomb:  { name: 'Smoke Bomb', icon: '', mana: 22, cd: 12, type: 'aoe', dmgMult: 0, radius: 6, stun: 2.2, selfIframes: 1.2, color: 0x99aabb },
+  deathmark:  { name: 'Death Mark', icon: '', mana: 21, cd: 10, type: 'mark', range: 22, vuln: 1.5, dur: 6 },
+  shurikenstorm: { name: 'Shuriken Storm', icon: '', mana: 30, cd: 9, type: 'proj', dmgMult: 0.45, speed: 19, color: 0xbbccdd, count: 9, spread: 1.6, vis: 'knife' },
   // mage
-  fireball:   { name: 'Fireball', icon: '🔥', mana: 27, cd: 5, type: 'proj', dmgMult: 1.5, speed: 19, color: 0xff5522, size: 1.4, aoe: 3.5, vis: 'fireball' },
-  frostshard: { name: 'Frost Shard', icon: '❄️', mana: 18, cd: 3.5, type: 'proj', dmgMult: 0.9, speed: 22, color: 0x88d4ff, slow: { mult: 0.45, dur: 3 }, vis: 'shard' },
-  chainlightning: { name: 'Chain Lightning', icon: '⚡', mana: 36, cd: 9, type: 'chain', dmgMult: 0.95, range: 20, jumps: 4, falloff: 0.78 },
-  meteor:     { name: 'Meteor', icon: '☄️', mana: 39, cd: 11, type: 'targetaoe', dmgMult: 2.2, radius: 4.5, range: 24, delay: 0.9, color: 0xff6622, burn: { mult: 0.3, dur: 3 }, fall: 'fireball' },
-  blizzard:   { name: 'Blizzard', icon: '🌨️', mana: 33, cd: 10, type: 'aoe', dmgMult: 0.6, radius: 7, slowAll: { mult: 0.4, dur: 4 }, color: 0xaaddff },
-  arcaneorb:  { name: 'Arcane Orb', icon: '🔮', mana: 30, cd: 8, type: 'proj', dmgMult: 1.1, speed: 10, color: 0xcc66ff, size: 2.2, pierce: true, vis: 'orb' },
+  fireball:   { name: 'Fireball', icon: '', mana: 27, cd: 5, type: 'proj', dmgMult: 1.5, speed: 19, color: 0xff5522, size: 1.4, aoe: 3.5, vis: 'fireball' },
+  frostshard: { name: 'Frost Shard', icon: '', mana: 18, cd: 3.5, type: 'proj', dmgMult: 0.9, speed: 22, color: 0x88d4ff, slow: { mult: 0.45, dur: 3 }, vis: 'shard' },
+  chainlightning: { name: 'Chain Lightning', icon: '', mana: 36, cd: 9, type: 'chain', dmgMult: 0.95, range: 20, jumps: 4, falloff: 0.78 },
+  meteor:     { name: 'Meteor', icon: '', mana: 39, cd: 11, type: 'targetaoe', dmgMult: 2.2, radius: 4.5, range: 24, delay: 0.9, color: 0xff6622, burn: { mult: 0.3, dur: 3 }, fall: 'fireball' },
+  blizzard:   { name: 'Blizzard', icon: '', mana: 33, cd: 10, type: 'aoe', dmgMult: 0.6, radius: 7, slowAll: { mult: 0.4, dur: 4 }, color: 0xaaddff },
+  arcaneorb:  { name: 'Arcane Orb', icon: '', mana: 30, cd: 8, type: 'proj', dmgMult: 1.1, speed: 10, color: 0xcc66ff, size: 2.2, pierce: true, vis: 'orb' },
   // ranger
-  powershot:  { name: 'Power Shot', icon: '🎯', mana: 21, cd: 5, type: 'proj', dmgMult: 2.0, speed: 34, color: 0xd8e6b0, pierce: true, vis: 'arrow', arrows: 1 },
-  multishot:  { name: 'Multishot', icon: '🏹', mana: 24, cd: 6, type: 'proj', dmgMult: 0.8, speed: 28, color: 0xd8e6b0, count: 3, spread: 0.35, vis: 'arrow', arrows: 3 },
-  rainarrows: { name: 'Rain of Arrows', icon: '🌧️', mana: 36, cd: 10, type: 'targetaoe', dmgMult: 1.4, radius: 4.5, range: 26, delay: 0.7, color: 0xd8e6b0, fall: 'arrowrain', arrows: 7 },
+  powershot:  { name: 'Power Shot', icon: '', mana: 21, cd: 5, type: 'proj', dmgMult: 2.0, speed: 34, color: 0xd8e6b0, pierce: true, vis: 'arrow', arrows: 1 },
+  multishot:  { name: 'Multishot', icon: '', mana: 24, cd: 6, type: 'proj', dmgMult: 0.8, speed: 28, color: 0xd8e6b0, count: 3, spread: 0.35, vis: 'arrow', arrows: 3 },
+  rainarrows: { name: 'Rain of Arrows', icon: '', mana: 36, cd: 10, type: 'targetaoe', dmgMult: 1.4, radius: 4.5, range: 26, delay: 0.7, color: 0xd8e6b0, fall: 'arrowrain', arrows: 7 },
   // ---- physical power-up abilities (knight & barbarian) ----
-  bullcharge:  { name: 'Charge', icon: '🐗', mana: 24, cd: 9, type: 'charge', dist: 9, dmgMult: 1.2, phys: true },
-  warbanner:   { name: 'War Banner', icon: '🚩', mana: 30, cd: 18, type: 'banner', dur: 10, radius: 7, dmgAura: 1.25, phys: true },
-  executioner: { name: "Executioner's Arc", icon: '🪓', mana: 27, cd: 10, type: 'cone', dmgMult: 1.3, range: 4.5, arc: 1.4, knockback: 4, execute: 0.3, execMult: 3, phys: true },
-  sunderstomp: { name: 'Sunder Stomp', icon: '🦶', mana: 24, cd: 9, type: 'aoe', dmgMult: 0.9, radius: 5.5, vulnAll: 4, slowAll: { mult: 0.6, dur: 2.5 }, phys: true },
-  chainhook:   { name: 'Chain Hook', icon: '⛓', mana: 21, cd: 8, type: 'hook', range: 16, dmgMult: 0.8, stun: 0.6, phys: true },
+  bullcharge:  { name: 'Charge', icon: '', mana: 24, cd: 9, type: 'charge', dist: 9, dmgMult: 1.2, phys: true },
+  warbanner:   { name: 'War Banner', icon: '', mana: 30, cd: 18, type: 'banner', dur: 10, radius: 7, dmgAura: 1.25, phys: true },
+  executioner: { name: "Executioner's Arc", icon: '', mana: 27, cd: 10, type: 'cone', dmgMult: 1.3, range: 4.5, arc: 1.4, knockback: 4, execute: 0.3, execMult: 3, phys: true },
+  sunderstomp: { name: 'Sunder Stomp', icon: '', mana: 24, cd: 9, type: 'aoe', dmgMult: 0.9, radius: 5.5, vulnAll: 4, slowAll: { mult: 0.6, dur: 2.5 }, phys: true },
+  chainhook:   { name: 'Chain Hook', icon: '', mana: 21, cd: 8, type: 'hook', range: 16, dmgMult: 0.8, stun: 0.6, phys: true },
   // ---- exotic effect spells ----
-  gravitylash: { name: 'Gravity Lash', icon: '🧲', mana: 27, cd: 0, type: 'lash', range: 22 },
-  beartrap:    { name: 'Steel Trap', icon: '🪤', mana: 15, cd: 6, type: 'trap', dmgMult: 1.2, root: 2.5, max: 3 },
-  chronobubble:{ name: 'Chrono Bubble', icon: '⏳', mana: 33, cd: 16, type: 'freeze', radius: 6, range: 20, dur: 3.5 },
-  shadowswap:  { name: 'Shadow Swap', icon: '🌑', mana: 21, cd: 9, type: 'swap', range: 18, critDur: 3 },
-  decoy:       { name: 'Straw Double', icon: '🎭', mana: 24, cd: 14, type: 'decoy', hp: 140, dur: 9 },
-  frostprison: { name: 'Frost Prison', icon: '🧊', mana: 27, cd: 11, type: 'prison', range: 20, dur: 4, vuln: 4 },
-  truesight:   { name: 'True Sight', icon: '👁', mana: 15, cd: 18, type: 'sight', dur: 12 },
-  levitate:    { name: 'Levitate', icon: '🎈', mana: 24, cd: 14, type: 'levitate', dur: 4.5 },
-  embertrail:  { name: 'Ember Trail', icon: '🔥', mana: 21, cd: 12, type: 'trail', dur: 6, dmgMult: 0.5 },
-  sanctuary:   { name: 'Sanctuary', icon: '🛡', mana: 27, cd: 16, type: 'sanctuary', radius: 5.5, dur: 6 },
+  gravitylash: { name: 'Gravity Lash', icon: '', mana: 27, cd: 0, type: 'lash', range: 22 },
+  beartrap:    { name: 'Steel Trap', icon: '', mana: 15, cd: 6, type: 'trap', dmgMult: 1.2, root: 2.5, max: 3 },
+  chronobubble:{ name: 'Chrono Bubble', icon: '', mana: 33, cd: 16, type: 'freeze', radius: 6, range: 20, dur: 3.5 },
+  shadowswap:  { name: 'Shadow Swap', icon: '', mana: 21, cd: 9, type: 'swap', range: 18, critDur: 3 },
+  decoy:       { name: 'Straw Double', icon: '', mana: 24, cd: 14, type: 'decoy', hp: 140, dur: 9 },
+  frostprison: { name: 'Frost Prison', icon: '', mana: 27, cd: 11, type: 'prison', range: 20, dur: 4, vuln: 4 },
+  truesight:   { name: 'True Sight', icon: '', mana: 15, cd: 18, type: 'sight', dur: 12 },
+  levitate:    { name: 'Levitate', icon: '', mana: 24, cd: 14, type: 'levitate', dur: 4.5 },
+  embertrail:  { name: 'Ember Trail', icon: '', mana: 21, cd: 12, type: 'trail', dur: 6, dmgMult: 0.5 },
+  sanctuary:   { name: 'Sanctuary', icon: '', mana: 27, cd: 16, type: 'sanctuary', radius: 5.5, dur: 6 },
   // ---- the necromancer's school + shared dark exotics ----
-  raisedead:  { name: 'Raise Dead', icon: '⚰️', mana: 33, cd: 6, type: 'raise', cap: 4, dmgMult: 0.45 },
-  dominate:   { name: 'Dominate', icon: '🧿', mana: 36, cd: 14, type: 'charm', range: 20, dur: 9 },
-  soulharvest:{ name: 'Soul Harvest', icon: '🌾', mana: 30, cd: 11, type: 'harvest', radius: 8, dmgMult: 1.0, healFrac: 0.5 },
-  bloodpact:  { name: 'Blood Pact', icon: '🩸', mana: 0, cd: 9, type: 'pact', hpCost: 0.2, manaGain: 0.4 },
-  deathcoil:  { name: 'Death Coil', icon: '🌀', mana: 21, cd: 5, type: 'proj', dmgMult: 1.25, speed: 17, color: 0x77ff88, size: 1.2, vis: 'wisp', lifesteal: 0.5 },
+  raisedead:  { name: 'Raise Dead', icon: '', mana: 33, cd: 6, type: 'raise', cap: 4, dmgMult: 0.45 },
+  dominate:   { name: 'Dominate', icon: '', mana: 36, cd: 14, type: 'charm', range: 20, dur: 9 },
+  soulharvest:{ name: 'Soul Harvest', icon: '', mana: 30, cd: 11, type: 'harvest', radius: 8, dmgMult: 1.0, healFrac: 0.5 },
+  bloodpact:  { name: 'Blood Pact', icon: '', mana: 0, cd: 9, type: 'pact', hpCost: 0.2, manaGain: 0.4 },
+  deathcoil:  { name: 'Death Coil', icon: '', mana: 21, cd: 5, type: 'proj', dmgMult: 1.25, speed: 17, color: 0x77ff88, size: 1.2, vis: 'wisp', lifesteal: 0.5 },
   // new schools
-  mirrorimage: { name: 'Mirror Legion', icon: '👥', mana: 51, cd: 20, type: 'phantoms', count: 2, dur: 12, dmgMult: 0.5 },
-  stormlance: { name: 'Storm Lance', icon: '⚡', mana: 30, cd: 6, type: 'lightning', dmgMult: 1.7, range: 18, forks: 3, forkRange: 8, forkMult: 0.75, stun: 0.6 },
-  gravitywell: { name: 'Gravity Well', icon: '🌀', mana: 39, cd: 12, type: 'vortex', dmgMult: 1.1, radius: 6.5, range: 22, dur: 2.6, color: 0xbb66ff },
-  ricochet:   { name: 'Ricochet Orb', icon: '🪩', mana: 21, cd: 5, type: 'proj', dmgMult: 1.05, speed: 15, color: 0x66ffee, size: 1.3, vis: 'orb', bounce: 4 },
-  lifeward:   { name: 'Life Ward', icon: '💠', mana: 36, cd: 16, type: 'ward', frac: 0.07, radius: 6, dur: 8, tick: 1.0 },
+  mirrorimage: { name: 'Mirror Legion', icon: '', mana: 51, cd: 20, type: 'phantoms', count: 2, dur: 12, dmgMult: 0.5 },
+  stormlance: { name: 'Storm Lance', icon: '', mana: 30, cd: 6, type: 'lightning', dmgMult: 1.7, range: 18, forks: 3, forkRange: 8, forkMult: 0.75, stun: 0.6 },
+  gravitywell: { name: 'Gravity Well', icon: '', mana: 39, cd: 12, type: 'vortex', dmgMult: 1.1, radius: 6.5, range: 22, dur: 2.6, color: 0xbb66ff },
+  ricochet:   { name: 'Ricochet Orb', icon: '', mana: 21, cd: 5, type: 'proj', dmgMult: 1.05, speed: 15, color: 0x66ffee, size: 1.3, vis: 'orb', bounce: 4 },
+  lifeward:   { name: 'Life Ward', icon: '', mana: 36, cd: 16, type: 'ward', frac: 0.07, radius: 6, dur: 8, tick: 1.0 },
   // universal
-  bonewall:   { name: 'Bone Wall', icon: '🦴', mana: 24, cd: 12, type: 'wall', dur: 10, range: 12 },
+  bonewall:   { name: 'Bone Wall', icon: '', mana: 24, cd: 12, type: 'wall', dur: 10, range: 12 },
 };
 
 // ---------------- weapon affixes (rare+ weapons) ----------------
@@ -193,16 +193,16 @@ export const WEAPON_TYPES = {
 // Rare+ weapons can roll one: landing basic hits builds charge; at full charge
 // the weapon glows and key 4 unleashes it (costing mana + the charge).
 export const SIGNATURES = {
-  radiantbeam:   { name: 'Lance Array', icon: '🌟', mana: 20, hits: 8, desc: 'a piercing energy lance burns through everything in a line' },
-  firenova:      { name: 'Core Burst', icon: '💥', mana: 22, hits: 9, desc: 'your power core vents — plasma ignites the pack around you' },
-  thunderclap:   { name: 'Concussion Pulse', icon: '🌩', mana: 22, hits: 9, desc: 'a stunning shockwave slams outward from your frame' },
-  voidrip:       { name: 'Singularity', icon: '🕳', mana: 25, hits: 10, desc: 'collapse a hungry gravity well at your crosshair' },
-  lifedrain:     { name: 'Leech Field', icon: '🩸', mana: 18, hits: 8, desc: 'siphon power from every hostile near you' },
-  arrowstorm:    { name: 'Full Auto', icon: '🌪', mana: 20, hits: 8, desc: 'a fan of seven bolts in one trigger pull' },
-  frostwave:     { name: 'Cryo Sweep', icon: '❄️', mana: 20, hits: 8, desc: 'a coolant flood that chills all it touches' },
-  shadowflurry:  { name: 'Ghost Protocol', icon: '🌑', mana: 22, hits: 9, desc: 'phase-skip between the three nearest hostiles, striking each' },
-  earthsplitter: { name: 'Seismic Line', icon: '⛰', mana: 24, hits: 10, desc: 'a rupturing line of deck plating ahead of you' },
-  dragonsbreath: { name: 'Promethium Burn', icon: '🐉', mana: 24, hits: 10, desc: 'a cone of promethium fire that keeps burning' },
+  radiantbeam:   { name: 'Lance Array', icon: '', mana: 20, hits: 8, desc: 'a piercing energy lance burns through everything in a line' },
+  firenova:      { name: 'Core Burst', icon: '', mana: 22, hits: 9, desc: 'your power core vents — plasma ignites the pack around you' },
+  thunderclap:   { name: 'Concussion Pulse', icon: '', mana: 22, hits: 9, desc: 'a stunning shockwave slams outward from your frame' },
+  voidrip:       { name: 'Singularity', icon: '', mana: 25, hits: 10, desc: 'collapse a hungry gravity well at your crosshair' },
+  lifedrain:     { name: 'Leech Field', icon: '', mana: 18, hits: 8, desc: 'siphon power from every hostile near you' },
+  arrowstorm:    { name: 'Full Auto', icon: '', mana: 20, hits: 8, desc: 'a fan of seven bolts in one trigger pull' },
+  frostwave:     { name: 'Cryo Sweep', icon: '', mana: 20, hits: 8, desc: 'a coolant flood that chills all it touches' },
+  shadowflurry:  { name: 'Ghost Protocol', icon: '', mana: 22, hits: 9, desc: 'phase-skip between the three nearest hostiles, striking each' },
+  earthsplitter: { name: 'Seismic Line', icon: '', mana: 24, hits: 10, desc: 'a rupturing line of deck plating ahead of you' },
+  dragonsbreath: { name: 'Promethium Burn', icon: '', mana: 24, hits: 10, desc: 'a cone of promethium fire that keeps burning' },
 };
 export const OFFHAND_TYPES = {
   knight: { noun: 'Riot Plate', meshes: [], models: ['riotplate'], stat: 'armor' },
@@ -223,11 +223,11 @@ export const NAME_PREFIX = {
 export const NAME_SUFFIX = ['', '', 'of Embers', 'of the Hold', 'of the Core', 'of the Deep Void', 'of Echoes', 'of the Fallen Fleet'];
 export const TRINKET_NAMES = ['Ring', 'Amulet', 'Charm', 'Talisman', 'Signet'];
 export const TRINKET_STATS = [
-  { stat: 'crit', min: 4, max: 12, label: '% crit chance', icon: '🎯' },
-  { stat: 'speed', min: 0.3, max: 0.9, label: ' move speed', icon: '👢' },
-  { stat: 'hp', min: 12, max: 40, label: ' max HP', icon: '❤' },
-  { stat: 'mregen', min: 1, max: 3, label: ' mana/s', icon: '🔮' },
-  { stat: 'armor', min: 4, max: 12, label: '% damage reduction', icon: '🛡' },
+  { stat: 'crit', min: 4, max: 12, label: '% crit chance', icon: '' },
+  { stat: 'speed', min: 0.3, max: 0.9, label: ' move speed', icon: '' },
+  { stat: 'hp', min: 12, max: 40, label: ' max HP', icon: '' },
+  { stat: 'mregen', min: 1, max: 3, label: ' mana/s', icon: '' },
+  { stat: 'armor', min: 4, max: 12, label: '% damage reduction', icon: '' },
 ];
 
 // ---------------- enemies ----------------
@@ -377,23 +377,23 @@ export const scaleDmg = (dmg, floor) => Math.round(dmg * (1 + 0.13 * (floor - 1)
 export const XP_FOR_LEVEL = (lv) => Math.round(45 * Math.pow(lv, 1.35));
 
 export const SHOP_ITEMS = [
-  { id: 'potion', icon: '🧪', name: 'Combat Stim', desc: 'Restores 45% HP. Use with Q.', base: 25, grow: 6 },
-  { id: 'atk', icon: '⚔', name: 'Fire-Control Chip', desc: '+3 damage for this run.', base: 40, grow: 22 },
-  { id: 'hp', icon: '❤', name: 'Dermal Plating', desc: '+20 max HP and heal 20.', base: 40, grow: 22 },
-  { id: 'relic', icon: '💍', name: 'Sealed Requisition', desc: 'A random implant. Rarity scales with depth.', base: 70, grow: 25 },
-  { id: 'tome', icon: '📖', name: 'Firmware Patch', desc: 'Replace one of your abilities with another from your kit.', base: 55, grow: 20 },
-  { id: 'reforge', icon: '🔨', name: 'Refit Weapon', desc: 'A brand-new random weapon for your class.', base: 60, grow: 18 },
-  { id: 'offhand', icon: '🛡', name: 'Fabricate Offhand', desc: 'A random offhand item for your class.', base: 45, grow: 15 },
-  { id: 'merc', icon: '🤺', name: 'Hire Trooper', desc: 'A blade or rifle trooper fights beside you until slain.', base: 120, grow: 60 },
-  { id: 'arrows', icon: '⚡', name: 'Cell Magazine', desc: '+25 cells for your guns.', base: 20, grow: 0 },
+  { id: 'potion', icon: '', name: 'Combat Stim', desc: 'Restores 45% HP. Use with Q.', base: 25, grow: 6 },
+  { id: 'atk', icon: '', name: 'Fire-Control Chip', desc: '+3 damage for this run.', base: 40, grow: 22 },
+  { id: 'hp', icon: '', name: 'Dermal Plating', desc: '+20 max HP and heal 20.', base: 40, grow: 22 },
+  { id: 'relic', icon: '', name: 'Sealed Requisition', desc: 'A random implant. Rarity scales with depth.', base: 70, grow: 25 },
+  { id: 'tome', icon: '', name: 'Firmware Patch', desc: 'Replace one of your abilities with another from your kit.', base: 55, grow: 20 },
+  { id: 'reforge', icon: '', name: 'Refit Weapon', desc: 'A brand-new random weapon for your class.', base: 60, grow: 18 },
+  { id: 'offhand', icon: '', name: 'Fabricate Offhand', desc: 'A random offhand item for your class.', base: 45, grow: 15 },
+  { id: 'merc', icon: '', name: 'Hire Trooper', desc: 'A blade or rifle trooper fights beside you until slain.', base: 120, grow: 60 },
+  { id: 'arrows', icon: '', name: 'Cell Magazine', desc: '+25 cells for your guns.', base: 20, grow: 0 },
 ];
 
 // which building sells what (the old floor-merchant is gone — shop in town)
 export const SHOP_TABLES = {
-  blacksmith: { title: '⚒ The Armory', greet: '“Firepower solves most problems.”', items: ['atk', 'reforge', 'offhand', 'arrows'] },
-  alchemist: { title: '🧪 The Med Station', greet: '“Inject it. Probably not coolant.”', items: ['potion', 'hp'] },
-  arcanum: { title: '🔮 Requisitions', greet: '“Exotic hardware has a price.”', items: ['relic', 'potion'] },
-  tavern: { title: '🍺 The Crew Deck', greet: '“Guns for hire, rations for sale.”', items: ['merc', 'potion', 'arrows'] },
+  blacksmith: { title: 'The Armory', greet: '“Firepower solves most problems.”', items: ['atk', 'reforge', 'offhand', 'arrows'] },
+  alchemist: { title: 'The Med Station', greet: '“Inject it. Probably not coolant.”', items: ['potion', 'hp'] },
+  arcanum: { title: 'Requisitions', greet: '“Exotic hardware has a price.”', items: ['relic', 'potion'] },
+  tavern: { title: 'The Crew Deck', greet: '“Guns for hire, rations for sale.”', items: ['merc', 'potion', 'arrows'] },
 };
 
 // Weapon-ish meshes we hide by default; equipment then re-shows its kit.

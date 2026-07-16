@@ -107,7 +107,7 @@ export function destroyBuild(p, fromNet = false, cascade = false) {
   if (pi >= 0) b.pieces.splice(pi, 1);
   p.obj?.parent?.remove(p.obj);
   if (p.cols) fs.grid.colliders = fs.grid.colliders.filter(c => !p.cols.includes(c));
-  if (p.kind === 'post') b.posts.get(p.i + ',' + p.j)?.delete(p.base + LVL);
+  if (p.kind === 'post') b.posts.get(p.i +',' + p.j)?.delete(p.base + LVL);
   else if (p.kind === 'floor') {
     const fl = b.floors.get(p.idx);
     if (fl) { const k = fl.indexOf(p.h); if (k >= 0) fl.splice(k, 1); }
@@ -136,7 +136,7 @@ function checkCollapse(fs, post) {
     const fl = b.floors.get(idx);
     if (!fl || !fl.includes(top)) continue;
     const corners = [[cx, cy], [cx + 1, cy], [cx, cy + 1], [cx + 1, cy + 1]];
-    const supports = corners.filter(([i, j]) => (b.posts.get(i + ',' + j) || new Set()).has(top)).length;
+    const supports = corners.filter(([i, j]) => (b.posts.get(i +',' + j) || new Set()).has(top)).length;
     if (supports > 2) continue;
     collapseStorey(fs, cx, cy, top);
   }
@@ -168,13 +168,13 @@ function collapseStorey(fs, cx, cy, h) {
       if (k >= 0) fl[k] = p.h - delta;
       p.h -= delta; p.key = floorKey(idx, p.h); drop = true;
     } else if (p.kind === 'post' && isCorner(p) && p.base >= h) {
-      const set = b.posts.get(p.i + ',' + p.j);
+      const set = b.posts.get(p.i +',' + p.j);
       set?.delete(p.base + LVL); set?.add(p.base - delta + LVL);
       p.base -= delta; p.key = postKey(p.i, p.j, p.base + LVL); drop = true;
     } else if ((p.kind === 'wall' || p.kind === 'machine') && nearCell(p) && (p.base ?? 0) >= h) {
       if (p.kind === 'wall') {
         b.walls.delete(p.wkey);
-        p.wkey = p.wkey.replace(/,[^,]*$/, ',' + (p.base - delta));
+        p.wkey = p.wkey.replace(/,[^,]*$/,',' + (p.base - delta));
         b.walls.add(p.wkey);
         p.key = 'w:' + p.wkey;
       }
@@ -189,7 +189,7 @@ function collapseStorey(fs, cx, cy, h) {
       spawnBurst(new THREE.Vector3(cx * CELL + (i - 1) * 1.4, landing + 0.8 + i * 0.7, cy * CELL + (i - 1) * 1.1), 0xb9a684, 26, 6, 0.2, 0.9);
     }
     sfx.rumble();
-    addMsg('💨 A tower storey gives way!', 'bad');
+    addMsg('A tower storey gives way!', 'bad');
   }
 }
 
@@ -268,7 +268,7 @@ export function clearBuilds() {
 }
 
 const cornerWorld = (i, j) => ({ x: i * CELL - CELL / 2, z: j * CELL - CELL / 2 });
-const postTops = (b, i, j) => b.posts.get(i + ',' + j) || new Set();
+const postTops = (b, i, j) => b.posts.get(i +',' + j) || new Set();
 
 // ---------- aim & snapping ----------
 // look down to build near, look up to build far: the aim ray is projected onto
@@ -387,7 +387,7 @@ export function applyBuild(m, broadcast = true) {
   const group = fs.meshGroup || G.scene;
 
   if (m.kind === 'post') {
-    const key = m.i + ',' + m.j;
+    const key = m.i +',' + m.j;
     if (!b.posts.has(key)) b.posts.set(key, new Set());
     const top = m.base + LVL;
     if (b.posts.get(key).has(top)) return false;
@@ -448,7 +448,7 @@ export function toggleBuildMode(force = null) {
   if (!want && buildState.ghost) { G.scene.remove(buildState.ghost); buildState.ghost = null; }
   if (want) {
     const bp = BUILD_PIECES[buildState.idx];
-    addMsg(`🔨 BUILD — ${bp.label} (${bp.cost}g): ${bp.hint}. Scroll to switch, click to place, B to exit.`);
+    addMsg(`BUILD — ${bp.label} (${bp.cost}g): ${bp.hint}. Scroll to switch, click to place, B to exit.`);
   }
 }
 
@@ -457,7 +457,7 @@ export function cycleBuildPiece(dir) {
   buildState.idx = (buildState.idx + dir + BUILD_PIECES.length) % BUILD_PIECES.length;
   if (buildState.ghost) { G.scene.remove(buildState.ghost); buildState.ghost = null; }
   const bp = BUILD_PIECES[buildState.idx];
-  addMsg(`🔨 ${bp.label} — ${bp.cost}g · ${bp.hint}`);
+  addMsg(`${bp.label} — ${bp.cost}g · ${bp.hint}`);
 }
 
 function makeGhostFor(plan) {

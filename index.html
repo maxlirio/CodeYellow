@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>CodeYellow — Boarding Action</title>
-<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🏰</text></svg>">
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'></text></svg>">
 <link rel="stylesheet" href="css/style.css">
 <script src="https://unpkg.com/peerjs@1.5.4/dist/peerjs.min.js"></script>
 <script type="importmap">
@@ -41,7 +41,7 @@
     <div class="classes" id="classCards"></div>
     <div id="spellPick" class="hidden"><!-- abilities cut for the boarding pass; returns as tech -->
       <div class="sp-head">Choose your <span id="spKitWord">spells</span> (pick 3) — or leave it to fate:
-        <button id="spRandom" class="chip sel">🎲 Random each run</button></div>
+        <button id="spRandom" class="chip sel">Random each run</button></div>
       <div id="spellChips"></div>
     </div>
     <div class="customize">
@@ -53,19 +53,19 @@
       </div>
     </div>
     <div class="moderow">
-      <div class="modebtn sel" data-mode="campaign">⚔ Campaign<span>Descend &amp; slay the dragon</span></div>
-      <div class="modebtn" data-mode="horde">🏰 Last Stand<span>Build, hire, survive the waves</span></div>
-      <div class="modebtn" data-mode="duel">⚔ Duel<span>PvP: build &amp; battle rivals</span></div>
+      <div class="modebtn sel" data-mode="campaign">Campaign<span>Descend &amp; slay the dragon</span></div>
+      <div class="modebtn" data-mode="horde">Last Stand<span>Build, hire, survive the waves</span></div>
+      <div class="modebtn" data-mode="duel">Duel<span>PvP: build &amp; battle rivals</span></div>
     </div>
     <div class="menu-buttons">
-      <button id="btnSolo" class="big orange-btn">⚔ Play Solo</button>
-      <button id="btnHost" class="big">🕸 Host Co-op</button>
-      <label class="publabel"><input type="checkbox" id="pubToggle"> 📜 List my game on the tavern board</label>
+      <button id="btnSolo" class="big orange-btn">Play Solo</button>
+      <button id="btnHost" class="big">Host Co-op</button>
+      <label class="publabel"><input type="checkbox" id="pubToggle"> List my game on the tavern board</label>
       <div class="joinrow">
         <input id="joinCode" maxlength="5" placeholder="CODE" autocomplete="off">
         <button id="btnJoin" class="big">Join Co-op</button>
       </div>
-      <button id="btnBoard" class="big">🍺 Browse public games</button>
+      <button id="btnBoard" class="big">Browse public games</button>
     </div>
     <div class="menu-note">First-person · WASD move · Click attack · Shift aim · 1-3 spells · Space dash · E interact · Tab inventory</div>
     <div class="credits">Assets: <a href="https://kaylousberg.com" target="_blank">KayKit</a> (CC0) · three.js · PeerJS</div>
@@ -80,7 +80,7 @@
     <div id="lobbyStatus" class="lobby-status"></div>
     <ul id="lobbyList" class="lobby-list"></ul>
     <div class="menu-buttons">
-      <button id="btnStart" class="big orange-btn hidden">⚔ Start the Descent</button>
+      <button id="btnStart" class="big orange-btn hidden">Start the Descent</button>
       <button id="btnLeaveLobby" class="big">Leave</button>
     </div>
   </div>
@@ -104,12 +104,12 @@
     <div class="slot spell" id="spell1"><span class="sp-icon"></span><span class="key">2</span><div class="cdmask"></div></div>
     <div class="slot spell" id="spell2"><span class="sp-icon"></span><span class="key">3</span><div class="cdmask"></div></div>
     <div class="slot sig hidden" id="sigSlot"><div class="fill"></div><span class="icon"></span><span class="key">4</span></div>
-    <div class="slot" id="slotPotion">🧪 <b id="potionCount">0</b> <span class="key">Q</span></div>
-    <div class="slot hidden" id="slotArrows">⚡ <b id="arrowCount">0</b></div>
-    <div class="slot" id="slotDodge">⤴ <span class="key">SPACE</span><div class="cool" id="dodgeCool"></div></div>
-    <div class="slot">💰 <b id="goldCount">0</b></div>
-    <div class="slot">🏰 <b id="floorNum">1</b></div>
-    <div class="slot" id="slotBag">🎒 <span class="key">TAB</span></div>
+    <div class="slot" id="slotPotion"><span class="slot-tag">STIM</span> <b id="potionCount">0</b> <span class="key">Q</span></div>
+    <div class="slot hidden" id="slotArrows"><span class="slot-tag">CELLS</span> <b id="arrowCount">0</b></div>
+    <div class="slot" id="slotDodge"><span class="key">SPACE</span><div class="cool" id="dodgeCool"></div></div>
+    <div class="slot"><span class="slot-tag">CREDITS</span> <b id="goldCount">0</b></div>
+    <div class="slot"><span class="slot-tag">DECK</span> <b id="floorNum">1</b></div>
+    <div class="slot" id="slotBag"><span class="slot-tag">GEAR</span> <span class="key">TAB</span></div>
   </div>
   <div id="prompt" class="hidden"></div>
   <div id="msgs"></div>
@@ -120,7 +120,7 @@
 <!-- Inventory -->
 <div id="inventory" class="overlay">
   <div class="panel inv-panel">
-    <h2>🎒 Inventory</h2>
+    <h2>Inventory</h2>
     <div class="inv-cols">
       <div class="equip-col">
         <div class="equip-title">Equipped</div>
@@ -143,7 +143,7 @@
 <!-- Shop (town buildings) -->
 <div id="merchant" class="overlay">
   <div class="panel">
-    <h2 id="shopTitle">🕯 Shop</h2>
+    <h2 id="shopTitle">Shop</h2>
     <div class="subtitle" id="shopGreet"></div>
     <div class="shop" id="shopItems"></div>
     <div class="shop-gold">Your credits: <b id="shopGold">0</b></div>
@@ -154,7 +154,7 @@
 <!-- Home stash -->
 <div id="stash" class="overlay">
   <div class="panel inv-panel">
-    <h2>🏠 Your stash</h2>
+    <h2>Your stash</h2>
     <div class="subtitle">Stored safely in your house — it survives between runs.</div>
     <div class="inv-cols">
       <div class="bag-col">
@@ -173,12 +173,12 @@
 <!-- Hire choice -->
 <div id="hireDialog" class="overlay">
   <div class="panel">
-    <h2>🤺 Hire a mercenary — 120g</h2>
+    <h2>Hire a mercenary — 120g</h2>
     <div class="subtitle">They fight beside you until slain.</div>
     <div class="menu-buttons">
-      <button id="btnHireSword" class="big orange-btn">⚔ Sellsword — sturdy melee</button>
-      <button id="btnHireBow" class="big orange-btn">🏹 Marksman — ranged support</button>
-      <button id="btnHireWorker" class="big orange-btn hidden">🔧 Worker — crews machines (60g)</button>
+      <button id="btnHireSword" class="big orange-btn">Sellsword — sturdy melee</button>
+      <button id="btnHireBow" class="big orange-btn">Marksman — ranged support</button>
+      <button id="btnHireWorker" class="big orange-btn hidden">Worker — crews machines (60g)</button>
       <button id="btnHireCancel" class="big">Not now</button>
     </div>
   </div>
@@ -189,11 +189,11 @@
 
 <div id="commandMap" class="overlay">
   <div class="panel">
-    <h2>🗺 Commander</h2>
+    <h2>Commander</h2>
     <div class="subtitle">Click a minion, then click the field to station them there. Click your own marker to recall one.</div>
     <canvas id="cmdCanvas" width="640" height="640" class="cmd-canvas"></canvas>
     <div class="menu-buttons">
-      <button id="btnCmdFollowAll" class="big">📣 All follow me</button>
+      <button id="btnCmdFollowAll" class="big">All follow me</button>
       <button id="btnCloseCmd" class="big orange-btn">Done (M)</button>
     </div>
   </div>
@@ -202,7 +202,7 @@
 <!-- Combat codex: the drillmaster's exact numbers / the hunter's bestiary -->
 <div id="codexDialog" class="overlay">
   <div class="panel">
-    <h2 id="codexTitle">📖 Codex</h2>
+    <h2 id="codexTitle">Codex</h2>
     <div class="subtitle" id="codexSub"></div>
     <div id="codexBody" class="codex-body"></div>
     <div class="menu-buttons"><button id="btnCloseCodex" class="big orange-btn">Done</button></div>
@@ -212,7 +212,7 @@
 <!-- Spell tome: choose which spell to unbind -->
 <div id="tomeDialog" class="overlay">
   <div class="panel">
-    <h2>📖 Spell Tome</h2>
+    <h2>Spell Tome</h2>
     <div class="subtitle">Choose the spell to unbind — the tome teaches a new one from your school.</div>
     <div class="menu-buttons">
       <button id="btnTome0" class="big orange-btn"></button>
@@ -226,12 +226,12 @@
 <!-- Change venture (tavern wayfarer post) -->
 <div id="modeDialog" class="overlay">
   <div class="panel">
-    <h2>⚔ Change Venture</h2>
+    <h2>Change Venture</h2>
     <div class="subtitle">Your credits, gear, stims and levels travel with you.</div>
     <div class="menu-buttons">
-      <button id="btnModeCampaign" class="big orange-btn">⚔ Campaign — descend &amp; slay the dragon</button>
-      <button id="btnModeHorde" class="big orange-btn">🏰 Last Stand — build &amp; survive the waves</button>
-      <button id="btnModeDuel" class="big orange-btn">🤺 Duel — PvP in the arena</button>
+      <button id="btnModeCampaign" class="big orange-btn">Campaign — descend &amp; slay the dragon</button>
+      <button id="btnModeHorde" class="big orange-btn">Last Stand — build &amp; survive the waves</button>
+      <button id="btnModeDuel" class="big orange-btn">Duel — PvP in the arena</button>
       <button id="btnModeCancel" class="big">Stay the course</button>
     </div>
   </div>
@@ -240,7 +240,7 @@
 <!-- Floor select (village gate) -->
 <div id="floorSelect" class="overlay">
   <div class="panel">
-    <h2>⬇ The Dungeon Gate</h2>
+    <h2>The Dungeon Gate</h2>
     <div class="subtitle">Descend to any floor you've reached — or push into the unknown.</div>
     <div id="floorButtons" class="floor-grid"></div>
     <div class="menu-buttons"><button id="btnFloorCancel" class="big">Stay in town</button></div>
@@ -250,11 +250,11 @@
 <!-- Stairs choice -->
 <div id="stairsDialog" class="overlay">
   <div class="panel">
-    <h2>⬇ The way onward</h2>
+    <h2>The way onward</h2>
     <div class="subtitle" id="stairsSub"></div>
     <div class="menu-buttons">
-      <button id="btnGoDown" class="big orange-btn">⬇ Descend</button>
-      <button id="btnToTown" class="big">🏰 Return to town</button>
+      <button id="btnGoDown" class="big orange-btn">Descend</button>
+      <button id="btnToTown" class="big">Return to town</button>
       <button id="btnStayHere" class="big">Stay here</button>
     </div>
   </div>
@@ -263,11 +263,11 @@
 <!-- Tavern notice board: public games -->
 <div id="tavernBoard" class="overlay">
   <div class="panel">
-    <h2>📜 Public Games</h2>
+    <h2>Public Games</h2>
     <div class="subtitle">Adventurers looking for company. Listed rooms live while their host's tavern tab is open.</div>
     <div id="boardList" class="board-list"><div class="board-empty">Checking the board…</div></div>
     <div class="menu-buttons">
-      <button id="btnBoardRefresh" class="big">🔄 Refresh</button>
+      <button id="btnBoardRefresh" class="big">Refresh</button>
       <button id="btnBoardClose" class="big orange-btn">Close</button>
     </div>
   </div>
@@ -279,19 +279,19 @@
     <h2 id="deadTitle">You have fallen…</h2>
     <div id="deadStats" class="runstats"></div>
     <div id="respawnMsg" class="lobby-status hidden"></div>
-    <div class="menu-buttons"><button id="btnRestart" class="big orange-btn hidden">☠ Rise Again</button></div>
+    <div class="menu-buttons"><button id="btnRestart" class="big orange-btn hidden">Rise Again</button></div>
   </div>
 </div>
 
 <!-- Victory -->
 <div id="victory" class="overlay">
   <div class="panel">
-    <h2>🐉 Emberwing the Undying is slain!</h2>
+    <h2>Emberwing the Undying is slain!</h2>
     <div class="subtitle">Light returns to the depths.</div>
     <div id="victoryStats" class="runstats"></div>
     <div class="menu-buttons">
-      <button id="btnEndless" class="big">⬇ Keep descending (endless)</button>
-      <button id="btnMenu" class="big orange-btn">🏰 Back to menu</button>
+      <button id="btnEndless" class="big">Keep descending (endless)</button>
+      <button id="btnMenu" class="big orange-btn">Back to menu</button>
     </div>
   </div>
 </div>
@@ -318,7 +318,7 @@
     </table>
     <div class="menu-buttons">
       <button id="btnResume" class="big orange-btn">Resume</button>
-      <button id="btnPauseMode" class="big">⚔ Change Venture</button>
+      <button id="btnPauseMode" class="big">Change Venture</button>
       <button id="btnQuit" class="big">Abandon run</button>
     </div>
   </div>

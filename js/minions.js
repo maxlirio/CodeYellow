@@ -68,7 +68,7 @@ export function spawnMinion(kindId, owner, floor, x, z, id = null, broadcast = t
   const g = c.getContext('2d');
   g.font = 'bold 22px Trebuchet MS'; g.textAlign = 'center';
   g.strokeStyle = '#000'; g.lineWidth = 5;
-  const tagText = (kind.phantom ? '👤 ' : kind.worker ? '🔧 ' : kind.undead ? '💀 ' : '🤺 ') + kind.name;
+  const tagText = (kind.phantom ? '' : kind.worker ? '' : kind.undead ? '' : '') + kind.name;
   g.strokeText(tagText, 128, 28);
   g.fillStyle = kind.phantom ? '#cfe6ff' : '#9fd6ff';
   g.fillText(tagText, 128, 28);

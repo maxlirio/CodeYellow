@@ -48,7 +48,7 @@ function draw() {
   for (const m of machines) {
     if (m.f !== G.floor) continue;
     const [px, pz] = toPx(L, m.x, m.z);
-    ctx.fillText(m.kind === 'cannon' ? '💣' : '🏹', px, pz);
+    ctx.fillText(m.kind === 'cannon' ? '' : '', px, pz);
   }
   // enemies (mid-combat pvp view)
   const fs = L.fs;

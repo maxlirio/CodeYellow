@@ -37,7 +37,7 @@ export function rollWeapon(classId, floor, luck = 0) {
   const item = {
     uid: uidCounter++, slot: 'weapon', classId, wtype: wt.id, mesh: wt.mesh, model: wt.model,
     held: wt.held || null, held2: !!wt.held2, verb: wt.verb || 'slash',
-    name: itemName(rarity, wt.noun), rarity: rarity.id, icon: wt.ranged ? '🏹' : '⚔',
+    name: itemName(rarity, wt.noun), rarity: rarity.id, icon: wt.ranged ? '' : '',
     ranged: !!wt.ranged, atkTime: wt.atkTime || null,
     rangeAdd: wt.rangeAdd || 0, arcAdd: wt.arcAdd || 0, stunHit: wt.stunHit || 0,
     stats: { dmg },
@@ -79,7 +79,7 @@ export function rollOffhand(classId, floor, luck = 0) {
     : +(2.5 * rarity.mult + floor * 0.3).toFixed(1);
   return {
     uid: uidCounter++, slot: 'offhand', classId, mesh: [ot.meshes[idx]], model: ot.models[idx] || ot.models[0],
-    name: itemName(rarity, ot.noun), rarity: rarity.id, icon: '🛡',
+    name: itemName(rarity, ot.noun), rarity: rarity.id, icon: '',
     stats: { [ot.stat]: Math.min(ot.stat === 'armor' ? 30 : 99, val) },
   };
 }

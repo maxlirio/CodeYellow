@@ -219,7 +219,7 @@ function handleAsHost(conn, m) {
       break;
     case 'pdead': {
       const p = G.net.players.get(pid);
-      addMsg(`☠ ${p?.name || 'A companion'} has fallen!`, 'bad');
+      addMsg(`${p?.name || 'A companion'} has fallen!`, 'bad');
       relay(conn, { t: 'pdead', pid });
       callbacks.onPartyDeath?.();
       break;
@@ -422,7 +422,7 @@ function handleAsGuest(m) {
     }
     case 'pdead': {
       const p = G.net.players.get(m.pid);
-      addMsg(`☠ ${p?.name || 'A companion'} has fallen!`, 'bad');
+      addMsg(`${p?.name || 'A companion'} has fallen!`, 'bad');
       break;
     }
     case 'pleft':

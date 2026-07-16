@@ -848,7 +848,7 @@ function simulateDragon(e, fs, players, dt, mine) {
       d.mustLand = true;
       d.state = 'landing'; d.t = 0; d.strafed = false; d.skyT = 0;
       d.landAt = { x: target?.pos.x ?? d.home.x, z: target?.pos.z ?? d.home.z };
-      if (mine) addMsg('🐉 She folds her wings and DROPS—', 'bad');
+      if (mine) addMsg('She folds her wings and DROPS—', 'bad');
     }
   } else if (d.state === 'prowl') { d.skyT = 0; d.mustLand = false; }
   // wingbeat downdraft: dust storms beneath her when she flies low
@@ -920,12 +920,12 @@ function simulateDragon(e, fs, players, dt, mine) {
           // her prey is BELOW: she pours off the ledge onto them
           d.state = 'landing'; d.t = 0;
           d.landAt = { x: target.pos.x, z: target.pos.z };
-          if (mine) addMsg('🐉 She pours off the ledge toward you—', 'bad');
+          if (mine) addMsg('She pours off the ledge toward you—', 'bad');
           break;
         }
         d.state = 'takeoff'; d.t = 0;
         setEnemyState(e, 'chase');
-        if (mine) { sfx.bossroar(); addMsg('🐉 EMBERWING takes to the sky!', 'bad'); }
+        if (mine) { sfx.bossroar(); addMsg('EMBERWING takes to the sky!', 'bad'); }
         break;
       }
       if (d.atkCd <= 0) {
@@ -938,7 +938,7 @@ function simulateDragon(e, fs, players, dt, mine) {
           // TAIL SWEEP: a spinning lash at everything close
           d.state = 'tailsweep'; d.t = 0;
           setEnemyState(e, 'attack');
-          if (mine) addMsg('🐉 Her tail whips around!', 'bad');
+          if (mine) addMsg('Her tail whips around!', 'bad');
         } else if (td < 8 + (e.cfg.bodyR || 0)) {
           // CLAW SWIPE
           d.state = 'claw'; d.t = 0;
@@ -947,7 +947,7 @@ function simulateDragon(e, fs, players, dt, mine) {
           // LUNGING BITE: rear back, then explode forward
           d.state = 'lungewind'; d.t = 0;
           setEnemyState(e, 'idle');
-          if (mine) addMsg('🐉 She coils to lunge—', 'bad');
+          if (mine) addMsg('She coils to lunge—', 'bad');
         }
         d.atkCd = enraged ? 1.8 : 2.6;
       }
@@ -955,7 +955,7 @@ function simulateDragon(e, fs, players, dt, mine) {
       if (d.breathCd <= 0 && td > 7 && td < 22 && facing < 0.6) {
         d.state = 'rearup'; d.t = 0;
         setEnemyState(e, 'idle');
-        if (mine) { sfx.bossroar(); addMsg('🔥 She draws a deep breath…', 'bad'); }
+        if (mine) { sfx.bossroar(); addMsg('She draws a deep breath…', 'bad'); }
         netSend({ t: 'fx', f: e.floor, x: pos.x, y: 4, z: pos.z, color: 0xffaa00, big: 1 });
         d.breathCd = enraged ? 7 : 11;
       }
@@ -968,13 +968,13 @@ function simulateDragon(e, fs, players, dt, mine) {
         if (d.pain > e.maxHp * 0.18 && d.t > 12) { d.state = 'takeoff'; d.t = 0; d.pain = 0; }
       } else if (!d.finalStand) {
         d.finalStand = true;
-        if (mine) { sfx.bossroar(); addMsg('🐉 Wounded and wingless — her FINAL STAND!', 'bad'); G.shake = Math.max(G.shake || 0, 0.8); }
+        if (mine) { sfx.bossroar(); addMsg('Wounded and wingless — her FINAL STAND!', 'bad'); G.shake = Math.max(G.shake || 0, 0.8); }
         if (G.net.role === 'solo') G.slowmo = 1.4;
         e.dmg = Math.round(e.dmg * 1.35); // desperate strikes hit harder
       }
       if (d.state === 'takeoff') {
         setEnemyState(e, 'chase');
-        if (mine) { sfx.bossroar(); addMsg('🐉 EMBERWING takes to the sky!', 'bad'); G.shake = Math.max(G.shake || 0, 0.4); }
+        if (mine) { sfx.bossroar(); addMsg('EMBERWING takes to the sky!', 'bad'); G.shake = Math.max(G.shake || 0, 0.4); }
         hitPlayersWithin(9, 8, 15); // downdraft on liftoff
       }
       break;
@@ -1078,16 +1078,16 @@ function simulateDragon(e, fs, players, dt, mine) {
         const dl = Math.hypot(dx, dz) || 1;
         d.breath = { x0: pos.x, z0: pos.z, dx: dx / dl, dz: dz / dl, len: dl + 14, t: -0.9, tick: 0 };
         setEnemyState(e, 'attack');
-        if (mine) { sfx.bossroar(); addMsg('🔥 She strafes the hall with fire!', 'bad'); }
+        if (mine) { sfx.bossroar(); addMsg('She strafes the hall with fire!', 'bad'); }
       }
       if (d.t > 7) {
         if (fs.grid.dragonPerch && Math.random() < 0.4 && !enraged && !d.mustLand) {
           d.state = 'roostfly'; d.t = 0; d.strafed = false;
-          if (mine) addMsg('🐉 She wheels toward her tower—', 'bad');
+          if (mine) addMsg('She wheels toward her tower—', 'bad');
         } else {
           d.state = 'landing'; d.t = 0; d.strafed = false;
           d.landAt = { x: target?.pos.x ?? d.home.x, z: target?.pos.z ?? d.home.z };
-          if (mine) addMsg('🐉 She folds her wings and DROPS—', 'bad');
+          if (mine) addMsg('She folds her wings and DROPS—', 'bad');
           // scorch-ring telegraph where she will crash
           const ring = new THREE.Mesh(
             new THREE.RingGeometry(6.5, 8, 36),
@@ -1111,7 +1111,7 @@ function simulateDragon(e, fs, players, dt, mine) {
         pos.x = pr.x; pos.y = pr.y + 0.5; pos.z = pr.z;
         d.state = 'roost'; d.t = 0; d.roostCd = 1.2;
         setEnemyState(e, 'idle');
-        if (mine) { sfx.bossroar(); addMsg('🐉 She ROOSTS on the tower, wings mantled.', 'bad'); }
+        if (mine) { sfx.bossroar(); addMsg('She ROOSTS on the tower, wings mantled.', 'bad'); }
       }
       break;
     }
@@ -1383,7 +1383,7 @@ export function killEnemy(e, source = 'local', fromNet = false) {
     G.run.gold += gold;
     G.run.kills++;
     gainXp(Math.round(e.cfg.xp * e.xpMult));
-    addMsg(`${e.boss ? '💀 Boss defeated!' : e.elite ? '⭐ Elite destroyed!' : 'Skeleton destroyed'} +${gold}g`, e.boss || e.elite ? 'gold' : '');
+    addMsg(`${e.boss ? 'Boss defeated!' : e.elite ? 'Elite destroyed!' : 'Skeleton destroyed'} +${gold}g`, e.boss || e.elite ? 'gold' : '');
   }
   // item drops (authority rolls & shares the actual item)
   if (isAuthority() && !fromNet && source !== 'none') {
