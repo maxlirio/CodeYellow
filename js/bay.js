@@ -66,7 +66,7 @@ export function generateBayData() {
       label: 'Med Station', tints: [], x: 13.5 * CELL, z: 6 * CELL },
     { model: 'Astronaut_FinnTheFrog', name: 'Artificer Hale', shop: 'arcanum', mscale: 0.62,
       label: 'Requisitions', tints: [], x: 16 * CELL, z: 8.5 * CELL },
-    { model: 'Character_Soldier', name: 'Sgt. Vasquez', shop: 'tavern', mscale: 0.85,
+    { model: 'Character_Soldier', name: 'Sgt. Vasquez', shop: 'tavern', mscale: 0.85, show: ['AK'],
       label: 'Crew Deck', tints: [], x: 10 * CELL, z: 12 * CELL },
     { model: null, noModel: true, name: 'Mission Console', shop: 'board',
       label: 'Mission Console', x: 17.8 * CELL, z: 14.8 * CELL },

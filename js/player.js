@@ -108,7 +108,8 @@ export function refreshEquipVisuals() {
   refreshSigSlot();
   p.maxHp = effectiveMaxHp();
   p.hp = Math.min(p.hp, p.maxHp);
-  netSend({ t: 'equip', meshes, held: heldName, held2: !!w?.held2 });
+  G.lastEquipMsg = { t: 'equip', meshes, held: heldName, held2: !!w?.held2 };
+  netSend(G.lastEquipMsg);
   refreshHud();
 }
 
@@ -430,6 +431,13 @@ export function updatePlayer(dt) {
       refreshHud();
     }
   }
+  // equip self-heal: teammates re-learn what you're holding even if they
+  // missed the one-shot equip broadcast (late join, remote-creation race)
+  if (G.net?.role && G.net.role !== 'solo' && G.lastEquipMsg) {
+    p.equipSyncT = (p.equipSyncT || 0) + dt;
+    if (p.equipSyncT > 3) { p.equipSyncT = 0; netSend(G.lastEquipMsg); }
+  }
+
   // unstick self-heal: if we ever end up inside geometry (bad landing,
   // desync, a wall raised nearby), nudge to the nearest free spot.
   // Tests the BODY, not just the centre: with a centre-only test you could be
@@ -822,7 +830,7 @@ function doAttackHit() {
     const b = {
       x: p.obj.position.x + dir.x * 0.7, z: p.obj.position.z + dir.z * 0.7, y: p.obj.position.y + 1.45,
       dirX: dir.x + sx, dirY: dir.y + sy, dirZ: dir.z + sz,
-      speed: G.inv.weapon?.ranged ? 28 : 20, dmg: boltDmg, size: boltSize, owner: 'player', basic: true,
+      speed: G.inv.weapon?.ranged ? 40 : 30, dmg: boltDmg, size: boltSize, owner: 'player', basic: true, // lasers are QUICK
       color: G.inv.weapon?.ranged ? 0xddcc99 : (p.cls.boltColor || 0xff8833),
       vis: G.inv.weapon?.ranged ? 'arrow' : (p.cls.boltVis || 'fire'),
       slow: wfx?.slow || null, poison: wfx?.poison || null, lifesteal: wfx?.lifesteal || 0,
@@ -1222,6 +1230,9 @@ export function removeRemotePlayer(pid) {
 export function applyRemoteEquip(pid, meshes, held, held2) {
   const r = G.remotes.get(pid);
   if (!r) return;
+  const key = JSON.stringify([meshes, held, held2]);
+  if (r.equipKey === key) return; // periodic self-heal pulse, nothing changed
+  r.equipKey = key;
   setEquipMeshes(r.obj, meshes);
   attachHeldWeapon(r.obj, held, held2);
 }

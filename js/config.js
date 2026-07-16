@@ -39,7 +39,7 @@ export const CLASSES = {
     spellPool: ['fireball', 'frostshard', 'chainlightning', 'meteor', 'blizzard', 'arcaneorb', 'bonewall', 'stormlance', 'mirrorimage', 'gravitywell', 'ricochet', 'gravitylash', 'chronobubble', 'frostprison', 'levitate', 'sanctuary'],
   },
   ranger: {
-    name: 'Marksman', icon: '', model: 'Character_Soldier', scale: 0.85,
+    name: 'Marksman', icon: '', model: 'Character_Soldier', scale: 0.85, 
     desc: 'Ship-security veteran. Pulse rifles fire where you aim — count your cells.',
     hp: 95, dmg: 14, speed: 9.0, crit: 0.15, attackAnims: ['2H_Ranged_Shoot'],
     attackTime: 0.95, attackRange: 28, attackArc: 0, mana: 80, manaRegen: 2.5,
@@ -181,11 +181,11 @@ export const WEAPON_TYPES = {
     { id: 'coolantlance', noun: 'Coolant Lance', mesh: [], model: 'blaster-b', verb: 'cast', dmgBonus: 0.9, atkTime: 0.45, manaRegenAdd: 1.5, sigPool: ['frostwave', 'voidrip'] },
   ],
   ranger: [
-    { id: 'pulsecarbine', noun: 'Pulse Carbine', mesh: [], model: 'blaster-d', verb: 'shoot', ranged: true, sigPool: ['arrowstorm', 'frostwave'] },
-    { id: 'longlas', noun: 'Long-Las', mesh: [], model: 'blaster-e', verb: 'shoot', ranged: true, dmgBonus: 1.35, atkTime: 1.15, sigPool: ['arrowstorm', 'thunderclap'] },
-    { id: 'needler', noun: 'Needler', mesh: [], model: 'blaster-j', verb: 'shoot', ranged: true, dmgBonus: 0.8, atkTime: 0.45, sigPool: ['arrowstorm', 'frostwave'] },
-    { id: 'marauder', noun: 'Marauder Rifle', mesh: [], model: 'blaster-f', verb: 'shoot', ranged: true, dmgBonus: 1.2, atkTime: 1.0, critAdd: 0.06, minRarity: 2, sigPool: ['radiantbeam', 'arrowstorm'] },
-    { id: 'suppressor', noun: 'Suppressor', mesh: [], model: 'blaster-p', verb: 'shoot', ranged: true, dmgBonus: 1.0, atkTime: 0.7, lifestealAdd: 0.05, minRarity: 1, sigPool: ['dragonsbreath', 'lifedrain'] },
+    { id: 'pulsecarbine', noun: 'Pulse Carbine', mesh: ['AK'], model: 'blaster-d', verb: 'shoot', ranged: true, sigPool: ['arrowstorm', 'frostwave'] },
+    { id: 'longlas', noun: 'Long-Las', mesh: ['Sniper'], model: 'blaster-e', verb: 'shoot', ranged: true, dmgBonus: 1.35, atkTime: 1.15, sigPool: ['arrowstorm', 'thunderclap'] },
+    { id: 'needler', noun: 'Needler', mesh: ['SMG'], model: 'blaster-j', verb: 'shoot', ranged: true, dmgBonus: 0.8, atkTime: 0.45, sigPool: ['arrowstorm', 'frostwave'] },
+    { id: 'marauder', noun: 'Marauder Rifle', mesh: ['Sniper_2'], model: 'blaster-f', verb: 'shoot', ranged: true, dmgBonus: 1.2, atkTime: 1.0, critAdd: 0.06, minRarity: 2, sigPool: ['radiantbeam', 'arrowstorm'] },
+    { id: 'suppressor', noun: 'Suppressor', mesh: ['Shotgun'], model: 'blaster-p', verb: 'shoot', ranged: true, dmgBonus: 1.0, atkTime: 0.7, lifestealAdd: 0.05, minRarity: 1, sigPool: ['dragonsbreath', 'lifedrain'] },
   ],
 };
 
@@ -237,6 +237,10 @@ const QA = 'CharacterArmature|';
 export const ANIM_ROBOT = { idle: 'Idle', walk: 'Walking', run: 'Running', attack: ['Punch'], hit: 'No', death: 'Death' };
 export const ANIM_MECH = { idle: 'Idle', walk: 'Walk', run: 'Run', attack: ['Kick', 'Punch', 'SwordSlash'], hit: 'HitRecieve_1', death: 'Death' };
 export const ANIM_TROOP = { idle: 'Idle', walk: 'Walk', run: 'Run_Gun', attack: ['Idle_Shoot', 'Punch'], hit: 'HitReact', death: 'Death' };
+// cyberpunk kit (QA-prefixed clips; the flyer says 'Dead', the rest 'Death')
+export const ANIM_CYBER = { idle: QA + 'Idle', walk: QA + 'Walk', run: QA + 'Run', attack: [QA + 'Attack', QA + 'Attack.001'], hit: QA + 'Jump', death: QA + 'Death' };
+export const ANIM_CYBERFLY = { idle: QA + 'Idle', walk: QA + 'Run', run: QA + 'Run', attack: [QA + 'Attack', QA + 'Shoot'], hit: QA + 'Idle', death: QA + 'Dead' };
+export const ANIM_CYBERHERO = { idle: QA + 'Idle_Sword', walk: QA + 'Walk', run: QA + 'Run', attack: [QA + 'Sword_Slash', QA + 'Kick_Right'], hit: QA + 'HitRecieve', death: QA + 'Death' };
 export const ANIM_HUSK = { idle: 'Idle', walk: 'Walk', run: 'Run', attack: ['Punch'], hit: 'HitReact', death: 'Death' };
 export const ANIM_VOID = { idle: 'Flying_Idle', walk: 'Fast_Flying', run: 'Fast_Flying', attack: ['Headbutt', 'Punch'], hit: 'HitReact', death: 'Death' };
 export const ANIM_GROUND = { idle: QA + 'Idle', walk: QA + 'Walk', run: QA + 'Run', attack: [QA + 'Punch', QA + 'Weapon'], hit: QA + 'HitReact', death: QA + 'Death' };
@@ -246,35 +250,35 @@ export const ENEMIES = {
   // ---- the hulk's machine crew (RobotExpressive family: one rig, many frames) ----
   minion:   { name: 'Scrap Drone', model: 'RobotExpressive', animMap: 'robot', hp: 32, dmg: 9,  speed: 4.8, range: 2.2, xp: 12, gold: [2, 7],  attackTime: 0.9, aggro: 11, scale: 0.42, paint: 0x4aa8ff },
   rogue:    { name: 'Scuttle Unit', model: 'RobotExpressive', animMap: 'robot', hp: 26, dmg: 7,  speed: 6.6, range: 2.1, xp: 15, gold: [3, 8],  attackTime: 0.7, aggro: 13, scale: 0.36, paint: 0x2fe8d0 },
-  warrior:  { name: 'Warframe', model: 'Leela', animMap: 'mech', hp: 62, dmg: 14, speed: 3.9, range: 2.4, xp: 24, gold: [5, 12], attackTime: 1.1, aggro: 10, scale: 0.4 },
+  warrior:  { name: 'Warframe', model: 'Cyber_Enemy_2Legs_Gun', animMap: 'cyber', hp: 62, dmg: 14, speed: 3.9, range: 2.4, xp: 24, gold: [5, 12], attackTime: 1.1, aggro: 10, scale: 2.0 },
   bomber:   { name: 'Volatile Cell', model: 'RobotExpressive', animMap: 'robot', hp: 24, dmg: 22, speed: 6.6, range: 1.8, xp: 20, gold: [4, 9],  attackTime: 0.4, aggro: 13, scale: 0.34, paint: 0x8aff2e, explode: 3.6 },
   berserker:{ name: 'Feral Husk', model: 'Enemy_Large', animMap: 'husk', hp: 44, dmg: 11, speed: 5.6, range: 2.2, xp: 36, gold: [8, 16], attackTime: 0.55, aggro: 14, scale: 0.7, tint: 0xffb4a4, enrage: true },
-  brute:    { name: 'Loader Frame', model: 'RobotExpressive', animMap: 'robot', hp: 55, dmg: 15, speed: 4.0, range: 2.4, xp: 30, gold: [7, 14], attackTime: 1.1, aggro: 11, scale: 0.6, paint: 0xff9226, kbHit: 7 },
+  brute:    { name: 'Loader Frame', model: 'Cyber_Enemy_Large', animMap: 'cyber', hp: 55, dmg: 15, speed: 4.0, range: 2.4, xp: 30, gold: [7, 14], attackTime: 1.1, aggro: 11, scale: 2.1, kbHit: 7 },
   goblin:   { name: 'Scuttle Swarm', model: 'RobotExpressive', animMap: 'robot', hp: 20, dmg: 6, speed: 6.8, range: 1.9, xp: 10, gold: [2, 5], attackTime: 0.7, aggro: 13, scale: 0.28, paint: 0xd6ff2e, trio: true },
-  orcwar:   { name: 'Vault Scavenger', model: 'Character_Hazmat', animMap: 'troop', hp: 55, dmg: 13, speed: 5.2, range: 2.4, xp: 26, gold: [6, 12], attackTime: 0.95, aggro: 12, scale: 0.85 },
+  orcwar:   { name: 'Vault Scavenger', model: 'Character_Hazmat', animMap: 'troop', show: ['Shovel'], hp: 55, dmg: 13, speed: 5.2, range: 2.4, xp: 26, gold: [6, 12], attackTime: 0.95, aggro: 12, scale: 0.85 },
   // ---- the scavenger crews still living aboard (toon-shooter rigs, guns baked in) ----
-  mage:     { name: 'Hull Raider', model: 'Character_Enemy', animMap: 'troop', hp: 38, dmg: 11, speed: 3.6, range: 14,  xp: 26, gold: [6, 12], attackTime: 1.4, aggro: 15, scale: 0.85, ranged: true, boltVis: 'laser', boltColor: 0xff5533 },
-  frostmage:{ name: 'Cryo Raider', model: 'Character_Enemy', animMap: 'troop', hp: 40, dmg: 9,  speed: 3.4, range: 14,  xp: 30, gold: [7, 14], attackTime: 1.5, aggro: 15, scale: 0.85, ranged: true, slowBolt: true, boltVis: 'laser', boltColor: 0x77ddff },
-  sniper:   { name: 'Marksman Unit', model: 'Character_Enemy', animMap: 'troop', hp: 26, dmg: 13, speed: 4.5, range: 18,  xp: 34, gold: [8, 15], attackTime: 1.7, aggro: 20, scale: 0.85, ranged: true, boltSpeed: 24, boltVis: 'laser', boltColor: 0xffe14d },
+  mage:     { name: 'Hull Raider', model: 'Character_Enemy', animMap: 'troop', show: ['AK'], hp: 38, dmg: 11, speed: 3.6, range: 14,  xp: 26, gold: [6, 12], attackTime: 1.4, aggro: 15, scale: 0.85, ranged: true, boltVis: 'laser', boltColor: 0xff5533, boltSpeed: 30 },
+  frostmage:{ name: 'Cryo Raider', model: 'Character_Enemy', animMap: 'troop', show: ['ShortCannon'], hp: 40, dmg: 9,  speed: 3.4, range: 14,  xp: 30, gold: [7, 14], attackTime: 1.5, aggro: 15, scale: 0.85, ranged: true, slowBolt: true, boltVis: 'laser', boltColor: 0x77ddff, boltSpeed: 28 },
+  sniper:   { name: 'Marksman Unit', model: 'Character_Enemy', animMap: 'troop', show: ['Sniper'], hp: 26, dmg: 13, speed: 4.5, range: 18,  xp: 34, gold: [8, 15], attackTime: 1.7, aggro: 20, scale: 0.85, ranged: true, boltSpeed: 34, boltVis: 'laser', boltColor: 0xffe14d },
   // ---- corrupted holograms: the ship remembers its crew ----
   ghost:    { name: 'Echo', model: 'Astronaut_RaeTheRedPanda', animMap: 'troop', hp: 34, dmg: 13, speed: 3.1, range: 2.0, xp: 32, gold: [8, 15], attackTime: 0.9, aggro: 17, scale: 0.62, ghost: true },
-  shade:    { name: 'Phantom Signal', model: 'Character_Enemy', animMap: 'troop', hp: 28, dmg: 10, speed: 5.4, range: 2.0, xp: 34, gold: [8, 16], attackTime: 0.6, aggro: 18, scale: 0.85, ghost: true },
+  shade:    { name: 'Phantom Signal', model: 'Character_Enemy', animMap: 'troop', show: ['Knife_1'], hp: 28, dmg: 10, speed: 5.4, range: 2.0, xp: 34, gold: [8, 16], attackTime: 0.6, aggro: 18, scale: 0.85, ghost: true },
   // ---- fabrication: the hulk prints its own defenders ----
-  necromancer: { name: 'Fabricator Unit', model: 'Leela', animMap: 'mech', hp: 46, dmg: 10, speed: 3.2, range: 13, xp: 42, gold: [10, 20], attackTime: 1.5, aggro: 15, scale: 0.5, ranged: true, tint: 0xddaaff, boltVis: 'wisp', boltColor: 0xbb66ff, summons: true, summonEvery: 12, summonType: 'minion', summonCount: 1 },
+  necromancer: { name: 'Fabricator Unit', model: 'Leela', animMap: 'mech', hp: 46, dmg: 10, speed: 3.2, range: 13, xp: 42, gold: [10, 20], attackTime: 1.5, aggro: 15, scale: 0.5, ranged: true, tint: 0xddaaff, boltVis: 'laser', boltColor: 0xbb66ff, boltSpeed: 26, summons: true, summonEvery: 12, summonType: 'minion', summonCount: 1 },
   plaguebearer:{ name: 'Blight Drifter', model: 'Enemy_Flying', animMap: 'void', hp: 38, dmg: 8, speed: 4.4, range: 2.2, xp: 38, gold: [9, 17], attackTime: 0.95, aggro: 12, scale: 0.6, fly: true, tint: 0xa8e090, plague: { dps: 4, dur: 4 }, deathCloud: 3.2 },
   juggernaut:{ name: 'Siegewalker', model: 'Mike', animMap: 'mech', hp: 120, dmg: 18, speed: 2.7, range: 2.6, xp: 55, gold: [14, 26], attackTime: 1.3, aggro: 10, scale: 0.55, tint: 0xb8b8cc, stalwart: true },
   ogre:     { name: 'Wrecking Frame', model: 'Stan', animMap: 'mech', hp: 140, dmg: 24, speed: 3.4, range: 2.9, xp: 60, gold: [15, 28], attackTime: 1.5, aggro: 11, scale: 0.58, stalwart: true, kbHit: 8 },
   // ---- void vermin: what got in through the breaches ----
-  imp:      { name: 'Spark Mote', model: 'Enemy_ExtraSmall', animMap: 'void', hp: 30, dmg: 10, speed: 5.5, range: 9, xp: 28, gold: [7, 13], attackTime: 1.3, aggro: 15, scale: 0.85, fly: true, ranged: true, boltVis: 'wisp', boltColor: 0x88ccff },
+  imp:      { name: 'Gun Drone', model: 'Cyber_Enemy_Flying_Gun', animMap: 'cyberfly', hp: 30, dmg: 10, speed: 5.5, range: 9, xp: 28, gold: [7, 13], attackTime: 1.3, aggro: 15, scale: 1.7, fly: true, ranged: true, boltVis: 'laser', boltColor: 0x88ccff, boltSpeed: 26 },
   slime:    { name: 'Nanite Mass', model: 'Slime', animMap: 'critter', hp: 40, dmg: 8, speed: 3.4, range: 2.0, xp: 24, gold: [5, 10], attackTime: 1.0, aggro: 11, scale: 0.7, tint: 0xa8fff0, splitInto: 'slimelet' },
   slimelet: { name: 'Nanite Glob', model: 'Slime', animMap: 'critter', hp: 14, dmg: 5, speed: 5.4, range: 1.7, xp: 8, gold: [1, 3], attackTime: 0.8, aggro: 14, scale: 0.4, tint: 0xd0fff6 },
   glub:     { name: 'Void Drifter', model: 'Enemy_Flying', animMap: 'void', hp: 34, dmg: 11, speed: 4.6, range: 2.2, xp: 30, gold: [8, 14], attackTime: 1.0, aggro: 15, scale: 0.55, fly: true },
-  drake:    { name: 'Plasma Wraith', model: 'Enemy_Flying', animMap: 'void', hp: 90, dmg: 18, speed: 6.0, range: 10, xp: 70, gold: [20, 35], attackTime: 1.4, aggro: 18, scale: 0.85, fly: true, ranged: true, tint: 0xffb0a0, boltVis: 'fireball', boltSpeed: 15 },
+  drake:    { name: 'Plasma Wraith', model: 'Enemy_Flying', animMap: 'void', hp: 90, dmg: 18, speed: 6.0, range: 10, xp: 70, gold: [20, 35], attackTime: 1.4, aggro: 18, scale: 0.85, fly: true, ranged: true, tint: 0xffb0a0, boltVis: 'fireball', boltSpeed: 22 },
   // bosses (deck 3/6 rolls one archetype; deck 9 is still the old god below)
   boss:     { model: 'George', animMap: 'mech', hp: 380, dmg: 22, speed: 4.6, range: 3.4, xp: 170, gold: [60, 90], attackTime: 1.1, aggro: 30, scale: 0.62, boss: true, bossName: 'THE HULK WARDEN', stalwart: true },
-  necrolord:{ model: 'Leela', animMap: 'mech', hp: 300, dmg: 18, speed: 3.8, range: 15, xp: 180, gold: [60, 95], attackTime: 1.3, aggro: 30, scale: 0.68, boss: true, ranged: true, tint: 0xddaaff, boltVis: 'wisp', boltColor: 0xbb66ff, summons: true, summonEvery: 8, summonType: 'minion', summonCount: 2, bossName: 'FABRICATOR PRIME', bossMsg: 'prints fresh frames' },
-  reaper:   { model: 'Character_Enemy', animMap: 'troop', hp: 320, dmg: 20, speed: 6.8, range: 2.8, xp: 180, gold: [60, 95], attackTime: 0.6, aggro: 32, scale: 1.3, boss: true, ghost: true, bossName: 'THE SILENT PROTOCOL' },
-  boneking: { model: 'George', animMap: 'mech', hp: 620, dmg: 26, speed: 4.2, range: 16,  xp: 420, gold: [150, 220], attackTime: 1.3, aggro: 40, scale: 0.8, ranged: true, boltVis: 'laser', boltColor: 0xff3322, boss: true, summons: true, summonEvery: 9, summonType: 'minion', summonCount: 2, tint: 0xffb8a8, bossName: 'THE FOUNDRY TYRANT' },
+  necrolord:{ model: 'Leela', animMap: 'mech', hp: 300, dmg: 18, speed: 3.8, range: 15, xp: 180, gold: [60, 95], attackTime: 1.3, aggro: 30, scale: 0.68, boss: true, ranged: true, tint: 0xddaaff, boltVis: 'laser', boltColor: 0xbb66ff, boltSpeed: 28, summons: true, summonEvery: 8, summonType: 'minion', summonCount: 2, bossName: 'FABRICATOR PRIME', bossMsg: 'prints fresh frames' },
+  reaper:   { model: 'Cyber_Character', animMap: 'cyberhero', hp: 320, dmg: 20, speed: 6.8, range: 2.8, xp: 180, gold: [60, 95], attackTime: 0.6, aggro: 32, scale: 2.3, boss: true, ghost: true, bossName: 'THE SILENT PROTOCOL' },
+  boneking: { model: 'George', animMap: 'mech', hp: 620, dmg: 26, speed: 4.2, range: 16,  xp: 420, gold: [150, 220], attackTime: 1.3, aggro: 40, scale: 0.8, ranged: true, boltVis: 'laser', boltColor: 0xff3322, boltSpeed: 30, boss: true, summons: true, summonEvery: 9, summonType: 'minion', summonCount: 2, tint: 0xffb8a8, bossName: 'THE FOUNDRY TYRANT' },
   mushking: { model: 'MushroomKing', animMap: 'ground', hp: 350, dmg: 20, speed: 4.4, range: 3.0, xp: 190, gold: [70, 100], attackTime: 1.2, aggro: 30, scale: 1.35, boss: true, stalwart: true, tint: 0xc0ffd0, summons: true, summonEvery: 10, summonType: 'slimelet', summonCount: 3, bossName: 'THE SPORE ENGINE', bossMsg: 'vents spores' },
   // deck 9: the old god of the reactor — still the dragon, pending its own rebuild
   // solidR = her TORSO: you must walk around it. bodyR (4.5) is her whole reach,
@@ -399,6 +403,10 @@ export const SHOP_TABLES = {
 // Weapon-ish meshes we hide by default; equipment then re-shows its kit.
 export const WEAPON_MESHES = [
   'Pistol', // Ultimate Space Kit astronauts carry a toggleable sidearm mesh
+  // Toon-shooter rigs ship a WHOLE ARSENAL parented to the right hand — all
+  // visible unless hidden here. (This was the sword+gun+launcher overlap.)
+  'AK', 'GrenadeLauncher', 'Knife_1', 'Knife_2', 'Revolver', 'Revolver_Small',
+  'RocketLauncher', 'ShortCannon', 'Shotgun', 'Shovel', 'SMG', 'Sniper', 'Sniper_2',
   '1H_Sword', '1H_Sword_Offhand', '2H_Sword', 'Badge_Shield', 'Rectangle_Shield', 'Round_Shield', 'Spike_Shield',
   '1H_Axe', '1H_Axe_Offhand', '2H_Axe', 'Barbarian_Round_Shield', 'Mug',
   'Spellbook', 'Spellbook_open', '1H_Wand', '2H_Staff',

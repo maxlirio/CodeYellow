@@ -3,7 +3,7 @@
 // floor-namespaced and deterministic (floor*1000+index; summons get 500+).
 import * as THREE from 'three';
 import { G, floorState } from './state.js';
-import { ENEMIES, scaleHp, scaleDmg, ANIM_GROUND, ANIM_CRITTER, ANIM_FLYER, ANIM_ROBOT, ANIM_MECH, ANIM_TROOP, ANIM_VOID } from './config.js';
+import { ENEMIES, scaleHp, scaleDmg, ANIM_GROUND, ANIM_CRITTER, ANIM_FLYER, ANIM_ROBOT, ANIM_MECH, ANIM_TROOP, ANIM_VOID, ANIM_HUSK, ANIM_CYBER, ANIM_CYBERFLY, ANIM_CYBERHERO } from './config.js';
 import { makeCharacter, tintCharacter, makeWeaponModel } from './assets.js';
 import { makeBlobShadow, spawnDamageNumber, spawnBurst, makeGlowSprite } from './fx.js';
 import { sfx } from './audio.js';
@@ -37,7 +37,7 @@ export function spawnEnemy(fs, type, x, z, { y = 0, elite = false, id = null } =
   const cfg = ENEMIES[type];
   const { obj, anim } = cfg.procDragon
     ? { obj: buildDragonModel(), anim: DUMMY_ANIM }
-    : makeCharacter('enemy', cfg.model);
+    : makeCharacter('enemy', cfg.model, cfg.show || []); // rigs with baked arsenals show ONE weapon
   obj.position.set(x, y, z);
   const scale = cfg.scale * (elite ? 1.28 : 1);
   obj.scale.setScalar(scale);
@@ -291,7 +291,7 @@ function updateDragonFlames(dt) {
 const _muzzle = new THREE.Vector3();
 const _muzDir = new THREE.Vector3();
 
-const ANIM_MAPS = { ground: ANIM_GROUND, critter: ANIM_CRITTER, flyer: ANIM_FLYER, robot: ANIM_ROBOT, mech: ANIM_MECH, troop: ANIM_TROOP, void: ANIM_VOID };
+const ANIM_MAPS = { ground: ANIM_GROUND, critter: ANIM_CRITTER, flyer: ANIM_FLYER, robot: ANIM_ROBOT, mech: ANIM_MECH, troop: ANIM_TROOP, void: ANIM_VOID, husk: ANIM_HUSK, cyber: ANIM_CYBER, cyberfly: ANIM_CYBERFLY, cyberhero: ANIM_CYBERHERO };
 const amap = (e) => e.cfg.animMap ? ANIM_MAPS[e.cfg.animMap] : null;
 const onMyFloor = (e) => e.floor === G.floor;
 
@@ -544,8 +544,10 @@ function simulateEnemy(e, fs, players, dt, mine) {
           const bolt = {
             x: from.x + dir.x * 0.8, y: from.y, z: from.z + dir.z * 0.8,
             dirX: dir.x, dirY: dir.y, dirZ: dir.z,
-            speed: e.cfg.boltSpeed || 13, dmg: e.dmg, owner: 'enemy',
-            color: e.cfg.slowBolt ? 0x66ccff : e.cfg.boltVis === 'arrow' ? 0xddcc88 : 0x9944ff,
+            // lasers are FAST — a 13 u/s energy bolt reads as a lobbed ball
+            speed: e.cfg.boltSpeed || (e.cfg.boltVis === 'laser' ? 30 : 16),
+            dmg: e.dmg, owner: 'enemy',
+            color: e.cfg.boltColor || (e.cfg.slowBolt ? 0x66ccff : 0x9944ff),
             vis: e.cfg.boltVis || (e.cfg.slowBolt ? 'shard' : 'wisp'),
             slow: e.cfg.slowBolt ? { mult: 0.5, dur: 2.5 } : null,
           };
