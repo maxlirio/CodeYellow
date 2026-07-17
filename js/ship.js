@@ -96,32 +96,45 @@ export function generateShipDeck(seedStr, floor) {
   const idxOf = (x, y) => y * w + x;
   const inb = (x, y) => x > 0 && y > 0 && x < w - 1 && y < h - 1;
 
+  // THE SPACE PORT sortie skips the BSP: one vast hangar hall aft, a service
+  // strip forward, and the whole south wall open to space (the mouth)
+  const hangarMode = !!(sortieOverride && floor === sortieOverride.floorN && sortieOverride.special === 'hangar');
+
   // ---- BSP the deck into holds ----
   const MINROOM = 8, WALL = 3;   // bulkhead thickness between holds
   const MAXW = 18, MAXH = 14;    // a hold larger than this must keep splitting
   let leaves = [{ x: 1, y: 1, w: w - 2, h: h - 2 }];
-  const canSplit = (l) => l.w >= MINROOM * 2 + WALL || l.h >= MINROOM * 2 + WALL;
-  const oversized = (l) => l.w > MAXW || l.h > MAXH;
-  const target = rng.int(5, 7);
-  for (let guard = 0; guard < 60; guard++) {
-    const mustSplit = leaves.some(l => oversized(l) && canSplit(l));
-    if (leaves.length >= 8 || (leaves.length >= target && !mustSplit)) break;
-    leaves.sort((a, b) => b.w * b.h - a.w * a.h);
-    const l = (mustSplit ? leaves.find(x => oversized(x) && canSplit(x)) : leaves.find(canSplit));
-    if (!l) break;
-    leaves.splice(leaves.indexOf(l), 1);
-    const vertical = l.w === l.h ? rng.chance(0.5) : l.w > l.h; // cut the long axis
-    if (vertical && l.w >= MINROOM * 2 + WALL) {
-      const cut = rng.int(MINROOM, l.w - MINROOM - WALL);
-      leaves.push({ x: l.x, y: l.y, w: cut, h: l.h });
-      leaves.push({ x: l.x + cut + WALL, y: l.y, w: l.w - cut - WALL, h: l.h });
-    } else if (!vertical && l.h >= MINROOM * 2 + WALL) {
-      const cut = rng.int(MINROOM, l.h - MINROOM - WALL);
-      leaves.push({ x: l.x, y: l.y, w: l.w, h: cut });
-      leaves.push({ x: l.x, y: l.y + cut + WALL, w: l.w, h: l.h - cut - WALL });
-    } else {
-      leaves.push(l); // couldn't split after all
-      break;
+  if (hangarMode) {
+    leaves = [
+      { x: 1, y: 1, w: 12, h: 8 },            // service rooms forward
+      { x: 16, y: 1, w: 12, h: 8 },
+      { x: 31, y: 1, w: w - 32, h: 8 },
+      { x: 1, y: 12, w: w - 2, h: h - 13 },   // THE HANGAR
+    ];
+  } else {
+    const canSplit = (l) => l.w >= MINROOM * 2 + WALL || l.h >= MINROOM * 2 + WALL;
+    const oversized = (l) => l.w > MAXW || l.h > MAXH;
+    const target = rng.int(5, 7);
+    for (let guard = 0; guard < 60; guard++) {
+      const mustSplit = leaves.some(l => oversized(l) && canSplit(l));
+      if (leaves.length >= 8 || (leaves.length >= target && !mustSplit)) break;
+      leaves.sort((a, b) => b.w * b.h - a.w * a.h);
+      const l = (mustSplit ? leaves.find(x => oversized(x) && canSplit(x)) : leaves.find(canSplit));
+      if (!l) break;
+      leaves.splice(leaves.indexOf(l), 1);
+      const vertical = l.w === l.h ? rng.chance(0.5) : l.w > l.h; // cut the long axis
+      if (vertical && l.w >= MINROOM * 2 + WALL) {
+        const cut = rng.int(MINROOM, l.w - MINROOM - WALL);
+        leaves.push({ x: l.x, y: l.y, w: cut, h: l.h });
+        leaves.push({ x: l.x + cut + WALL, y: l.y, w: l.w - cut - WALL, h: l.h });
+      } else if (!vertical && l.h >= MINROOM * 2 + WALL) {
+        const cut = rng.int(MINROOM, l.h - MINROOM - WALL);
+        leaves.push({ x: l.x, y: l.y, w: l.w, h: cut });
+        leaves.push({ x: l.x, y: l.y + cut + WALL, w: l.w, h: l.h - cut - WALL });
+      } else {
+        leaves.push(l); // couldn't split after all
+        break;
+      }
     }
   }
   for (const l of leaves) { l.cx = l.x + Math.floor(l.w / 2); l.cy = l.y + Math.floor(l.h / 2); }
@@ -147,7 +160,7 @@ export function generateShipDeck(seedStr, floor) {
 
   // ---- seal a section or two (dead void space keeps the hulk claustrophobic
   //      at the edges without ever pinching the fights) ----
-  const sealable = leaves.length >= 6 ? 2 : leaves.length === 5 ? rng.int(1, 2) : 1;
+  const sealable = hangarMode ? 0 : leaves.length >= 6 ? 2 : leaves.length === 5 ? rng.int(1, 2) : 1;
   const sealed = new Set();
   for (let i = 0; i < sealable; i++) {
     let cand = leaves.filter(l => !sealed.has(l) && adj.get(l).length <= 2);
@@ -170,7 +183,7 @@ export function generateShipDeck(seedStr, floor) {
   // ---- carve holds (with chamfered hull corners for a ship silhouette) ----
   const chamfer = [];
   for (const [cx0, cy0, sx, sy] of [[1, 1, 1, 1], [w - 2, 1, -1, 1], [1, h - 2, 1, -1], [w - 2, h - 2, -1, -1]]) {
-    if (rng.chance(0.7)) chamfer.push({ cx0, cy0, sx, sy, s: rng.int(4, 9) });
+    if (!hangarMode && rng.chance(0.7)) chamfer.push({ cx0, cy0, sx, sy, s: rng.int(4, 9) });
   }
   // diagonal hull bite: cells within taxicab distance s of a chosen deck corner
   const chamfered = (x, y) => chamfer.some(c => (x - c.cx0) * c.sx + (y - c.cy0) * c.sy < c.s);
@@ -297,11 +310,16 @@ export function generateShipDeck(seedStr, floor) {
       command: ['gantry', 'machine', 'barracks', 'cargo'],
     }[theme.id];
   const biggest = biggestHold;
+  // sortie sections deal their roles round-robin — SECURITY must actually get
+  // its cell blocks, CARGO its container rows; rng.pick left it to luck
+  const dealt = sortieOverride && floor === sortieOverride.floorN && sortieOverride.roles?.length;
+  let dealIdx = 0;
   for (const l of holds) {
-    if (l === spawnHold) l.role = 'breach';
-    else if (l === biggest && l.w >= 12 && l.h >= 9 && theme.id === 'cargo') l.role = 'hangar';
-    else if (l === biggest && l.w >= 12 && l.h >= 9 && rng.chance(0.6)) l.role = 'gantry';
-    else l.role = rng.pick(flavorRoles);
+    if (hangarMode && l === biggest) l.role = 'bay'; // THE HANGAR gets its parking row
+    else if (l === spawnHold) l.role = 'breach';
+    else if (!dealt && l === biggest && l.w >= 12 && l.h >= 9 && theme.id === 'cargo') l.role = 'hangar';
+    else if (!dealt && l === biggest && l.w >= 12 && l.h >= 9 && rng.chance(0.6)) l.role = 'gantry';
+    else l.role = dealt ? flavorRoles[dealIdx++ % flavorRoles.length] : rng.pick(flavorRoles);
   }
 
   // ---- interiors ----
@@ -324,7 +342,28 @@ export function generateShipDeck(seedStr, floor) {
   for (const l of holds) {
     const inset = { x: l.x + 1, y: l.y + 1, w: l.w - 2, h: l.h - 2 };
     if (l.role === 'cargo' || l.role === 'breach') {
-      // crate clusters on a loose lattice; the breach room gets rubble-light cover
+      // CONTAINER CANYONS: shipping containers in aligned rows (big holds),
+      // then crate clusters as loose fill; the breach room gets rubble-light cover
+      if (l.role === 'cargo' && inset.w >= 5 && inset.h >= 5) {
+        const along = inset.w >= inset.h;
+        const rows = rng.int(1, 2);
+        for (let r0 = 0; r0 < rows; r0++) {
+          const lane = (along ? inset.y : inset.x) + 1 + r0 * 3 + rng.int(0, 1);
+          const run = rng.int(2, 3);
+          const start = (along ? inset.x : inset.y) + 1 + rng.int(0, 2);
+          for (let i = 0; i < run; i++) {
+            const cx2 = along ? start + i * 2 : lane, cy2 = along ? lane : start + i * 2;
+            if (!free(cx2, cy2) || !free(cx2 + (along ? 1 : 0), cy2 + (along ? 0 : 1))) continue;
+            const stacked = rng.chance(0.4);
+            colliders.push({
+              x: cx2 * CELL + (along ? CELL / 2 : 0), z: cy2 * CELL + (along ? 0 : CELL / 2),
+              hx: along ? 3.6 : 1.45, hz: along ? 1.45 : 3.6, y0: 0, h: stacked ? 5.1 : 2.6, noMesh: true,
+            });
+            shipDecor.push({ kind: 'container', x: cx2 * CELL + (along ? CELL / 2 : 0), z: cy2 * CELL + (along ? 0 : CELL / 2), w: along ? 7.2 : 2.9, d: along ? 2.9 : 7.2, h: 2.6, yaw: 0, stacked, tone: rng.int(0, 2) });
+            occupied.add(idxOf(cx2, cy2)); occupied.add(idxOf(cx2 + (along ? 1 : 0), cy2 + (along ? 0 : 1)));
+          }
+        }
+      }
       const clusters = l.role === 'breach' ? rng.int(1, 2) : rng.int(2, Math.min(5, 2 + (l.w * l.h > 140 ? 2 : 1)));
       for (let c = 0; c < clusters; c++) {
         const ox = inset.x + 1 + rng.int(0, Math.max(0, inset.w - 4));
@@ -338,6 +377,73 @@ export function generateShipDeck(seedStr, floor) {
       for (let i = 0; i < rng.int(2, 4); i++) {
         crate(inset.x + rng.int(0, inset.w - 1), inset.y + rng.int(0, inset.h - 1), false);
       }
+    } else if (l.role === 'bay') {
+      // THE HANGAR: dropships parked in a row, noses toward the mouth, each on
+      // its own landing ring. Fuel drums and crate trains between them.
+      const n = Math.max(2, Math.floor((l.w - 6) / 7));
+      const rowCy = l.y + Math.floor(l.h * 0.55);
+      for (let i = 0; i < n; i++) {
+        const cx2 = l.x + 4 + i * 7, cy2 = rowCy + rng.int(-1, 1);
+        let open = true;
+        for (let dy = -2; dy <= 2; dy++) for (let dx = -1; dx <= 1; dx++)
+          if (at(cx2 + dx, cy2 + dy) !== FLOOR || elev[idxOf(cx2 + dx, cy2 + dy)]) open = false;
+        if (!open) continue;
+        const cxw = cx2 * CELL, cyw = cy2 * CELL;
+        colliders.push({ x: cxw, z: cyw, hx: 2.5, hz: 5.0, y0: 0, h: 3.1, noMesh: true }); // hull
+        colliders.push({ x: cxw, z: cyw - 6.4, hx: 1.5, hz: 1.5, y0: 0, h: 1.4, noMesh: true }); // aft ramp — mantleable
+        shipDecor.push({ kind: 'ship', x: cxw, z: cyw, w: 5, d: 10, h: 3.1, yaw: 0, tone: rng.int(0, 2) });
+        for (let dy = -2; dy <= 2; dy++) for (let dx = -1; dx <= 1; dx++) occupied.add(idxOf(cx2 + dx, cy2 + dy));
+        if (rng.chance(0.7)) { // ground crew clutter beside the pad
+          const gx = cx2 + (rng.chance(0.5) ? -2 : 2), gy = cy2 + rng.int(-2, 2);
+          if (free(gx, gy)) {
+            colliders.push({ x: gx * CELL, z: gy * CELL, r: 1.0, y0: 0, h: 1.4 });
+            shipDecor.push({ kind: 'drum', x: gx * CELL, z: gy * CELL, w: 2, d: 2, h: 1.4, yaw: 0 });
+            occupied.add(idxOf(gx, gy));
+          }
+        }
+      }
+      for (let i = 0; i < rng.int(3, 5); i++) crate(inset.x + rng.int(0, inset.w - 1), inset.y + 1 + rng.int(0, 2), false);
+    } else if (l.role === 'brig') {
+      // SECURITY: cell blocks along the walls — barred alcoves with a bench
+      const along = l.w >= l.h;
+      const walls = along ? [inset.y, inset.y + inset.h - 1] : [inset.x, inset.x + inset.w - 1];
+      for (const lane of walls) {
+        for (let t = (along ? inset.x : inset.y) + 1; t < (along ? inset.x + inset.w : inset.y + inset.h) - 1; t += 2) {
+          const cx2 = along ? t : lane, cy2 = along ? lane : t;
+          if (!free(cx2, cy2) || !rng.chance(0.75)) continue;
+          const toward = along ? (lane === inset.y ? 1 : -1) : (lane === inset.x ? 1 : -1); // bars face the aisle
+          colliders.push({
+            x: cx2 * CELL + (along ? 0 : toward * 1.5), z: cy2 * CELL + (along ? toward * 1.5 : 0),
+            hx: along ? 1.75 : 0.2, hz: along ? 0.2 : 1.75, y0: 0, h: 3.4, noMesh: true,
+          });
+          shipDecor.push({ kind: 'cellbar', x: cx2 * CELL, z: cy2 * CELL, w: 3.5, d: 3.5, h: 3.4, yaw: along ? 0 : Math.PI / 2, toward });
+          occupied.add(idxOf(cx2, cy2));
+        }
+      }
+      for (let i = 0; i < rng.int(1, 3); i++) crate(l.cx + rng.int(-2, 2), l.cy + rng.int(-2, 2), false);
+    } else if (l.role === 'foundry') {
+      // WEAPONS FACILITY: assembly lines — long low conveyors with printer arms
+      const along = l.w >= l.h;
+      const lines = Math.min(3, Math.max(1, Math.floor((along ? inset.h : inset.w) / 3)));
+      for (let li = 0; li < lines; li++) {
+        const lane = (along ? inset.y : inset.x) + 1 + li * 3;
+        const t0 = (along ? inset.x : inset.y) + 1, t1 = (along ? inset.x + inset.w : inset.y + inset.h) - 2;
+        if (t1 - t0 < 3) continue;
+        let ok = true;
+        for (let t = t0; t <= t1; t++) {
+          const cx2 = along ? t : lane, cy2 = along ? lane : t;
+          if (!free(cx2, cy2)) { ok = false; break; }
+        }
+        if (!ok) continue;
+        const mx = (along ? (t0 + t1) / 2 : lane) * CELL, mz = (along ? lane : (t0 + t1) / 2) * CELL;
+        const len = (t1 - t0 + 1) * CELL - 1;
+        colliders.push({
+          x: mx, z: mz, hx: along ? len / 2 : 1.1, hz: along ? 1.1 : len / 2, y0: 0, h: 1.15, noMesh: true,
+        });
+        shipDecor.push({ kind: 'line', x: mx, z: mz, w: along ? len : 2.2, d: along ? 2.2 : len, h: 1.15, yaw: along ? 0 : Math.PI / 2, arms: rng.int(2, 3) });
+        for (let t = t0; t <= t1; t++) occupied.add(idxOf(along ? t : lane, along ? lane : t));
+      }
+      for (let i = 0; i < rng.int(1, 3); i++) crate(inset.x + rng.int(0, inset.w - 1), inset.y + rng.int(0, inset.h - 1), false);
     } else if (l.role === 'hangar') {
       // the shuttle: one long axis-aligned mass in the middle of the volume
       // (colliders are axis-aligned boxes, so the hull sits along the hold's
@@ -352,9 +458,10 @@ export function generateShipDeck(seedStr, floor) {
         for (let dx = -Math.ceil(hx / CELL); dx <= Math.ceil(hx / CELL); dx++)
           if (at(l.cx + dx, l.cy + dy) !== FLOOR) footprintOpen = false;
       if (!footprintOpen) { l.role = 'cargo'; continue; } // fall back to crates next pass? no — just crates below
-      colliders.push({ x: cxw, z: cyw, hx, hz, y0: 0, h: 3.4 });                      // hull
-      colliders.push({ x: cxw + (along ? hx + 2 : 0), z: cyw + (along ? 0 : hz + 2), hx: along ? 2.4 : 1.6, hz: along ? 1.6 : 2.4, y0: 0, h: 1.6 }); // tail ramp — mantleable
-      shipDecor.push({ kind: 'shuttle', x: cxw, z: cyw, w: hx * 2, d: hz * 2, h: 3.4, yaw: along ? 0 : Math.PI / 2 });
+      // a real dropship on a pad (the renderer draws hull/wings/engines)
+      colliders.push({ x: cxw, z: cyw, hx: along ? 5.0 : 2.5, hz: along ? 2.5 : 5.0, y0: 0, h: 3.1, noMesh: true });
+      colliders.push({ x: cxw - (along ? 6.4 : 0), z: cyw - (along ? 0 : 6.4), hx: 1.5, hz: 1.5, y0: 0, h: 1.4, noMesh: true }); // aft ramp — mantleable
+      shipDecor.push({ kind: 'ship', x: cxw, z: cyw, w: 5, d: 10, h: 3.1, yaw: along ? Math.PI / 2 : 0, tone: rng.int(0, 2) });
       for (let dy = -Math.ceil(hz / CELL) - 1; dy <= Math.ceil(hz / CELL) + 1; dy++)
         for (let dx = -Math.ceil(hx / CELL) - 1; dx <= Math.ceil(hx / CELL) + 1; dx++)
           occupied.add(idxOf(l.cx + dx, l.cy + dy));
@@ -412,8 +519,22 @@ export function generateShipDeck(seedStr, floor) {
       }
       for (let i = 0; i < rng.int(2, 4); i++) crate(inset.x + rng.int(0, inset.w - 1), inset.y + rng.int(0, inset.h - 1), false);
     } else if (l.role === 'machine') {
-      // machinery ranks with a wide center aisle down the long axis
+      // ENGINEERING holds big enough get TURBINES: floor-to-ceiling drive
+      // cylinders ranked down the hold, glowing hot — the engine room reads
+      // as an engine room from the doorway
       const along = l.w >= l.h;
+      if (theme.id === 'engineering' && inset.w >= 5 && inset.h >= 5) {
+        const n = Math.max(2, Math.floor((along ? inset.w : inset.h) / 4));
+        for (let i = 0; i < n; i++) {
+          const t = (along ? inset.x : inset.y) + 2 + i * 4;
+          const cx2 = along ? t : l.cx + rng.int(-1, 1), cy2 = along ? l.cy + rng.int(-1, 1) : t;
+          if (!free(cx2, cy2) || !free(cx2 + (along ? 1 : 0), cy2 + (along ? 0 : 1))) continue;
+          colliders.push({ x: cx2 * CELL, z: cy2 * CELL, r: 2.3, y0: 0, h: 6.4, noMesh: true });
+          shipDecor.push({ kind: 'turbine', x: cx2 * CELL, z: cy2 * CELL, w: 4.6, d: 4.6, h: 6.4, yaw: 0 });
+          for (let dy = -1; dy <= 1; dy++) for (let dx = -1; dx <= 1; dx++) occupied.add(idxOf(cx2 + dx, cy2 + dy));
+        }
+      }
+      // machinery ranks with a wide center aisle down the long axis
       const aisleLo = (along ? l.cy : l.cx) - 1, aisleHi = (along ? l.cy : l.cx) + 1;
       for (let y = inset.y + 1; y < inset.y + inset.h - 1; y += 2) {
         for (let x = inset.x + 1; x < inset.x + inset.w - 1; x += 2) {
@@ -435,7 +556,7 @@ export function generateShipDeck(seedStr, floor) {
         colliders.push({
           x: x * CELL, z: y * CELL,
           hx: bunk ? (flip ? 0.9 : 1.6) : 1.0, hz: bunk ? (flip ? 1.6 : 0.9) : 1.0,
-          y0: 0, h: bunk ? 0.9 : 1.05,
+          y0: 0, h: bunk ? 0.9 : 1.05, noMesh: bunk, // bunks draw their own frame
         });
         shipDecor.push({ kind: bunk ? 'bunk' : 'table', x: x * CELL, z: y * CELL, w: bunk ? (flip ? 1.8 : 3.2) : 2, d: bunk ? (flip ? 3.2 : 1.8) : 2, h: bunk ? 0.9 : 1.05, yaw: 0 });
         occupied.add(idxOf(x, y));
@@ -589,8 +710,9 @@ export function generateShipDeck(seedStr, floor) {
   // early decks are a beachhead, not a meat grinder
   const floorScale = floor === 1 ? 0.55 : floor === 2 ? 0.8 : 1;
   const baseFor = (l) => (l.role === 'hangar' ? rng.int(4, 7)
+    : l.role === 'bay' ? rng.int(6, 9)
     : l.role === 'cargo' ? rng.int(3, 5)
-    : l.role === 'machine' ? rng.int(2, 4)
+    : l.role === 'machine' || l.role === 'foundry' ? rng.int(2, 4)
     : rng.int(2, 3)) * floorScale;
   for (const l of holds) {
     if (l === spawnHold) continue;
@@ -668,8 +790,22 @@ export function generateShipDeck(seedStr, floor) {
   }
 
   // ================= assemble =================
+  // THE MOUTH: the hangar's whole south wall opens onto space — a force field
+  // holds the air in, the starfield shows through, ships nose toward it
+  const mouth = [];
+  if (hangarMode) {
+    const hang = holds.find(l => l.role === 'bay');
+    if (hang) {
+      const cy = hang.y + hang.h - 1;
+      for (let x = hang.x + 2; x < hang.x + hang.w - 2; x++) {
+        if (at(x, cy) === FLOOR && at(x, cy + 1) === SOLID) mouth.push({ cx: x, cy, dx: 0, dy: 1 });
+      }
+    }
+  }
+
   const grid = {
     w, h, cells, elev, ramps, rooms: holds, colliders,
+    mouth,
     spawn: { x: spawnCell.x * CELL, z: spawnCell.y * CELL },
     spawnYaw,
     stairs: { x: portal.x * CELL, z: portal.y * CELL, cx: portal.x, cy: portal.y },

@@ -253,6 +253,20 @@ try {
     const a = generateShipDeck('seedA:sortie1', 5), b = generateShipDeck('seedA:sortie2', 5);
     assert(a.grid.cells.length && b.grid.cells.length &&
       a.grid.cells.join() !== b.grid.cells.join(), 'sorties: fresh layout per insertion');
+    // section identity: each sortie override produces its signature set pieces
+    const { setSortieOverride } = await import('./js/ship.js');
+    const kindsOf = (fsx) => fsx.grid.shipDecor.reduce((m, d) => (m[d.kind] = (m[d.kind] || 0) + 1, m), {});
+    setSortieOverride({ floorN: 2, theme: 'hab', roles: ['cargo', 'machine', 'barracks'], special: 'hangar' });
+    const hang = generateShipDeck('seedA:sortie3', 2);
+    assert(hang.grid.mouth.length >= 12, `spaceport: hull mouth open (${hang.grid.mouth.length} faces)`);
+    assert((kindsOf(hang).ship || 0) >= 2, `spaceport: dropships parked (${kindsOf(hang).ship || 0})`);
+    setSortieOverride({ floorN: 3, theme: 'command', roles: ['brig', 'brig', 'gantry', 'machine'] });
+    assert((kindsOf(generateShipDeck('seedA:sortie4', 3)).cellbar || 0) >= 3, 'security: cell blocks built');
+    setSortieOverride({ floorN: 5, theme: 'engineering', roles: ['machine', 'machine', 'machine', 'gantry'] });
+    assert((kindsOf(generateShipDeck('seedA:sortie5', 5)).turbine || 0) >= 3, 'engine room: turbines ranked');
+    setSortieOverride({ floorN: 6, theme: 'command', roles: ['foundry', 'foundry', 'machine', 'gantry'] });
+    assert((kindsOf(generateShipDeck('seedA:sortie6', 6)).line || 0) >= 1, 'weapons: assembly lines running');
+    setSortieOverride(null);
   }
 
   document.title = out.some(l => l.startsWith('FAIL') || l.startsWith('ERROR')) ? 'FAILED' : 'PASSED';

@@ -21,6 +21,26 @@ const cellHash = (cx, cy) => {
   return (h ^ (h >> 16)) >>> 0;
 };
 
+// deterministic star canvas — the bridge viewport and the hangar mouth share it
+function makeStarTex(count = 1400, cw = 2048, ch = 256) {
+  const sc = document.createElement('canvas');
+  sc.width = cw; sc.height = ch;
+  const sctx = sc.getContext('2d');
+  sctx.fillStyle = '#020409';
+  sctx.fillRect(0, 0, cw, ch);
+  let sseed = 1234;
+  const srand = () => { sseed = (sseed * 16807) % 2147483647; return sseed / 2147483647; };
+  for (let i = 0; i < count; i++) {
+    const b = srand();
+    sctx.fillStyle = b > 0.94 ? '#bfe6ff' : b > 0.7 ? '#ffffff' : '#7d8ba0';
+    const r = b > 0.96 ? 2.2 : b > 0.8 ? 1.4 : 0.8;
+    sctx.fillRect(srand() * cw, srand() * ch, r, r);
+  }
+  const t = new THREE.CanvasTexture(sc);
+  t.colorSpace = THREE.SRGBColorSpace;
+  return t;
+}
+
 function makeMats(accent, facility = false) {
   if (facility) {
     // training-facility whites: bright composite panels, blue trim
@@ -75,6 +95,7 @@ export function buildShipStatic(fs) {
 
   const at = (cx, cy) => (cx < 0 || cy < 0 || cx >= g.w || cy >= g.h) ? 0 : g.cells[cy * g.w + cx];
   const windowSet = new Set((g.windows || []).map(wd => `${wd.cx},${wd.cy},${wd.dx},${wd.dy}`));
+  const mouthSet = new Set((g.mouth || []).map(m => `${m.cx},${m.cy},${m.dx},${m.dy}`));
   const walkable = (c) => c === 1 || c === 3 || c === 4 || c === 6; // FLOOR/STAIRS/TRAP/RAMP
   const DIRS = [[1, 0, 0], [-1, 0, Math.PI], [0, 1, Math.PI / 2], [0, -1, -Math.PI / 2]];
 
@@ -104,6 +125,7 @@ export function buildShipStatic(fs) {
         const wx = x + dx * (CELL / 2 + 0.3), wz = z + dy * (CELL / 2 + 0.3);
         const along = dx !== 0; // wall runs along z if the normal is x
         const L = CELL + 0.6;
+        if (mouthSet.has(`${cx},${cy},${dx},${dy}`)) continue; // the hangar mouth is OPEN
         if (windowSet.has(`${cx},${cy},${dx},${dy}`)) {
           // VIEWPORT: sill + header + mullions — the gap between shows space
           box('wall', wx, 0.55, wz, along ? 0.6 : L, 1.1, along ? L : 0.6);
@@ -203,6 +225,113 @@ export function buildShipStatic(fs) {
     }
   }
 
+  // ---- SET PIECES from semantic decor: each section's signature furniture.
+  // Parts are built in ship-local coords (nose/long axis +z or +x as noted),
+  // then rotated by the decor's yaw and dropped at its world position ----
+  for (const d of g.shipDecor || []) {
+    const part = (mat, geo, ox, oy, oz) => { geo.translate(ox, oy, oz); add(mat, geo, d.x, 0, d.z, d.yaw || 0); };
+    const B = (mat, sx, sy, sz, ox, oy, oz) => part(mat, new THREE.BoxGeometry(sx, sy, sz), ox, oy, oz);
+    if (d.kind === 'ship') {
+      // DROPSHIP, nose +z: fuselage, canopy, wings, twin engines, tail, skids
+      const tone = ['machine', 'crate', 'wall'][d.tone || 0];
+      B('frame', 0.5, 0.4, 7.0, -1.4, 0.2, 0);   // skids
+      B('frame', 0.5, 0.4, 7.0, 1.4, 0.2, 0);
+      B(tone, 4.2, 2.1, 7.6, 0, 1.55, -0.4);      // fuselage
+      B(tone, 3.0, 1.5, 2.6, 0, 1.3, 4.4);        // nose
+      B('accent', 2.0, 0.7, 1.6, 0, 2.15, 3.6);   // canopy glass glows
+      B(tone, 2.6, 0.28, 3.4, -3.3, 1.6, -1);     // wings
+      B(tone, 2.6, 0.28, 3.4, 3.3, 1.6, -1);
+      for (const sx of [-3.6, 3.6]) {             // wingtip engines + exhaust glow
+        const eng = new THREE.CylinderGeometry(0.55, 0.62, 2.6, 8);
+        eng.rotateX(Math.PI / 2);
+        part('frame', eng, sx, 1.6, -2.2);
+        B('accent', 0.7, 0.7, 0.12, sx, 1.6, -3.55);
+      }
+      B(tone, 0.28, 1.7, 2.2, 0, 3.1, -3.3);      // tail fin
+      const ramp = new THREE.BoxGeometry(2.8, 0.3, 2.8);
+      ramp.rotateX(0.45);
+      part('dark', ramp, 0, 0.75, -5.2);          // aft boarding ramp
+      const ring = new THREE.CylinderGeometry(5.4, 5.4, 0.05, 24, 1, true);
+      part('accent', ring, 0, 0.05, 0);           // landing pad ring
+    } else if (d.kind === 'turbine') {
+      // DRIVE TURBINE: floor-to-ceiling cylinder, ringed and glowing
+      const trunk = new THREE.CylinderGeometry(2.0, 2.15, d.h - 0.6, 12);
+      part('machine', trunk, 0, (d.h - 0.6) / 2 + 0.5, 0);
+      const base = new THREE.CylinderGeometry(2.4, 2.5, 0.7, 12);
+      part('dark', base, 0, 0.35, 0);
+      for (const ry of [1.7, 3.3, 4.9]) {
+        const ring = new THREE.CylinderGeometry(2.1, 2.1, 0.16, 12, 1, true);
+        part('accent', ring, 0, ry, 0);
+      }
+      const duct = new THREE.CylinderGeometry(0.9, 0.9, 1.6, 8);
+      part('frame', duct, 0, d.h + 0.4, 0);
+    } else if (d.kind === 'container') {
+      // SHIPPING CONTAINER (long axis x): ribbed body, corner frames, id stripe
+      const tone = ['crate', 'machine', 'dark'][d.tone || 0];
+      const build = (y0) => {
+        B(tone, d.w, 2.5, d.d, 0, y0 + 1.25, 0);
+        B('frame', d.w + 0.1, 0.2, d.d + 0.1, 0, y0 + 0.12, 0);
+        B('frame', d.w + 0.1, 0.2, d.d + 0.1, 0, y0 + 2.42, 0);
+        for (const sx of [-d.w / 2 + 0.1, d.w / 2 - 0.1]) B('frame', 0.22, 2.5, d.d + 0.12, sx, y0 + 1.25, 0);
+        B('accent', d.w * 0.55, 0.14, 0.04, 0, y0 + 1.9, d.d / 2 + 0.01);
+      };
+      build(0);
+      if (d.stacked) build(2.56);
+    } else if (d.kind === 'cellbar') {
+      // BRIG CELL: bar wall facing the aisle, rails top and bottom, lock light
+      const off = (d.toward || 1) * 1.5;
+      B('frame', 3.4, 0.14, 0.14, 0, 0.22, off);
+      B('frame', 3.4, 0.14, 0.14, 0, 3.15, off);
+      for (let bx = -1.45; bx <= 1.46; bx += 0.485) B('frame', 0.09, 3.1, 0.09, bx, 1.68, off);
+      B('accent', 0.3, 0.22, 0.1, 1.2, 1.5, off + 0.08 * Math.sign(off)); // cell lock
+      B('dark', 2.6, 0.5, 1.0, 0, 0.25, -off * 0.4); // bench inside
+    } else if (d.kind === 'line') {
+      // ASSEMBLY LINE (long axis x): conveyor body, glowing belt, printer arms
+      const len = Math.max(d.w, d.d);
+      B('machine', len, 1.0, 2.1, 0, 0.5, 0);
+      B('accent', len - 0.5, 0.07, 0.6, 0, 1.06, 0); // the belt runs hot
+      const n = d.arms || 2;
+      for (let i = 0; i < n; i++) {
+        const ax = -len / 2 + (i + 0.7) * (len / (n + 0.4));
+        const az = (i % 2 ? 1 : -1) * 1.9;
+        B('frame', 0.4, 2.8, 0.4, ax, 1.4, az);
+        B('frame', 0.32, 0.32, 2.1, ax, 2.7, az * 0.45);
+        B('accent', 0.2, 0.5, 0.2, ax, 1.65, 0); // print head over the belt
+      }
+    } else if (d.kind === 'bunk') {
+      // BUNK BED (long axis follows w/d): posts, two racks, pillow strip
+      const along = (d.w || 0) >= (d.d || 0);
+      const L = Math.max(d.w, d.d), W = Math.min(d.w, d.d);
+      const bx = along ? L : W, bz = along ? W : L;
+      for (const sx of [-1, 1]) for (const sz of [-1, 1])
+        B('frame', 0.16, 2.1, 0.16, sx * (bx / 2 - 0.1), 1.05, sz * (bz / 2 - 0.1));
+      B('crate', bx - 0.1, 0.22, bz - 0.1, 0, 0.55, 0);
+      B('crate', bx - 0.1, 0.22, bz - 0.1, 0, 1.55, 0);
+      const px = along ? bx / 2 - 0.5 : 0, pz = along ? 0 : bz / 2 - 0.5;
+      B('wall', 0.7, 0.14, 0.7, px, 0.72, pz); // pillow
+      B('wall', 0.7, 0.14, 0.7, px, 1.72, pz);
+    }
+  }
+
+  // ---- THE MOUTH (hangar decks): the south wall is OPEN — heavy door frame
+  // columns, a knee sill, hazard striping. The force field itself is added
+  // after the merge (it's translucent) ----
+  if (g.mouth?.length) {
+    const xs = g.mouth.map(m => m.cx * CELL);
+    const mx0 = Math.min(...xs) - CELL / 2, mx1 = Math.max(...xs) + CELL / 2;
+    const mz = (g.mouth[0].cy + 0.5) * CELL + 0.3;
+    box('dark', (mx0 + mx1) / 2, 0.25, mz, mx1 - mx0, 0.5, 0.7);        // knee sill
+    box('accent', (mx0 + mx1) / 2, 0.54, mz - 0.1, mx1 - mx0, 0.06, 0.5); // sill warning light
+    box('dark', (mx0 + mx1) / 2, WALL_H - 0.5, mz, mx1 - mx0, 1.0, 0.9); // header beam
+    box('accent', (mx0 + mx1) / 2, WALL_H - 1.05, mz - 0.1, mx1 - mx0, 0.1, 0.5);
+    for (let x = mx0; x <= mx1 + 0.1; x += CELL * 5) {
+      box('frame', x, WALL_H / 2, mz, 1.2, WALL_H, 1.3);                 // heavy mullion columns
+      box('accent', x, WALL_H / 2, mz - 0.75, 0.16, WALL_H - 1.5, 0.06);
+    }
+    // hazard stripe painted on the deck along the opening
+    box('accent', (mx0 + mx1) / 2, 0.012, mz - 2.2, mx1 - mx0, 0.012, 0.35);
+  }
+
   // ---- the breach (spawn): torn hull + scorch. Not in the bay or on the
   // bridge — those are OUR decks, nobody blew a hole in them ----
   if (g.spawn && !g.bay && !g.bridge) {
@@ -260,29 +389,37 @@ export function buildShipStatic(fs) {
     }
   }
 
+  // THE MOUTH's translucent skin + the space beyond (post-merge: transparent)
+  if (g.mouth?.length) {
+    const xs = g.mouth.map(m => m.cx * CELL);
+    const mx0 = Math.min(...xs) - CELL / 2, mx1 = Math.max(...xs) + CELL / 2;
+    const mz = (g.mouth[0].cy + 0.5) * CELL + 0.3;
+    const field = new THREE.Mesh(
+      new THREE.PlaneGeometry(mx1 - mx0, WALL_H - 1.4),
+      new THREE.MeshBasicMaterial({
+        color: 0x59e8ff, transparent: true, opacity: 0.13, toneMapped: false,
+        side: THREE.DoubleSide, depthWrite: false,
+      })
+    );
+    field.position.set((mx0 + mx1) / 2, (WALL_H - 1.4) / 2 + 0.5, mz);
+    group.add(field);
+    const stars = new THREE.Mesh(
+      new THREE.PlaneGeometry(mx1 - mx0 + 70, 34),
+      new THREE.MeshBasicMaterial({ map: makeStarTex(), toneMapped: false })
+    );
+    stars.position.set((mx0 + mx1) / 2, 3, mz + 11);
+    stars.rotation.y = Math.PI; // face back into the hangar
+    group.add(stars);
+  }
+
   // THE BRIDGE: starfield wrapped all the way around, a central holo table,
   // and stations built into the wall as SCREENS — a control room, not an office
   if (g.bridge) {
     const cx0 = (g.w / 2 - 0.5) * CELL, cz0 = (g.h / 2 - 0.5) * CELL; // room center
     // space, in every window: a star cylinder wrapping the whole deck
-    const sc = document.createElement('canvas');
-    sc.width = 2048; sc.height = 256;
-    const sctx = sc.getContext('2d');
-    sctx.fillStyle = '#020409';
-    sctx.fillRect(0, 0, 2048, 256);
-    let sseed = 1234;
-    const srand = () => { sseed = (sseed * 16807) % 2147483647; return sseed / 2147483647; };
-    for (let i = 0; i < 1400; i++) {
-      const b = srand();
-      sctx.fillStyle = b > 0.94 ? '#bfe6ff' : b > 0.7 ? '#ffffff' : '#7d8ba0';
-      const r = b > 0.96 ? 2.2 : b > 0.8 ? 1.4 : 0.8;
-      sctx.fillRect(srand() * 2048, srand() * 256, r, r);
-    }
-    const starTex = new THREE.CanvasTexture(sc);
-    starTex.colorSpace = THREE.SRGBColorSpace;
     const stars = new THREE.Mesh(
       new THREE.CylinderGeometry(38, 38, 44, 24, 1, true),
-      new THREE.MeshBasicMaterial({ map: starTex, toneMapped: false, side: THREE.BackSide })
+      new THREE.MeshBasicMaterial({ map: makeStarTex(), toneMapped: false, side: THREE.BackSide })
     );
     stars.position.set(cx0, 4, cz0);
     group.add(stars);

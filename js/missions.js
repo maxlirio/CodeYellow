@@ -16,12 +16,12 @@ export const SECTIONS = [
   { id: 'cargo', name: 'CARGO HOLD', floorN: 1, threat: 1, theme: 'cargo',
     roles: ['cargo', 'cargo', 'cargo', 'hangar', 'barracks'],
     desc: 'Container canyons and dormant loader frames. Breach-team shakedown.' },
-  { id: 'spaceport', name: 'SPACE PORT', floorN: 2, threat: 1, theme: 'hab',
-    roles: ['hangar', 'hangar', 'cargo', 'machine'],
-    desc: 'Launch bays and parked shuttles. Long sightlines — bring a rifle.' },
+  { id: 'spaceport', name: 'SPACE PORT', floorN: 2, threat: 1, theme: 'hab', special: 'hangar',
+    roles: ['cargo', 'machine', 'barracks'],
+    desc: 'The hangar deck — hull mouth open to space, dropships on their pads. Long sightlines.' },
   { id: 'security', name: 'SECURITY DECK', floorN: 3, threat: 2, theme: 'command',
-    roles: ['barracks', 'gantry', 'machine', 'cargo'],
-    desc: 'Checkpoint warrens under a warden-grade custodian. Expect a fight.' },
+    roles: ['brig', 'brig', 'gantry', 'machine'],
+    desc: 'Cell blocks and checkpoint warrens under a warden-grade custodian. Expect a fight.' },
   { id: 'hab', name: 'HABITATION RING', floorN: 4, threat: 2, theme: 'hab',
     roles: ['barracks', 'barracks', 'cargo', 'gantry'],
     desc: 'Bunk stacks and mess halls. The crew never left.' },
@@ -29,8 +29,8 @@ export const SECTIONS = [
     roles: ['machine', 'machine', 'machine', 'gantry'],
     desc: 'Turbine ranks and red-line heat. Tight aisles, heavy frames.' },
   { id: 'weapons', name: 'WEAPONS FACILITY', floorN: 6, threat: 3, theme: 'command',
-    roles: ['machine', 'cargo', 'machine', 'gantry'],
-    desc: 'The foundry that prints the defenders. Guarded accordingly.' },
+    roles: ['foundry', 'foundry', 'machine', 'gantry'],
+    desc: 'Assembly lines still printing the defenders. Guarded accordingly.' },
   { id: 'reactor', name: 'REACTOR CORE', floorN: 9, threat: 4, theme: 'engineering',
     roles: [],
     desc: 'Something old coils on the pile. Kill it and the hulk is yours.' },
@@ -67,7 +67,7 @@ export function beginSortie(secId, seed = null, n = null, fromNet = false) {
     active: true, entered: false,
   };
   // the section IS its identity: the generator honors the section's theme/roles
-  setSortieOverride({ floorN: sec.floorN, theme: sec.theme, roles: sec.roles });
+  setSortieOverride({ floorN: sec.floorN, theme: sec.theme, roles: sec.roles, special: sec.special || null });
   // the section regenerates fresh every sortie (never under our own feet)
   if (G.floor !== sec.floorN) hooks.disposeFloor?.(sec.floorN);
   portalSet(true);
