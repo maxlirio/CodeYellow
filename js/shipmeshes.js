@@ -74,6 +74,7 @@ export function buildShipStatic(fs) {
     add(matKey, new THREE.BoxGeometry(sx, sy, sz), x, y, z, rotY);
 
   const at = (cx, cy) => (cx < 0 || cy < 0 || cx >= g.w || cy >= g.h) ? 0 : g.cells[cy * g.w + cx];
+  const windowSet = new Set((g.windows || []).map(wd => `${wd.cx},${wd.cy},${wd.dx},${wd.dy}`));
   const walkable = (c) => c === 1 || c === 3 || c === 4 || c === 6; // FLOOR/STAIRS/TRAP/RAMP
   const DIRS = [[1, 0, 0], [-1, 0, Math.PI], [0, 1, Math.PI / 2], [0, -1, -Math.PI / 2]];
 
@@ -103,6 +104,17 @@ export function buildShipStatic(fs) {
         const wx = x + dx * (CELL / 2 + 0.3), wz = z + dy * (CELL / 2 + 0.3);
         const along = dx !== 0; // wall runs along z if the normal is x
         const L = CELL + 0.6;
+        if (windowSet.has(`${cx},${cy},${dx},${dy}`)) {
+          // VIEWPORT: sill + header + mullions — the gap between shows space
+          box('wall', wx, 0.55, wz, along ? 0.6 : L, 1.1, along ? L : 0.6);
+          box('dark', wx, 5.8, wz, along ? 0.6 : L, WALL_H - 4.6, along ? L : 0.6);
+          const mx = along ? 0 : CELL / 2, mz = along ? CELL / 2 : 0;
+          box('frame', wx + mx, WALL_H / 2, wz + mz, 0.4, WALL_H, 0.4);
+          box('frame', wx - mx, WALL_H / 2, wz - mz, 0.4, WALL_H, 0.4);
+          box('accent', x + dx * (CELL / 2 - 0.02), 1.14, z + dy * (CELL / 2 - 0.02),
+            along ? 0.05 : CELL * 0.92, 0.1, along ? CELL * 0.92 : 0.05);
+          continue;
+        }
         // main panel, two-tone: plated lower half, darker upper
         box('wall', wx, 1.6, wz, along ? 0.6 : L, 3.2, along ? L : 0.6);
         box('dark', wx, 3.2 + (WALL_H - 3.2) / 2, wz, along ? 0.6 : L, WALL_H - 3.2, along ? L : 0.6);
@@ -191,8 +203,9 @@ export function buildShipStatic(fs) {
     }
   }
 
-  // ---- the breach (spawn): torn hull + scorch. Not in the bay — you DOCKED there ----
-  if (g.spawn && !g.bay) {
+  // ---- the breach (spawn): torn hull + scorch. Not in the bay or on the
+  // bridge — those are OUR decks, nobody blew a hole in them ----
+  if (g.spawn && !g.bay && !g.bridge) {
     const bx = g.spawn.x, bz = g.spawn.z;
     const scorch = new THREE.CircleGeometry(3.2, 9);
     scorch.rotateX(-Math.PI / 2);
@@ -245,6 +258,54 @@ export function buildShipStatic(fs) {
       const pz = along ? wz + sside * CELL * 0.45 : wz;
       box('accent', px, 1.5, pz, 0.12, 3.0, 0.12);
     }
+  }
+
+  // the bridge: a starfield behind the viewport, and the hologram status wall
+  if (g.bridge) {
+    const wins = g.windows || [];
+    if (wins.length) {
+      const xs = wins.map(wd => wd.cx * CELL);
+      const x0 = Math.min(...xs) - CELL, x1 = Math.max(...xs) + CELL;
+      const zEdge = (wins[0].cy + wins[0].dy) * CELL - wins[0].dy * 1.5;
+      const sc = document.createElement('canvas');
+      sc.width = 1024; sc.height = 256;
+      const sctx = sc.getContext('2d');
+      sctx.fillStyle = '#020409';
+      sctx.fillRect(0, 0, 1024, 256);
+      let sseed = 1234;
+      const srand = () => { sseed = (sseed * 16807) % 2147483647; return sseed / 2147483647; };
+      for (let i = 0; i < 340; i++) {
+        const b = srand();
+        sctx.fillStyle = b > 0.94 ? '#bfe6ff' : b > 0.7 ? '#ffffff' : '#7d8ba0';
+        const r = b > 0.96 ? 2.2 : b > 0.8 ? 1.4 : 0.8;
+        sctx.fillRect(srand() * 1024, srand() * 256, r, r);
+      }
+      const starTex = new THREE.CanvasTexture(sc);
+      starTex.colorSpace = THREE.SRGBColorSpace;
+      const stars = new THREE.Mesh(
+        new THREE.PlaneGeometry(x1 - x0 + 24, 26),
+        new THREE.MeshBasicMaterial({ map: starTex, toneMapped: false })
+      );
+      stars.position.set((x0 + x1) / 2, 4, zEdge - 6);
+      stars.rotation.y = wins[0].dy > 0 ? Math.PI : 0;
+      group.add(stars);
+    }
+    // hologram wall on the WEST bulkhead — content drawn by bridge.js
+    const holo = new THREE.Mesh(
+      new THREE.PlaneGeometry(10, 5),
+      new THREE.MeshBasicMaterial({ map: fs.holoTex, transparent: true, toneMapped: false })
+    );
+    holo.position.set(3 * CELL - 1.55, 3.4, 7.5 * CELL);
+    holo.rotation.y = Math.PI / 2;
+    group.add(holo);
+    const hglow = new THREE.PointLight(0x2fd6c8, 6, 16, 1.6);
+    hglow.position.set(3 * CELL + 1.5, 3.4, 7.5 * CELL);
+    group.add(hglow);
+    // the red-alert beacon over the mission console (missions.js pulses it)
+    const beacon = new THREE.PointLight(0xff2222, 0, 20, 1.4);
+    beacon.position.set(11.5 * CELL, 5.4, 11.3 * CELL);
+    beacon.name = 'alertBeacon';
+    group.add(beacon);
   }
 
   // dressed props (the staging bay parks real Kenney models — few, unmerged)

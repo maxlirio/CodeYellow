@@ -64,6 +64,8 @@ export const sfx = {
   cannon() { if (!ctx) return; const t = ctx.currentTime; noise(t, 0.3, 0.35, 500, 'lowpass'); osc('sawtooth', 90, t, 0.35, 0.25, 35); },
   victory() { if (!ctx) return; const t = ctx.currentTime; [523, 659, 784, 1046, 784, 1046, 1318].forEach((f, i) => osc('triangle', f, t + i * 0.14, 0.3, 0.15)); },
   dodge() { if (!ctx) return; const t = ctx.currentTime; noise(t, 0.12, 0.1, 1800, 'bandpass', 1.5); },
+  // ship klaxon: three two-tone whoops
+  alarm() { if (!ctx) return; const t = ctx.currentTime; for (let i = 0; i < 3; i++) { osc('sawtooth', 520, t + i * 0.55, 0.26, 0.12, 320); osc('sawtooth', 330, t + i * 0.55 + 0.27, 0.26, 0.12, 220); } },
 };
 
 // Low, quiet dungeon drone.

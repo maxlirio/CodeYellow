@@ -127,6 +127,11 @@ function buildFstate(n) {
   };
 }
 
+// push a floor's authoritative snapshot to everyone (extraction unlocks ride on it)
+export function broadcastFstate(n) {
+  if (G.net.role === 'host') netSend(buildFstate(n));
+}
+
 function handleAsHost(conn, m) {
   const pid = conn.peer;
   switch (m.t) {
@@ -323,6 +328,12 @@ function handleAsGuest(m) {
       break;
     case 'fstate':
       callbacks.onFstate?.(m);
+      break;
+    case 'mission':
+      callbacks.onMission?.(m);
+      break;
+    case 'mend':
+      callbacks.onMissionEnd?.();
       break;
     case 'modeswitch':
       callbacks.onModeSwitch?.(m.mode);

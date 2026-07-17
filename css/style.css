@@ -292,3 +292,55 @@ button.orange-btn:hover { filter: brightness(1.15); }
 .chip { background: #16121e; border: 1px solid var(--border); border-radius: 14px; color: #cfc4ae; padding: 4px 10px; font-size: 12.5px; cursor: pointer; }
 .chip:hover { border-color: var(--orange); }
 .chip.sel { border-color: var(--orange); color: #ffd9a0; background: #241a12; }
+
+/* ---- mission map: the tactical hulk schematic ---- */
+.mm-panel { max-width: 860px; width: min(94vw, 860px); }
+#mmShip {
+  position: relative; height: 250px; margin: 8px 0 14px;
+  background: #060b10; border: 1px solid #1c3a3f; border-radius: 10px; overflow: hidden;
+}
+/* the hulk's silhouette, drawn in pure CSS: hull spine + engine block + prow */
+#mmHull { position: absolute; inset: 0; pointer-events: none; }
+#mmHull::before {
+  content: ''; position: absolute; left: 4%; right: 5%; top: 26%; bottom: 26%;
+  background: linear-gradient(180deg, #0d1a20, #0a141a);
+  border: 1px solid #234c52; border-radius: 60px 140px 140px 60px / 40px 90px 90px 40px;
+  box-shadow: inset 0 0 40px rgba(47, 214, 200, 0.05);
+}
+#mmHull::after {
+  content: ''; position: absolute; left: 1.5%; top: 38%; bottom: 38%; width: 6%;
+  background: #0d1a20; border: 1px solid #234c52; border-radius: 6px;
+  box-shadow: 12px 0 0 -6px #17323a;
+}
+.mm-sec {
+  position: absolute; transform: translate(-50%, -50%);
+  background: rgba(9, 26, 30, 0.92); color: #7fd8ce; border: 1px solid #2b6a63;
+  border-radius: 6px; padding: 7px 10px; font-family: inherit; font-size: 12px;
+  letter-spacing: 1px; cursor: pointer; white-space: nowrap; z-index: 2;
+}
+.mm-sec:hover { border-color: #2fd6c8; color: #c9fff8; box-shadow: 0 0 14px rgba(47,214,200,0.35); }
+.mm-sec.sel {
+  border-color: #2fd6c8; color: #06181a; background: #2fd6c8; font-weight: bold;
+  box-shadow: 0 0 20px rgba(47,214,200,0.6);
+}
+.mm-sec.locked { color: #5a4a4a; border-color: #55302c; background: rgba(26,10,10,0.9); cursor: not-allowed; }
+.mm-sec::after {
+  content: attr(data-threat); display: block; font-size: 9px; letter-spacing: 2px;
+  color: #d8905f; margin-top: 2px;
+}
+.mm-sec.sel::after { color: #06393a; }
+.mm-sec.locked::after { content: 'SEALED'; color: #8a4a42; }
+#mmDetail {
+  min-height: 100px; text-align: left; background: rgba(8, 20, 24, 0.7);
+  border: 1px solid #1c3a3f; border-radius: 10px; padding: 14px 18px; color: #a9c4c0;
+}
+#mmDetail h3 { color: #2fd6c8; letter-spacing: 2px; margin-bottom: 4px; }
+#mmDetail .mm-threat { color: #d8905f; font-size: 12px; letter-spacing: 3px; margin-bottom: 8px; }
+#mmDetail .mm-hint, #mmDetail .mm-locked { color: #6f8a86; font-style: italic; padding-top: 28px; text-align: center; }
+#mmDetail .mm-locked { color: #c96a55; }
+#mmConfirm {
+  margin-top: 10px; background: #123b36; color: #7fffee; border: 1px solid #2fd6c8;
+  border-radius: 8px; padding: 10px 26px; font-family: inherit; font-size: 15px;
+  letter-spacing: 3px; cursor: pointer;
+}
+#mmConfirm:hover { background: #2fd6c8; color: #06181a; box-shadow: 0 0 22px rgba(47,214,200,0.6); }

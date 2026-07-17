@@ -805,25 +805,34 @@ export function buildFloorMeshes(fs) {
   );
   glow.position.set(stairs.x + portal.dx * CELL / 2, 1.8, stairs.z + portal.dy * CELL / 2);
   glow.rotation.y = portal.yaw;
+  glow.name = 'portalGlow';
   group.add(glow);
   const plight = new THREE.PointLight(portalCol, 18, 14, 1.6);
   plight.position.set(stairs.x + portal.dx * (CELL / 2 - 0.6), 2.2, stairs.z + portal.dy * (CELL / 2 - 0.6));
+  plight.name = 'portalLight';
   group.add(plight);
+  if (fs.grid.portalIdle) { glow.visible = false; plight.visible = false; } // sleeps until a sortie is confirmed
   group.visible = false;
   G.scene.add(group);
   fs.meshGroup = group;
   fs.built = true;
 }
 
-export function disposeAllFloors() {
-  for (const fs of G.floors.values()) {
-    for (const grp of [fs.meshGroup, fs.enemyGroup, fs.lootGroup]) {
-      if (!grp) continue;
-      grp.traverse((n) => { if (n.isMesh && !n.isSkinnedMesh && fs.meshGroup === grp) n.geometry.dispose(); });
-      G.scene.remove(grp);
-    }
+// throw away one floor entirely — the next ensureFloor() regenerates it fresh.
+// Sorties use this so every insertion into a section is a new layout.
+export function disposeFloor(n) {
+  const fs = G.floors.get(n);
+  if (!fs) return;
+  for (const grp of [fs.meshGroup, fs.enemyGroup, fs.lootGroup]) {
+    if (!grp) continue;
+    grp.traverse((node) => { if (node.isMesh && !node.isSkinnedMesh && fs.meshGroup === grp) node.geometry.dispose(); });
+    G.scene.remove(grp);
   }
-  G.floors.clear();
+  G.floors.delete(n);
+}
+
+export function disposeAllFloors() {
+  for (const n of [...G.floors.keys()]) disposeFloor(n);
 }
 
 // ---- elevation ----

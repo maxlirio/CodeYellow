@@ -7,7 +7,7 @@ import { loadAll, makeCharacter, applyLook } from './assets.js';
 import { initFx, buildTorchFx, updateFx, clearTransientFx } from './fx.js';
 import { updateFireFx, clearFireFx, spawnFireImpact } from './firefx.js';
 import { initAudio, resumeAudio, toggleMute, sfx } from './audio.js';
-import { generateFloorData, buildFloorMeshes, disposeAllFloors } from './dungeon.js';
+import { generateFloorData, buildFloorMeshes, disposeAllFloors, disposeFloor } from './dungeon.js';
 import { spawnEnemiesForFloor, updateEnemies, damageEnemy, spawnEnemy, setEnemyState, killEnemy, refreshBossBarForFloor } from './enemies.js';
 import { spawnLootsForFloor, updateLoot, applyTakenSilently, dropItemLoot } from './loot.js';
 import { updateProjectiles, clearProjectiles } from './projectiles.js';
@@ -15,7 +15,11 @@ import { castSpell, castSignature, updateSpells, updateBeams, resetCooldowns, co
 import { giveStartingGear, equipItem, salvageItem, rollTrinket, rollWeapon, rollOffhand, addToBag, rarityOf } from './items.js';
 import { SPELLS, SHOP_TABLES, ENEMIES, RARITIES } from './config.js';
 import { generateTownData, generateArenaData, spawnTownNpcs, updateTownNpcs } from './town.js';
-import { generateBayData } from './bay.js';
+import { generateBridgeData, getHoloTexture, renderHologram } from './bridge.js';
+import {
+  setMissionHooks, updateMissions, openMissionMap, enterSortie, tryExtract,
+  onRemoteMission, onRemoteMissionEnd,
+} from './missions.js';
 import { initViewmodel, updateViewmodel } from './viewmodel.js';
 import { updateWalls, clearWalls } from './walls.js';
 import { initFloorTraps, updateTraps } from './traps.js';
@@ -317,7 +321,10 @@ function setupMenu() {
     },
     ensureFloorSim: (n) => ensureFloor(n),
     onFstate: (m) => applyFstate(m),
+    onMission: (m) => onRemoteMission(m),
+    onMissionEnd: () => onRemoteMissionEnd(),
   });
+  setMissionHooks({ goto: descendTo, disposeFloor, lock: lockPointer });
 }
 
 function renderLobby() {
@@ -389,7 +396,7 @@ function startRun(seed, mode = 'campaign') {
   G.run = { gold: mode === 'horde' ? 60 : 0, potions: 1, keys: 0, atkBonus: 0, hpBonus: 0, speedBonus: 0, speedBuys: 0, level: 1, xp: 0, kills: 0, chests: 0, startTime: performance.now(), buys: {}, deepest: 0 };
   resetCooldowns();
   stopHorde();
-  hide('menu'); hide('lobby'); hide('merchant'); hide('dead'); hide('victory'); hide('inventory'); hide('stairsDialog'); hide('tavernBoard'); hide('modeDialog'); hide('tomeDialog');
+  hide('menu'); hide('lobby'); hide('merchant'); hide('dead'); hide('victory'); hide('inventory'); hide('stairsDialog'); hide('tavernBoard'); hide('modeDialog'); hide('tomeDialog'); hide('missionMap');
   invOpen = false;
   setHidden('hud', false);
 
@@ -420,9 +427,10 @@ function startRun(seed, mode = 'campaign') {
     setLocalFloor(1);
     addMsg('DUEL — build with B, fight your rivals. Gold trickles in over time.', 'gold');
   } else {
+    G.sortie = null;
     setLocalFloor(0);
-    addMsg('Forward Staging Bay secured. The breach chute is in the north wall.', 'gold');
-    addMsg('Gear up at the bay terminals — then take the breach chute and cut down to the reactor on deck 9.');
+    addMsg('Bridge secured. Await tasking at the mission console.', 'gold');
+    addMsg('The hologram wall tracks your loadout and mission log. Listen for the red alert.');
   }
   spawnRemoteAvatars();
   refreshRemoteVisibility();
@@ -438,8 +446,19 @@ function startRun(seed, mode = 'campaign') {
 function ensureFloor(n) {
   const fs = floorState(n);
   if (!fs.grid) {
-    if (n === 0) Object.assign(fs, generateBayData());
+    if (n === 0) {
+      Object.assign(fs, generateBridgeData());
+      fs.holoTex = getHoloTexture();
+      renderHologram();
+    }
     else if (runMode !== 'campaign') Object.assign(fs, generateArenaData());
+    else if (G.sortie && n === G.sortie.floorN) {
+      // sortie floors are one-shot: fresh seed each insertion, named for the section,
+      // and ALWAYS locked — extraction opens only once the section is clear
+      Object.assign(fs, generateFloorData(G.sortie.seed, n));
+      if (fs.theme) fs.theme = { ...fs.theme, name: G.sortie.name };
+      fs.grid.stairsLocked = true;
+    }
     else Object.assign(fs, generateFloorData(G.seed, n));
   }
   if (!fs.spawned) {
@@ -545,6 +564,8 @@ function applyFstate(m) {
 
 function onStairsUsed() {
   if (G.mode !== 'playing') return;
+  if (G.grid.bridge) { enterSortie(); return; } // the breach portal — missions.js decides if it's live
+  if (tryExtract()) return; // on a sortie floor the pad is the EXTRACTION point
   sfx.stairs();
   if (G.grid.town) {
     openFloorSelect(); // pick any floor you've reached (or the next one down)
@@ -836,6 +857,7 @@ function applyModeSwitch(mode) {
 }
 
 function onShopOpened(type) {
+  if (type === 'missions') { openMissionMap(); return; }
   if (type === 'board') { document.exitPointerLock?.(); window.openTavernBoard(); return; }
   if (type === 'mode') { openModeDialog(); return; }
   if (type === 'codex') { openCodex(); return; }
@@ -1165,6 +1187,7 @@ function loop(t) {
     updateMinions(dt);
     updateMachines(dt);
     updateHorde(dt);
+    if (runMode === 'campaign') updateMissions(dt);
     updateBuildGhost();
     updateMachineGhost();
     if (G.runMode === 'duel' && G.mode === 'playing') {

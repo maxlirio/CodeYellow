@@ -229,6 +229,32 @@ try {
   assert(bay.grid.bay && bay.npcs.length >= 6, 'staging bay: grid + crew present');
   assert(bay.grid.colliders.every(c => c.noMesh), 'staging bay: prop colliders are noMesh');
 
+  // --- the bridge + sortie loop ---
+  const { generateBridgeData } = await import('./js/bridge.js');
+  const { SECTIONS } = await import('./js/missions.js');
+  const br = generateBridgeData();
+  assert(br.grid.bridge && br.grid.portalIdle && br.grid.stairsLocked === false,
+    'bridge: portal idle, never boss-locked');
+  assert(br.grid.windows.length >= 8, `bridge: viewport row (${br.grid.windows.length} panes)`);
+  assert(br.npcs.some(n => n.shop === 'missions') && br.npcs.every(n => n.noModel),
+    'bridge: console stations, no dealers');
+  assert(br.enemySpawns.length === 0, 'bridge: no hostiles aboard');
+  {
+    // every section names a real deck: valid theme id and a unique floor
+    const themeIds = ['cargo', 'hab', 'engineering', 'command'];
+    const floors = SECTIONS.map(s => s.floorN);
+    assert(SECTIONS.length >= 6 && new Set(floors).size === floors.length,
+      `sections: ${SECTIONS.length} unique decks`);
+    assert(SECTIONS.every(s => s.floorN >= 1 && themeIds.includes(s.theme) && s.threat >= 1),
+      'sections: floors + themes valid');
+    const deep = SECTIONS.find(s => s.id === 'reactor');
+    assert(deep && deep.floorN === 9, 'sections: the reactor is deck 9');
+    // a sortie-seeded deck generates and differs run to run
+    const a = generateShipDeck('seedA:sortie1', 5), b = generateShipDeck('seedA:sortie2', 5);
+    assert(a.grid.cells.length && b.grid.cells.length &&
+      a.grid.cells.join() !== b.grid.cells.join(), 'sorties: fresh layout per insertion');
+  }
+
   document.title = out.some(l => l.startsWith('FAIL') || l.startsWith('ERROR')) ? 'FAILED' : 'PASSED';
 } catch (e) {
   log('ERROR ' + (e.stack || e.message));

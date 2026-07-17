@@ -60,9 +60,18 @@ export const SHIP_THEMES = [
   },
 ];
 
+// sortie override: missions.js pins a section's identity so the ENGINE ROOM
+// really is engineering and the SPACE PORT really is hangars, whatever the floor
+let sortieOverride = null; // { floorN, theme, roles }
+export function setSortieOverride(o) { sortieOverride = o; }
+
 // deck flavor climbs toward the reactor: cargo bays first, then habitation,
 // then engineering, with the command spire just before the core
 export function shipThemeFor(seed, floor) {
+  if (sortieOverride && floor === sortieOverride.floorN && sortieOverride.theme) {
+    const t = SHIP_THEMES.find(t => t.id === sortieOverride.theme);
+    if (t) return t;
+  }
   const k = ((floor - 1) % 9 + 9) % 9; // 0..8 within each 9-deck run
   const id = k < 3 ? 'cargo' : k < 5 ? 'hab' : k < 7 ? 'engineering' : 'command';
   return SHIP_THEMES.find(t => t.id === id);
@@ -279,12 +288,14 @@ export function generateShipDeck(seedStr, floor) {
   for (const b of breachCells) clearAround(b.x, b.y, 2);
 
   // ---- hold roles ----
-  const flavorRoles = {
-    cargo: ['cargo', 'cargo', 'hangar', 'machine', 'barracks'],
-    hab: ['barracks', 'barracks', 'gantry', 'cargo', 'machine'],
-    engineering: ['machine', 'machine', 'gantry', 'cargo', 'barracks'],
-    command: ['gantry', 'machine', 'barracks', 'cargo'],
-  }[theme.id];
+  const flavorRoles = (sortieOverride && floor === sortieOverride.floorN && sortieOverride.roles?.length)
+    ? sortieOverride.roles
+    : {
+      cargo: ['cargo', 'cargo', 'hangar', 'machine', 'barracks'],
+      hab: ['barracks', 'barracks', 'gantry', 'cargo', 'machine'],
+      engineering: ['machine', 'machine', 'gantry', 'cargo', 'barracks'],
+      command: ['gantry', 'machine', 'barracks', 'cargo'],
+    }[theme.id];
   const biggest = biggestHold;
   for (const l of holds) {
     if (l === spawnHold) l.role = 'breach';
