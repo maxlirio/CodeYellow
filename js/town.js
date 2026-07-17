@@ -372,6 +372,11 @@ export function spawnTownNpcs(fs) {
   fs.npcObjs = [];
   for (const n of fs.npcs) {
     if (n.noModel) {
+      // sign: false — the station's SCREEN is its visual; interaction only
+      if (n.sign === false) {
+        fs.npcObjs.push({ ...n, obj: null, anim: null });
+        continue;
+      }
       // a visible floating sign (e.g. the tavern's Public Games board)
       const c2 = document.createElement('canvas');
       c2.width = 512; c2.height = 96;

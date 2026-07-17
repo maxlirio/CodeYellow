@@ -17,75 +17,57 @@ export const BRIDGE_THEME = {
 };
 
 export function generateBridgeData() {
-  const w = 24, h = 16;
+  // a ROUND command deck: viewport arc forward, holo table center, portal aft.
+  // No furniture scattered around — every station is built into the wall.
+  const w = 15, h = 15, C = 7, R = 5.6;
   const cells = new Uint8Array(w * h);
   const elev = new Uint8Array(w * h);
   const ramps = new Map();
-  const colliders = [];
-  const set = (x, y, v) => { cells[y * w + x] = v; };
+  const inR = (x, y) => (x - C) ** 2 + (y - C) ** 2 <= R * R;
+  for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) if (inR(x, y)) cells[y * w + x] = FLOOR;
 
-  // the command deck
-  for (let y = 3; y <= 12; y++) for (let x = 3; x <= 20; x++) set(x, y, FLOOR);
+  // breach portal pad on the aft rim — INERT until a sortie is confirmed
+  const portal = { x: 5, y: 12 };
+  cells[portal.y * w + portal.x] = STAIRS;
 
-  // breach portal pad, east side — INERT until a sortie is confirmed
-  const portal = { x: 18, y: 7 };
-  set(portal.x, portal.y, STAIRS);
-
-  // the VIEWPORT: north-wall window segments (rendered as glass by shipmeshes;
-  // the cells behind stay SOLID so nobody walks into space)
+  // panoramic viewport: every wall face on the forward hemisphere shows space
   const windows = [];
-  for (let x = 5; x <= 15; x++) windows.push({ cx: x, cy: 3, dx: 0, dy: -1 });
-
-  // consoles & furniture (Kenney props, measured colliders flagged noMesh)
-  const props = [
-    // forward operations rows, facing the stars
-    { piece: 'desk_computerScreen', x: 7, z: 4.6, yaw: Math.PI, scale: 3.0 },
-    { piece: 'desk_computer', x: 9.5, z: 4.6, yaw: Math.PI, scale: 3.0 },
-    { piece: 'desk_computerScreen', x: 12, z: 4.6, yaw: Math.PI, scale: 3.0 },
-    { piece: 'desk_computer', x: 14.5, z: 4.6, yaw: Math.PI, scale: 3.0 },
-    { piece: 'desk_computerScreen', x: 17, z: 4.6, yaw: Math.PI, scale: 3.0 },
-    { piece: 'desk_computerScreen', x: 8.2, z: 6.4, yaw: Math.PI, scale: 3.0 },
-    { piece: 'desk_computer', x: 11, z: 6.4, yaw: Math.PI, scale: 3.0 },
-    { piece: 'desk_computerScreen', x: 13.8, z: 6.4, yaw: Math.PI, scale: 3.0 },
-    // THE MISSION CONSOLE — at the back, under the alert light
-    // (Kenney pivots sit at a corner: geometry runs ~5u along +z at yaw 0,
-    // so back-row pieces anchor a cell and a half off the south wall)
-    { piece: 'desk_computerScreen', x: 10.9, z: 10.4, yaw: 0, scale: 3.6 },
-    { piece: 'machine_wirelessCable', x: 13.2, z: 10.6, yaw: 0, scale: 3.0 },
-    // comms station gear (west back wall, by the Comms sprite)
-    { piece: 'desk_computer', x: 5.6, z: 10.4, yaw: 0, scale: 3.0 },
-    { piece: 'satelliteDish', x: 4.2, z: 9.6, yaw: 0.8, scale: 3.0 },
-    // sim pods: parked training capsules by the east back wall
-    { piece: 'craft_cargoA', x: 15.6, z: 10.6, yaw: 2.4, scale: 2.6 },
-    { piece: 'craft_cargoA', x: 17.2, z: 10.2, yaw: 1.9, scale: 2.6 },
-    // power + comms gear by the east pad
-    { piece: 'machine_generatorLarge', x: 19.4, z: 10.2, yaw: -Math.PI / 2, scale: 3.4 },
-    { piece: 'barrels', x: 4.6, z: 4.6, yaw: 0.5, scale: 3.6 },
-    { piece: 'machine_barrelLarge', x: 4.2, z: 6.2, yaw: 0, scale: 3.2 },
-  ];
-  const shipProps = [];
-  for (const pr of props) {
-    shipProps.push({ ...pr, x: pr.x * CELL, z: pr.z * CELL });
+  for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) {
+    if (cells[y * w + x] !== FLOOR) continue;
+    for (const [dx, dy] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
+      const nx = x + dx, ny = y + dy;
+      if (nx < 0 || ny < 0 || nx >= w || ny >= h || cells[ny * w + nx] !== 0) continue;
+      if (y + dy * 0.5 < C - 0.2) windows.push({ cx: x, cy: y, dx, dy });
+    }
   }
 
-  // stations reuse the interaction system — no dealers, only consoles
+  // the holo table IS the collision — you lean on it, you don't walk through it
+  const colliders = [{ x: C * CELL, z: C * CELL, r: 1.95, y0: 0, h: 1.05, noMesh: true }];
+
+  // stations: interaction points only — the SCREENS are the visuals (sign: false)
   const npcs = [
-    { model: null, noModel: true, name: 'Mission Console', shop: 'missions',
-      label: 'MISSION CONSOLE', x: 11.5 * CELL, z: 11.3 * CELL },
-    { model: null, noModel: true, name: 'Comms', shop: 'board',
-      label: 'COMMS — JOINT OPS', x: 6.5 * CELL, z: 11.3 * CELL },
-    { model: null, noModel: true, name: 'Sim Pods', shop: 'mode',
-      label: 'SIM PODS', x: 16.5 * CELL, z: 11.3 * CELL },
+    { model: null, noModel: true, sign: false, name: 'Holo Table', shop: 'missions',
+      label: 'HOLO TABLE — TACTICAL', x: C * CELL, z: C * CELL },
+    { model: null, noModel: true, sign: false, name: 'Comms', shop: 'board',
+      label: 'COMMS — JOINT OPS', x: 11.9 * CELL, z: C * CELL },
+    { model: null, noModel: true, sign: false, name: 'Sim Deck', shop: 'mode',
+      label: 'SIM DECK — CHANGE VENTURE', x: 9 * CELL, z: 11.7 * CELL },
   ];
 
   const grid = {
     w, h, cells, elev, ramps, colliders,
-    ship: true, bridge: true, shipProps, windows,
-    rooms: [{ x: 3, y: 3, w: 18, h: 10, cx: 11, cy: 7 }],
-    spawn: { x: 11 * CELL, z: 8.5 * CELL }, spawnYaw: Math.PI, // wake facing the stars
+    ship: true, bridge: true, windows, shipProps: [],
+    // wall screens: status hologram west, comms east, sim deck aft
+    screens: [
+      { kind: 'status', x: 1.5 * CELL + 0.15, z: C * CELL, ry: Math.PI / 2 },
+      { kind: 'comms', x: 12.5 * CELL - 0.15, z: C * CELL, ry: -Math.PI / 2 },
+      { kind: 'sim', x: 9 * CELL, z: 12.5 * CELL - 0.15, ry: Math.PI },
+    ],
+    rooms: [{ x: 2, y: 2, w: 11, h: 11, cx: C, cy: C }],
+    spawn: { x: C * CELL, z: 9.6 * CELL }, spawnYaw: 0, // wake facing table + stars
     stairs: { x: portal.x * CELL, z: portal.y * CELL, cx: portal.x, cy: portal.y },
     stairsLocked: false,
-    portal: { dx: 1, dy: 0, yaw: Math.PI / 2 },
+    portal: { dx: 0, dy: 1, yaw: 0 },
     portalIdle: true, // missions.js lights it when a sortie is confirmed
   };
   return {

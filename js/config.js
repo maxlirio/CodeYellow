@@ -3,54 +3,59 @@ export const CELL = 4;              // world units per grid cell (KayKit tile si
 export const WALL_H = 4;
 export const PLATFORM_H = 4;        // height of climbable platforms
 
+// THE OPERATIVES — six different answers to a dead ship, not one hero in six
+// hats. Each has a pole: Aegis tanks, Ronin duels, Vesper crits, Volt nukes,
+// Deadeye one-taps, Forge brings friends. (Internal ids stay for saves/net.)
 export const CLASSES = {
   knight: {
-    name: 'Breacher', icon: '', model: 'Astronaut_BarbaraTheBee', scale: 0.62,
-    desc: 'Point of the spear. Arc-blade and riot plate — first through the hull.',
-    physical: true,
-    hp: 125, dmg: 16, speed: 8.2, crit: 0.06, attackAnims: ['1H_Melee_Attack_Slice_Horizontal', '1H_Melee_Attack_Chop'],
-    attackTime: 0.7, attackRange: 3.0, attackArc: 1.1, mana: 60, manaRegen: 2,
+    name: 'Aegis', icon: '', model: 'Mike', scale: 0.4, tint: 0xc8d8f8,
+    desc: 'Siege-frame pilot. Slowest boots on the deck, hardest to put down — 15% plating, immune to knockback.',
+    physical: true, armorBase: 0.15, kbImmune: true,
+    hp: 175, dmg: 20, speed: 6.9, crit: 0.04, attackAnims: ['1H_Melee_Attack_Slice_Horizontal', '1H_Melee_Attack_Chop'],
+    attackTime: 0.9, attackRange: 3.4, attackArc: 1.25, mana: 60, manaRegen: 2,
     show: [],
     spellPool: ['shieldbash', 'warcry', 'bulwark', 'bullcharge', 'warbanner', 'executioner', 'chainhook'],
   },
   barbarian: {
-    name: 'Wrecker', icon: '', model: 'Astronaut_FernandoTheFlamingo', scale: 0.62,
-    desc: 'Salvage-crew muscle. Two-handed plasma render — walls optional.',
+    name: 'Ronin', icon: '', model: 'Cyber_Character', scale: 1.28,
+    desc: 'Cyber-duelist. Mono-katana, fast feet, faster hands — hit hard, be gone before the swing back.',
     physical: true,
-    hp: 150, dmg: 26, speed: 7.7, crit: 0.1, attackAnims: ['2H_Melee_Attack_Chop', '2H_Melee_Attack_Slice'],
-    attackTime: 0.92, attackRange: 3.4, attackArc: 1.35, mana: 60, manaRegen: 2,
-    show: [],
+    hp: 105, dmg: 24, speed: 9.2, crit: 0.18, attackAnims: ['2H_Melee_Attack_Chop', '2H_Melee_Attack_Slice'],
+    attackTime: 0.55, attackRange: 3.0, attackArc: 1.2, mana: 60, manaRegen: 2,
+    show: ['Sword_1', 'Sword_2', 'Sword_3', 'Sword_4'],
     spellPool: ['axethrow', 'groundslam', 'rage', 'whirlwind', 'leap', 'bloodlust', 'bullcharge', 'sunderstomp', 'chainhook', 'executioner'],
   },
   rogue: {
-    name: 'Splicer', icon: '', model: 'Astronaut_RaeTheRedPanda', scale: 0.62,
-    desc: 'Twin vibro-blades. Fast, fragile, deadly crits.',
-    hp: 92, dmg: 11, speed: 9.4, crit: 0.28, attackAnims: ['Dualwield_Melee_Attack_Slice', 'Dualwield_Melee_Attack_Stab'],
-    attackTime: 0.44, attackRange: 2.6, attackArc: 1.0, mana: 70, manaRegen: 2.5,
-    show: [],
+    name: 'Vesper', icon: '', model: 'Character_Enemy', scale: 0.85,
+    desc: 'Void-crew knife artist. Paper thin, quickest on the ship, and every third cut is a crit.',
+    hp: 78, dmg: 10, speed: 10.4, crit: 0.34, attackAnims: ['Dualwield_Melee_Attack_Slice', 'Dualwield_Melee_Attack_Stab'],
+    attackTime: 0.4, attackRange: 2.5, attackArc: 1.0, mana: 70, manaRegen: 2.5,
+    show: ['Knife_1', 'Knife_2'],
     spellPool: ['knifefan', 'shadowstep', 'venomvial', 'smokebomb', 'deathmark', 'shurikenstorm', 'bonewall', 'mirrorimage', 'ricochet', 'shadowswap', 'decoy', 'beartrap', 'embertrail'],
   },
   mage: {
-    name: 'Technician', icon: '', model: 'Astronaut_FinnTheFrog', scale: 0.62,
-    desc: 'Arc projector. Bolts burn energy — they hit like a cannon when your capacitors are full.',
-    hp: 84, dmg: 26, speed: 8.4, crit: 0.08, attackAnims: ['Spellcast_Shoot'],
-    attackTime: 0.55, attackRange: 26, attackArc: 0, mana: 110, manaRegen: 3.5, manaAttack: 0.2,
+    name: 'Volt', icon: '', model: 'RobotExpressive', scale: 0.37, paint: 0x55ddff,
+    desc: 'Combat android. Arc bolts straight from the chassis, huge capacitors, and a hull that repairs itself.',
+    hpRegen: 0.6,
+    hp: 82, dmg: 30, speed: 8.0, crit: 0.06, attackAnims: ['Spellcast_Shoot'],
+    attackTime: 0.6, attackRange: 26, attackArc: 0, mana: 130, manaRegen: 4, manaAttack: 0.22,
     show: [], ranged: true, boltVis: 'laser', boltColor: 0x55ddff,
     spellPool: ['fireball', 'frostshard', 'chainlightning', 'meteor', 'blizzard', 'arcaneorb', 'bonewall', 'stormlance', 'mirrorimage', 'gravitywell', 'ricochet', 'gravitylash', 'chronobubble', 'frostprison', 'levitate', 'sanctuary'],
   },
   ranger: {
-    name: 'Marksman', icon: '', model: 'Character_Soldier', scale: 0.85, 
-    desc: 'Ship-security veteran. Pulse rifles fire where you aim — count your cells.',
-    hp: 95, dmg: 14, speed: 9.0, crit: 0.15, attackAnims: ['2H_Ranged_Shoot'],
-    attackTime: 0.95, attackRange: 28, attackArc: 0, mana: 80, manaRegen: 2.5,
+    name: 'Deadeye', icon: '', model: 'Character_Soldier', scale: 0.85,
+    desc: 'Long-las specialist. Slow, surgical shots that hit like a breach charge — one in four crits.',
+    hp: 90, dmg: 19, speed: 8.6, crit: 0.24, attackAnims: ['2H_Ranged_Shoot'],
+    attackTime: 1.2, attackRange: 32, attackArc: 0, mana: 80, manaRegen: 2.5,
     show: [], ranged: true, boltVis: 'laser', boltColor: 0xffb02e,
     spellPool: ['powershot', 'multishot', 'rainarrows', 'shadowstep', 'smokebomb', 'bonewall', 'lifeward', 'beartrap', 'truesight', 'decoy', 'embertrail', 'sanctuary'],
   },
   necromancer: {
-    name: 'Fabricator', icon: '', model: 'Character_Hazmat', scale: 0.85,
-    desc: 'Nanite engineer. Corrosive bolts, dark bargains with the machine — and the scrap answers when called.',
-    hp: 80, dmg: 19, speed: 8.2, crit: 0.06, attackAnims: ['Spellcast_Shoot'],
-    attackTime: 0.6, attackRange: 24, attackArc: 0, mana: 120, manaRegen: 3.5, manaAttack: 0.14,
+    name: 'Forge', icon: '', model: 'Leela', scale: 0.36, tint: 0xf2d8b8,
+    desc: 'Field fabricator. Corrosive nanite bolts — and a Blade Trooper escort prints at every deployment.',
+    escort: 'sword',
+    hp: 100, dmg: 14, speed: 8.0, crit: 0.06, attackAnims: ['Spellcast_Shoot'],
+    attackTime: 0.7, attackRange: 22, attackArc: 0, mana: 110, manaRegen: 3.5, manaAttack: 0.12,
     show: [], boltVis: 'wisp', boltColor: 0x77ff88, undead: true,
     spellPool: ['raisedead', 'dominate', 'soulharvest', 'bloodpact', 'deathcoil', 'bonewall', 'frostprison', 'gravitylash'],
   },
@@ -155,7 +160,8 @@ export const WEAPON_TYPES = {
     { id: 'runeblade', noun: 'Vengeance Edge', mesh: [], held: 'monoedge', model: 'monoedge', verb: 'slash', dmgBonus: 1.1, atkTime: 0.62, critAdd: 0.08, minRarity: 2, sigPool: ['radiantbeam', 'dragonsbreath'] },
   ],
   barbarian: [
-    { id: 'ripblade', noun: 'Rip-Blade', mesh: [], held: 'arcblade', model: 'arcblade', verb: 'slash', sigPool: ['firenova', 'dragonsbreath'] },
+    // the Ronin's signature blade IS the rig's own katana — no bone-attach
+    { id: 'monokatana', noun: 'Mono-Katana', mesh: ['Sword_1', 'Sword_2', 'Sword_3', 'Sword_4'], model: 'monoedge', verb: 'slash', dmgBonus: 1.1, critAdd: 0.04, sigPool: ['shadowflurry', 'dragonsbreath'] },
     { id: 'render2h', noun: 'Heavy Render', mesh: [], held: 'plasrend', model: 'plasrend', verb: 'cleave', dmgBonus: 1.25, atkTime: 1.0, sigPool: ['firenova', 'thunderclap'] },
     { id: 'wreckmaul', noun: 'Wrecking Maul', mesh: [], held: 'breachmaul', model: 'breachmaul', verb: 'smash', dmgBonus: 1.5, atkTime: 1.25, stunHit: 0.5, sigPool: ['thunderclap', 'earthsplitter'] },
     { id: 'monoscythe', noun: 'Salvage Scythe', mesh: [], held: 'monoscythe', model: 'monoscythe', verb: 'sweep', dmgBonus: 1.15, arcAdd: 0.5, rangeAdd: 0.6, sigPool: ['lifedrain', 'dragonsbreath'], minRarity: 1 },
@@ -279,7 +285,7 @@ export const ENEMIES = {
   necrolord:{ model: 'Leela', animMap: 'mech', hp: 300, dmg: 18, speed: 3.8, range: 15, xp: 180, gold: [60, 95], attackTime: 1.3, aggro: 30, scale: 0.68, boss: true, ranged: true, tint: 0xddaaff, boltVis: 'laser', boltColor: 0xbb66ff, boltSpeed: 28, summons: true, summonEvery: 8, summonType: 'minion', summonCount: 2, bossName: 'FABRICATOR PRIME', bossMsg: 'prints fresh frames' },
   reaper:   { model: 'Cyber_Character', animMap: 'cyberhero', hp: 320, dmg: 20, speed: 6.8, range: 2.8, xp: 180, gold: [60, 95], attackTime: 0.6, aggro: 32, scale: 2.3, boss: true, ghost: true, bossName: 'THE SILENT PROTOCOL' },
   boneking: { model: 'George', animMap: 'mech', hp: 620, dmg: 26, speed: 4.2, range: 16,  xp: 420, gold: [150, 220], attackTime: 1.3, aggro: 40, scale: 0.8, ranged: true, boltVis: 'laser', boltColor: 0xff3322, boltSpeed: 30, boss: true, summons: true, summonEvery: 9, summonType: 'minion', summonCount: 2, tint: 0xffb8a8, bossName: 'THE FOUNDRY TYRANT' },
-  mushking: { model: 'MushroomKing', animMap: 'ground', hp: 350, dmg: 20, speed: 4.4, range: 3.0, xp: 190, gold: [70, 100], attackTime: 1.2, aggro: 30, scale: 1.35, boss: true, stalwart: true, tint: 0xc0ffd0, summons: true, summonEvery: 10, summonType: 'slimelet', summonCount: 3, bossName: 'THE SPORE ENGINE', bossMsg: 'vents spores' },
+  mushking: { model: 'Enemy_Small', animMap: 'void', fly: true, hp: 350, dmg: 20, speed: 4.6, range: 3.0, xp: 190, gold: [70, 100], attackTime: 1.2, aggro: 30, scale: 1.5, boss: true, stalwart: true, tint: 0x9fe8d8, summons: true, summonEvery: 10, summonType: 'slimelet', summonCount: 3, bossName: 'THE NANITE HIVE', bossMsg: 'sheds nanite globs' },
   // deck 9: the old god of the reactor — still the dragon, pending its own rebuild
   // solidR = her TORSO: you must walk around it. bodyR (4.5) is her whole reach,
   // wings and tail included — those you can duck under.
@@ -411,6 +417,9 @@ export const WEAPON_MESHES = [
   '1H_Axe', '1H_Axe_Offhand', '2H_Axe', 'Barbarian_Round_Shield', 'Mug',
   'Spellbook', 'Spellbook_open', '1H_Wand', '2H_Staff',
   'Knife', 'Knife_Offhand', '1H_Crossbow', '2H_Crossbow', 'Throwable',
+  // Cyber_Character's built-in mono-katana (the Ronin's default kit; an
+  // equipped held model hides it)
+  'Sword_1', 'Sword_2', 'Sword_3', 'Sword_4',
 ];
 
 export const CAPE_COLORS = [

@@ -260,50 +260,134 @@ export function buildShipStatic(fs) {
     }
   }
 
-  // the bridge: a starfield behind the viewport, and the hologram status wall
+  // THE BRIDGE: starfield wrapped all the way around, a central holo table,
+  // and stations built into the wall as SCREENS — a control room, not an office
   if (g.bridge) {
-    const wins = g.windows || [];
-    if (wins.length) {
-      const xs = wins.map(wd => wd.cx * CELL);
-      const x0 = Math.min(...xs) - CELL, x1 = Math.max(...xs) + CELL;
-      const zEdge = (wins[0].cy + wins[0].dy) * CELL - wins[0].dy * 1.5;
-      const sc = document.createElement('canvas');
-      sc.width = 1024; sc.height = 256;
-      const sctx = sc.getContext('2d');
-      sctx.fillStyle = '#020409';
-      sctx.fillRect(0, 0, 1024, 256);
-      let sseed = 1234;
-      const srand = () => { sseed = (sseed * 16807) % 2147483647; return sseed / 2147483647; };
-      for (let i = 0; i < 340; i++) {
-        const b = srand();
-        sctx.fillStyle = b > 0.94 ? '#bfe6ff' : b > 0.7 ? '#ffffff' : '#7d8ba0';
-        const r = b > 0.96 ? 2.2 : b > 0.8 ? 1.4 : 0.8;
-        sctx.fillRect(srand() * 1024, srand() * 256, r, r);
-      }
-      const starTex = new THREE.CanvasTexture(sc);
-      starTex.colorSpace = THREE.SRGBColorSpace;
-      const stars = new THREE.Mesh(
-        new THREE.PlaneGeometry(x1 - x0 + 24, 26),
-        new THREE.MeshBasicMaterial({ map: starTex, toneMapped: false })
-      );
-      stars.position.set((x0 + x1) / 2, 4, zEdge - 6);
-      stars.rotation.y = wins[0].dy > 0 ? Math.PI : 0;
-      group.add(stars);
+    const cx0 = (g.w / 2 - 0.5) * CELL, cz0 = (g.h / 2 - 0.5) * CELL; // room center
+    // space, in every window: a star cylinder wrapping the whole deck
+    const sc = document.createElement('canvas');
+    sc.width = 2048; sc.height = 256;
+    const sctx = sc.getContext('2d');
+    sctx.fillStyle = '#020409';
+    sctx.fillRect(0, 0, 2048, 256);
+    let sseed = 1234;
+    const srand = () => { sseed = (sseed * 16807) % 2147483647; return sseed / 2147483647; };
+    for (let i = 0; i < 1400; i++) {
+      const b = srand();
+      sctx.fillStyle = b > 0.94 ? '#bfe6ff' : b > 0.7 ? '#ffffff' : '#7d8ba0';
+      const r = b > 0.96 ? 2.2 : b > 0.8 ? 1.4 : 0.8;
+      sctx.fillRect(srand() * 2048, srand() * 256, r, r);
     }
-    // hologram wall on the WEST bulkhead — content drawn by bridge.js
-    const holo = new THREE.Mesh(
-      new THREE.PlaneGeometry(10, 5),
-      new THREE.MeshBasicMaterial({ map: fs.holoTex, transparent: true, toneMapped: false })
+    const starTex = new THREE.CanvasTexture(sc);
+    starTex.colorSpace = THREE.SRGBColorSpace;
+    const stars = new THREE.Mesh(
+      new THREE.CylinderGeometry(38, 38, 44, 24, 1, true),
+      new THREE.MeshBasicMaterial({ map: starTex, toneMapped: false, side: THREE.BackSide })
     );
-    holo.position.set(3 * CELL - 1.55, 3.4, 7.5 * CELL);
-    holo.rotation.y = Math.PI / 2;
-    group.add(holo);
-    const hglow = new THREE.PointLight(0x2fd6c8, 6, 16, 1.6);
-    hglow.position.set(3 * CELL + 1.5, 3.4, 7.5 * CELL);
-    group.add(hglow);
-    // the red-alert beacon over the mission console (missions.js pulses it)
-    const beacon = new THREE.PointLight(0xff2222, 0, 20, 1.4);
-    beacon.position.set(11.5 * CELL, 5.4, 11.3 * CELL);
+    stars.position.set(cx0, 4, cz0);
+    group.add(stars);
+
+    // THE HOLO TABLE — round pedestal, glowing top, a hologram of the hulk
+    // floating above it (missions.js spins it and lights it up on red alert)
+    const ped = new THREE.Mesh(new THREE.CylinderGeometry(2.0, 2.35, 1.0, 14), mats.machine);
+    ped.position.set(cx0, 0.5, cz0);
+    group.add(ped);
+    const ring = new THREE.Mesh(new THREE.CylinderGeometry(2.06, 2.06, 0.14, 14, 1, true), mats.accent);
+    ring.position.set(cx0, 0.88, cz0);
+    group.add(ring);
+    const top = new THREE.Mesh(new THREE.CylinderGeometry(1.85, 1.85, 0.06, 14),
+      new THREE.MeshBasicMaterial({ color: 0x1a4a46, toneMapped: false }));
+    top.position.set(cx0, 1.06, cz0);
+    group.add(top);
+    // the hulk, in light: translucent hull + prow + engine block
+    const holoMat = new THREE.MeshBasicMaterial({ color: 0x3fe8d8, transparent: true, opacity: 0.5, toneMapped: false });
+    const holoShip = new THREE.Group();
+    holoShip.name = 'holoShip';
+    const hull = new THREE.Mesh(new THREE.BoxGeometry(3.6, 0.55, 1.1), holoMat);
+    holoShip.add(hull);
+    const prow = new THREE.Mesh(new THREE.ConeGeometry(0.55, 1.2, 4), holoMat);
+    prow.rotation.z = -Math.PI / 2;
+    prow.position.x = 2.35;
+    holoShip.add(prow);
+    const spine = new THREE.Mesh(new THREE.BoxGeometry(1.6, 0.35, 0.5), holoMat);
+    spine.position.set(-0.4, 0.42, 0);
+    holoShip.add(spine);
+    const eng = new THREE.Mesh(new THREE.BoxGeometry(0.8, 0.8, 1.5), holoMat);
+    eng.position.x = -2.1;
+    holoShip.add(eng);
+    for (const oz of [-0.45, 0, 0.45]) {
+      const noz = new THREE.Mesh(new THREE.CylinderGeometry(0.16, 0.2, 0.5, 6), holoMat);
+      noz.rotation.z = Math.PI / 2;
+      noz.position.set(-2.6, 0, oz);
+      holoShip.add(noz);
+    }
+    // the alert marker: a red node that pulses on the hull when a signature lands
+    const alertNode = new THREE.Mesh(new THREE.SphereGeometry(0.2, 8, 8),
+      new THREE.MeshBasicMaterial({ color: 0xff3322, toneMapped: false }));
+    alertNode.name = 'holoAlert';
+    alertNode.visible = false;
+    alertNode.position.set(0.8, 0.35, 0);
+    holoShip.add(alertNode);
+    holoShip.position.set(cx0, 2.15, cz0);
+    group.add(holoShip);
+    const tlight = new THREE.PointLight(0x2fd6c8, 10, 14, 1.6);
+    tlight.position.set(cx0, 2.6, cz0);
+    group.add(tlight);
+    // floor guide ring around the table
+    const fring = new THREE.Mesh(new THREE.CylinderGeometry(3.3, 3.3, 0.03, 24, 1, true), mats.accent);
+    fring.position.set(cx0, 0.05, cz0);
+    group.add(fring);
+
+    // WALL STATIONS: screens set into the bulkheads, consoles beneath them
+    const mkScreen = (tex, wdt, hgt) => new THREE.Mesh(
+      new THREE.PlaneGeometry(wdt, hgt),
+      new THREE.MeshBasicMaterial({ map: tex, transparent: true, toneMapped: false }));
+    const label = (text, sub) => {
+      const c = document.createElement('canvas');
+      c.width = 512; c.height = 288;
+      const cc = c.getContext('2d');
+      cc.fillStyle = 'rgba(8, 22, 30, 0.94)';
+      cc.fillRect(0, 0, 512, 288);
+      cc.strokeStyle = '#2fd6c8'; cc.lineWidth = 5;
+      cc.strokeRect(5, 5, 502, 278);
+      cc.fillStyle = '#2fd6c8';
+      cc.font = 'bold 40px Menlo, monospace';
+      cc.textAlign = 'center';
+      cc.fillText(text, 256, 120);
+      cc.fillStyle = '#7fb8b2';
+      cc.font = '24px Menlo, monospace';
+      cc.fillText(sub, 256, 175);
+      const t = new THREE.CanvasTexture(c);
+      t.colorSpace = THREE.SRGBColorSpace;
+      return t;
+    };
+    for (const s of g.screens || []) {
+      let scr;
+      if (s.kind === 'status') scr = mkScreen(fs.holoTex, 8.4, 4.2);
+      else if (s.kind === 'comms') scr = mkScreen(label('COMMS — JOINT OPS', 'public games · press E'), 4.6, 2.6);
+      else scr = mkScreen(label('SIM DECK', 'change venture · press E'), 4.6, 2.6);
+      scr.position.set(s.x, s.kind === 'status' ? 3.3 : 3.1, s.z);
+      scr.rotation.y = s.ry;
+      group.add(scr);
+      // slim console bench beneath, integrated into the wall (the geometry
+      // buckets are already merged by now — direct meshes only in this block)
+      const nx = Math.sin(s.ry), nz = Math.cos(s.ry); // screen normal (into the room)
+      const bench = new THREE.Mesh(
+        new THREE.BoxGeometry(s.ry === Math.PI ? 3.4 : 1.0, 1.1, s.ry === Math.PI ? 1.0 : 3.4), mats.machine);
+      bench.position.set(s.x + nx * 0.45, 0.55, s.z + nz * 0.45);
+      group.add(bench);
+      const strip = new THREE.Mesh(
+        new THREE.BoxGeometry(s.ry === Math.PI ? 3.0 : 0.08, 0.06, s.ry === Math.PI ? 0.08 : 3.0), mats.accent);
+      strip.position.set(s.x + nx * 0.98, 1.08, s.z + nz * 0.98);
+      group.add(strip);
+      const sl = new THREE.PointLight(0x2fd6c8, 4, 9, 1.8);
+      sl.position.set(s.x + nx * 1.6, 3.0, s.z + nz * 1.6);
+      group.add(sl);
+    }
+
+    // the red-alert beacon, high over the table (missions.js pulses it)
+    const beacon = new THREE.PointLight(0xff2222, 0, 26, 1.3);
+    beacon.position.set(cx0, 5.8, cz0);
     beacon.name = 'alertBeacon';
     group.add(beacon);
   }

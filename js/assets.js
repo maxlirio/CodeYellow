@@ -10,7 +10,9 @@ import { WEAPON_MESHES, CAPE_COLORS } from './config.js';
 const CHAR_MODELS = ['Knight', 'Mage', 'Rogue', 'Rogue_Hooded', 'Barbarian'];
 const ENEMY_MODELS = ['Skeleton_Minion', 'Skeleton_Warrior', 'Skeleton_Rogue', 'Skeleton_Mage'];
 // Quaternius Ultimate Monsters (CC0) — same low-poly big-head style as KayKit
-const MONSTER_MODELS = ['Orc', 'Goblin', 'Ogre', 'Imp', 'MushroomKing', 'Slime', 'Glub', 'Drake', 'Dragon', 'Red_Dragon'];
+// only the shapes the machine roster still wears (Slime = the Nanite Mass blob);
+// the fantasy menagerie (orcs, mushrooms, dragons-as-models) is gone
+const MONSTER_MODELS = ['Slime'];
 // ---- sci-fi packs (branch: scifi) — Quaternius + Kenney, all CC0 ----
 const SCIFI_CHARS = ['Astronaut_BarbaraTheBee', 'Astronaut_FernandoTheFlamingo', 'Astronaut_FinnTheFrog', 'Astronaut_RaeTheRedPanda'];
 const SCIFI_TOON = ['Character_Soldier', 'Character_Hazmat', 'Character_Enemy']; // self-contained .gltf
@@ -159,18 +161,28 @@ const alias = (idle, run, jump, death, melee, shoot) => {
   for (const m of MELEE_ANIMS) t[m] = melee;
   return t;
 };
+const QAC = 'CharacterArmature|'; // the Cyberpunk kit prefixes every clip
 const CLIP_ALIASES = {
   usk: alias('Idle_Gun', 'Run_Gun', 'Jump_Idle', 'Death', 'Punch', 'Weapon'),
   toon: alias('Idle', 'Run_Gun', 'Jump_Idle', 'Death', 'Punch', 'Idle_Shoot'),
   robot: alias('Idle', 'Running', 'Jump', 'Death', 'Punch', 'Punch'),
   mech: alias('Idle', 'Run', 'Jump', 'Death', 'SwordSlash', 'Shoot'),
+  cyberhero: alias(QAC + 'Idle_Sword', QAC + 'Run', QAC + 'Idle_Sword', QAC + 'Death', QAC + 'Sword_Slash', QAC + 'Gun_Shoot'),
 };
 function packOf(model) {
   if (model.startsWith('Astronaut_')) return 'usk';
   if (model.startsWith('Character_')) return 'toon';
   if (model === 'RobotExpressive') return 'robot';
   if (['George', 'Leela', 'Mike', 'Stan'].includes(model)) return 'mech';
+  if (model === 'Cyber_Character') return 'cyberhero';
   return null;
+}
+
+// class paint job: painted panels for robots (Main material only), a light
+// multiplier tint for textured rigs — same rules the enemy roster follows
+export function applyClassFinish(obj, cls) {
+  if (cls.paint) tintCharacter(obj, cls.paint, { only: /^Main$/ });
+  else if (cls.tint) tintCharacter(obj, cls.tint);
 }
 
 // ---- character instancing ----
@@ -178,10 +190,10 @@ export function makeCharacter(kind, modelName, showMeshes = []) {
   const src = kind === 'enemy' ? G.assets.enemy[modelName] : G.assets.char[modelName];
   const obj = SkeletonUtils.clone(src.scene);
   obj.traverse((n) => {
-    if (n.isMesh || n.isSkinnedMesh) {
-      n.frustumCulled = false; // skinned bounds are unreliable once animated
-      if (WEAPON_MESHES.includes(n.name)) n.visible = showMeshes.includes(n.name);
-    }
+    if (n.isMesh || n.isSkinnedMesh) n.frustumCulled = false; // skinned bounds are unreliable once animated
+    // arsenal gating by NAME, whatever the node type: some rigs bake weapons
+    // as meshes, others (Character_Enemy) as GROUPS of anonymous cubes
+    if (WEAPON_MESHES.includes(n.name)) n.visible = showMeshes.includes(n.name);
   });
   const pack = packOf(modelName);
   const anim = new Animator(obj, src.animations, pack ? CLIP_ALIASES[pack] : null);
@@ -191,7 +203,7 @@ export function makeCharacter(kind, modelName, showMeshes = []) {
 // show exactly this set of weapon/offhand meshes on a character rig
 export function setEquipMeshes(obj, meshes) {
   obj.traverse((n) => {
-    if ((n.isMesh || n.isSkinnedMesh) && WEAPON_MESHES.includes(n.name)) n.visible = meshes.includes(n.name);
+    if (WEAPON_MESHES.includes(n.name)) n.visible = meshes.includes(n.name);
   });
 }
 

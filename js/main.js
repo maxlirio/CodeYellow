@@ -3,7 +3,7 @@ import * as THREE from 'three';
 import { G, floorState, setFloorAliases } from './state.js';
 import { CLASSES } from './config.js';
 import { randomSeed } from './rng.js';
-import { loadAll, makeCharacter, applyLook } from './assets.js';
+import { loadAll, makeCharacter, applyLook, applyClassFinish } from './assets.js';
 import { initFx, buildTorchFx, updateFx, clearTransientFx } from './fx.js';
 import { updateFireFx, clearFireFx, spawnFireImpact } from './firefx.js';
 import { initAudio, resumeAudio, toggleMute, sfx } from './audio.js';
@@ -24,7 +24,7 @@ import { initViewmodel, updateViewmodel } from './viewmodel.js';
 import { updateWalls, clearWalls } from './walls.js';
 import { initFloorTraps, updateTraps } from './traps.js';
 import { buildRopesForFloor, updateRopes } from './ropes.js';
-import { updateMinions, clearMinions, moveMinionsToFloor, refreshMinionVisibility } from './minions.js';
+import { updateMinions, clearMinions, moveMinionsToFloor, refreshMinionVisibility, spawnMinion } from './minions.js';
 import { horde, startHorde, stopHorde, updateHorde, tryHireMerc } from './horde.js';
 import { toggleBuildMode, cycleBuildPiece, updateBuildGhost, placeCurrentBuild, buildState, clearBuilds } from './builds.js';
 import { toggleMachineMode, cycleMachine, updateMachineGhost, placeCurrentMachine, machineState, updateMachines, clearMachines, refreshMachineVisibility } from './machines.js';
@@ -174,6 +174,7 @@ function rebuildPreview() {
   const modelName = cls.model;
   const { obj } = makeCharacter('char', modelName, cls.show);
   applyLook(obj, G.look);
+  applyClassFinish(obj, cls);
   obj.scale.setScalar(cls.scale || 1);
   pvChar = obj;
   pvScene.add(obj);
@@ -431,6 +432,12 @@ function startRun(seed, mode = 'campaign') {
     setLocalFloor(0);
     addMsg('Bridge secured. Await tasking at the mission console.', 'gold');
     addMsg('The hologram wall tracks your loadout and mission log. Listen for the red alert.');
+  }
+  // the Forge deploys with a printed escort — free, once, at muster
+  if (G.player.cls.escort) {
+    const pp = G.player.obj.position;
+    if (G.net.role !== 'guest') spawnMinion(G.player.cls.escort, myId(), G.floor, pp.x + 1.5, pp.z + 1.5);
+    else netSend({ t: 'hire', kind: G.player.cls.escort, f: G.floor, x: pp.x + 1.5, z: pp.z + 1.5 });
   }
   spawnRemoteAvatars();
   refreshRemoteVisibility();
@@ -770,13 +777,8 @@ function openCodex() {
   show('codexDialog');
 }
 
-const MONSTER_NAMES = {
-  minion: 'Skeleton Minion', rogue: 'Skeleton Rogue', warrior: 'Skeleton Warrior', mage: 'Skeleton Mage',
-  bomber: 'Bomber', frostmage: 'Frost Mage', ghost: 'Ghost', shade: 'Shade', necromancer: 'Necromancer',
-  berserker: 'Berserker', juggernaut: 'Juggernaut', plaguebearer: 'Plaguebearer', sniper: 'Sniper',
-  brute: 'Brute', goblin: 'Goblin', orcwar: 'Orc Warrior', ogre: 'Ogre', imp: 'Imp',
-  slime: 'Slime', slimelet: 'Slimelet', glub: 'Glub', drake: 'Drake',
-};
+// bestiary names come straight from the roster — no stale second copy
+const MONSTER_NAMES = new Proxy({}, { get: (_, k) => ENEMIES[k]?.name || ENEMIES[k]?.bossName || k });
 
 function monsterTraits(e) {
   const t = [];

@@ -4,7 +4,7 @@
 import * as THREE from 'three';
 import { G } from './state.js';
 import { CLASSES, XP_FOR_LEVEL, CAPE_COLORS, SIGNATURES, SPELLS, CELL } from './config.js';
-import { makeCharacter, setEquipMeshes, applyLook, makeWeaponModel } from './assets.js';
+import { makeCharacter, setEquipMeshes, applyLook, makeWeaponModel, applyClassFinish } from './assets.js';
 import { makeBlobShadow, spawnDamageNumber, spawnBurst } from './fx.js';
 import { sfx } from './audio.js';
 import { moveWithCollision, groundHeightAt, posBlocked, bodyBlocked, resolveStuck, hasLineOfSight } from './dungeon.js';
@@ -27,6 +27,7 @@ export function createPlayer(classId, name) {
   const modelName = cls.model;
   const { obj, anim } = makeCharacter('char', modelName, cls.show);
   applyLook(obj, G.look);
+  applyClassFinish(obj, cls);
   obj.scale.setScalar(cls.scale || 1); // sci-fi rigs are pack-scale, not KayKit-scale
   obj.visible = false; // first person: own body hidden until death cam
   G.scene.add(obj);
@@ -60,9 +61,14 @@ function attachHeldWeapon(obj, held, held2) {
   obj.traverse((n) => { if (n.userData.heldWeapon) olds.push(n); });
   for (const o of olds) o.parent.remove(o);
   if (!held) return;
-  const sides = held2 ? [['handslotr', 'handslot.r'], ['handslotl', 'handslot.l']] : [['handslotr', 'handslot.r']];
+  // KayKit rigs have handslot bones; Quaternius rigs land on the Weapon bone
+  // (Cyber_Character) or the index finger (toon/mech/robot standard skeleton)
+  const R = ['handslotr', 'handslot.r', 'Weapon', 'Index1R', 'HandR'];
+  const L = ['handslotl', 'handslot.l', 'Index1L', 'HandL'];
+  const sides = held2 ? [R, L] : [R];
   for (const names of sides) {
-    const bone = obj.getObjectByName(names[0]) || obj.getObjectByName(names[1]);
+    let bone = null;
+    for (const nm of names) { bone = obj.getObjectByName(nm); if (bone) break; }
     if (!bone) continue;
     let m = makeWeaponModel(held);
     const isBow = held === 'bow' || held.startsWith('Bow_');
@@ -162,7 +168,7 @@ export function effectiveCrit() {
   return G.player.cls.crit + gearStat('crit') / 100;
 }
 export function effectiveArmor() {
-  let a = gearStat('armor') / 100;
+  let a = gearStat('armor') / 100 + (G.player.cls.armorBase || 0);
   if (G.player.buff?.armorAdd) a += G.player.buff.armorAdd;
   return Math.min(0.75, a);
 }
@@ -263,7 +269,7 @@ export function damageLocalPlayer(amount, effects = null) {
   p.hp -= reduced;
   if (effects?.slow) p.slowT = Math.max(p.slowT, effects.slow.dur);
   if (effects?.poison) { p.poisonT = effects.poison.dur; p.poisonDps = effects.poison.dps; addMsg('You are poisoned!', 'bad'); }
-  if (effects?.kb) { p.kbX += effects.kb.x; p.kbZ += effects.kb.z; }
+  if (effects?.kb && !p.cls.kbImmune) { p.kbX += effects.kb.x; p.kbZ += effects.kb.z; }
   if (effects?.shake) G.shake = Math.max(G.shake || 0, effects.shake);
   if (effects?.lashbreak && p.lash) {
     releaseLash(p);
@@ -487,6 +493,7 @@ export function updatePlayer(dt) {
   }
 
   if (!p.lash) p.mana = Math.min(p.maxMana, p.mana + effectiveManaRegen() * dt);
+  if (p.cls.hpRegen && p.hp < p.maxHp) p.hp = Math.min(p.maxHp, p.hp + p.cls.hpRegen * dt); // android self-repair
   p.aiming = !!(G.keys['ShiftLeft'] || G.keys['ShiftRight']);
   if (G.spectate) { spectateBot(p, dt); p.obj.visible = true; p.anim.update(dt); }
 
@@ -1196,6 +1203,7 @@ export function addRemotePlayer(pid, name, classId, look, equip) {
   const modelName = cls.model;
   const { obj, anim } = makeCharacter('char', modelName, equip || cls.show);
   applyLook(obj, lk);
+  applyClassFinish(obj, cls);
   obj.scale.setScalar(cls.scale || 1);
   obj.add(makeBlobShadow(0.85 / (cls.scale || 1)));
   const c = document.createElement('canvas');

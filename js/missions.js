@@ -147,9 +147,18 @@ export function updateMissions(dt) {
   // beacon pulse while an alert is live and unanswered
   const fs0 = G.floors.get(0);
   const beacon = fs0?.meshGroup?.getObjectByName('alertBeacon');
-  if (beacon) {
-    const wantAlert = alerted && !G.sortie?.active && G.floor === 0;
-    beacon.intensity = wantAlert ? 8 + Math.sin((G.time || 0) * 9) * 7 : 0;
+  const wantAlert = alerted && !G.sortie?.active && G.floor === 0;
+  if (beacon) beacon.intensity = wantAlert ? 8 + Math.sin((G.time || 0) * 9) * 7 : 0;
+  // the holo table's hulk turns slowly; a red node pulses on it during an alert
+  const holoShip = G.floor === 0 ? fs0?.meshGroup?.getObjectByName('holoShip') : null;
+  if (holoShip) {
+    holoShip.rotation.y += dt * 0.35;
+    holoShip.position.y = 2.15 + Math.sin((G.time || 0) * 1.1) * 0.08;
+    const node = holoShip.getObjectByName('holoAlert');
+    if (node) {
+      node.visible = wantAlert;
+      if (node.visible) node.scale.setScalar(0.85 + 0.45 * Math.sin((G.time || 0) * 7));
+    }
   }
   // in the field: unlock extraction when the section is clear
   if (G.sortie?.active && G.sortie.entered && G.floor === G.sortie.floorN && isAuthority()) {
