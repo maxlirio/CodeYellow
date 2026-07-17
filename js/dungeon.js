@@ -815,9 +815,14 @@ export function buildFloorMeshes(fs) {
   group.visible = false;
   G.scene.add(group);
   fs.meshGroup = group;
-  // cache the grav-lift discs for the per-frame ride animation
+  // cache the grav-lift discs for the per-frame ride animation, and the
+  // bridge's TOUCH surfaces for click interaction
   fs.liftDiscs = [];
-  group.traverse((n) => { if (n.userData.gravlift) fs.liftDiscs.push(n); });
+  fs.stationMeshes = [];
+  group.traverse((n) => {
+    if (n.userData.gravlift) fs.liftDiscs.push(n);
+    if (n.userData.station && n.isMesh) fs.stationMeshes.push(n);
+  });
   fs.built = true;
 }
 

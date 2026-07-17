@@ -71,10 +71,10 @@ export const SPELLS = {
   chainhook:   { name: 'Chain Hook', icon: '', mana: 21, cd: 8, type: 'hook', range: 16, dmgMult: 0.8, stun: 0.6, phys: true },
   // ---- exotic effect spells ----
   gravitylash: { name: 'Gravity Lash', icon: '', mana: 27, cd: 0, type: 'lash', range: 22 },
-  beartrap:    { name: 'Steel Trap', icon: '', mana: 15, cd: 6, type: 'trap', dmgMult: 1.2, root: 2.5, max: 3 },
+  beartrap:    { name: 'Arc Snare', icon: '', mana: 15, cd: 6, type: 'trap', dmgMult: 1.2, root: 2.5, max: 3 },
   chronobubble:{ name: 'Chrono Bubble', icon: '', mana: 33, cd: 16, type: 'freeze', radius: 6, range: 20, dur: 3.5 },
   shadowswap:  { name: 'Shadow Swap', icon: '', mana: 21, cd: 9, type: 'swap', range: 18, critDur: 3 },
-  decoy:       { name: 'Straw Double', icon: '', mana: 24, cd: 14, type: 'decoy', hp: 140, dur: 9 },
+  decoy:       { name: 'Holo Double', icon: '', mana: 24, cd: 14, type: 'decoy', hp: 140, dur: 9 },
   frostprison: { name: 'Frost Prison', icon: '', mana: 27, cd: 11, type: 'prison', range: 20, dur: 4, vuln: 4 },
   truesight:   { name: 'True Sight', icon: '', mana: 15, cd: 18, type: 'sight', dur: 12 },
   levitate:    { name: 'Levitate', icon: '', mana: 24, cd: 14, type: 'levitate', dur: 4.5 },
@@ -167,6 +167,21 @@ export const SIGNATURES = {
 export const OFFHAND_TYPES = {
   trooper: { noun: 'Riot Plate', meshes: [], models: ['riotplate'], stat: 'armor' },
 };
+// EXOTIC gear: equippable tech that GRANTS an ability into your 1-3 slots.
+// The old spellbook, reborn as hardware — nothing medieval survives.
+export const EXOTICS = [
+  { id: 'gravtether', name: 'Grav Tether', grant: 'gravitylash', desc: 'grants GRAV LASH: fire a gravity line, reel and swing' },
+  { id: 'blinkmodule', name: 'Blink Module', grant: 'shadowstep', desc: 'grants BLINK: short-range teleport' },
+  { id: 'ricomatrix', name: 'Ricochet Matrix', grant: 'ricochet', desc: 'grants RICOCHET ORB: a bolt that bounces off bulkheads' },
+  { id: 'stasisproj', name: 'Stasis Projector', grant: 'chronobubble', desc: 'grants STASIS FIELD: freeze hostiles in a bubble' },
+  { id: 'decoyemitter', name: 'Decoy Emitter', grant: 'decoy', desc: 'grants HOLO DOUBLE: a dummy frame that draws fire' },
+  { id: 'arcsnare', name: 'Arc Snare', grant: 'beartrap', desc: 'grants ARC SNARE: a trap that roots what steps in' },
+  { id: 'smokevent', name: 'Smoke Vent', grant: 'smokebomb', desc: 'grants SMOKE VENT: a blinding, stunning cloud' },
+  { id: 'gravboots', name: 'Grav Boots', grant: 'levitate', desc: 'grants LEVITATE: glide above the deck plates' },
+  { id: 'aegisdome', name: 'Aegis Dome', grant: 'sanctuary', desc: 'grants AEGIS DOME: a shelter hostiles cannot enter' },
+  { id: 'stormcoil', name: 'Storm Coil', grant: 'stormlance', desc: 'grants STORM LANCE: a forking lightning strike' },
+];
+
 export const OFFHAND_ROLLS = [
   { noun: 'Riot Plate', models: ['riotplate'], stat: 'armor' },
   { noun: 'Holdout Blade', models: ['vibro'], stat: 'crit' },
@@ -358,6 +373,7 @@ export const SHOP_TABLES = {
   alchemist: { title: 'The Med Station', greet: '“Inject it. Probably not coolant.”', items: ['potion', 'hp'] },
   arcanum: { title: 'Requisitions', greet: '“Exotic hardware has a price.”', items: ['relic', 'potion'] },
   tavern: { title: 'The Crew Deck', greet: '“Guns for hire, rations for sale.”', items: ['merc', 'potion', 'arrows'] },
+  armory: { title: 'THE ARMORY', greet: 'Cleared sectors pay for better hardware. Rolls scale with your deepest clear.', items: ['reforge', 'offhand', 'relic', 'arrows', 'potion', 'hp', 'atk'] },
 };
 
 // Weapon-ish meshes we hide by default; equipment then re-shows its kit.

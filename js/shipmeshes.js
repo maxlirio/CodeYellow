@@ -42,7 +42,47 @@ function makeStarTex(count = 1400, cw = 2048, ch = 256) {
   return t;
 }
 
-function makeMats(accent, facility = false) {
+// each section wears its OWN materials — cargo rusts, engineering runs hot
+// and dark, hab is warm and lived-in, command is navy and polished
+const PALETTES = {
+  cargo: {
+    floorA: 0x6d6154, floorB: 0x5f544a, wall: 0x8a7a66, frame: 0x574c40,
+    dark: 0x474038, crate: 0x9a7444, machine: 0x6e6458, panel: 0xffe9c8,
+  },
+  engineering: {
+    floorA: 0x545860, floorB: 0x484c54, wall: 0x62666d, frame: 0x424750,
+    dark: 0x40434a, crate: 0x74655a, machine: 0x565b63, panel: 0xffd9c0,
+  },
+  hab: {
+    floorA: 0x7d7a72, floorB: 0x6e6b63, wall: 0x9d9689, frame: 0x5e594f,
+    dark: 0x4d4941, crate: 0x8a8274, machine: 0x76716a, panel: 0xfff2da,
+  },
+  command: {
+    floorA: 0x5e6675, floorB: 0x525a68, wall: 0x76808f, frame: 0x47505e,
+    dark: 0x404856, crate: 0x7d8595, machine: 0x616b7c, panel: 0xe8f0ff,
+  },
+};
+
+function makeMats(accent, facility = false, deckType = null) {
+  const pal = PALETTES[deckType];
+  if (pal && !facility) {
+    return {
+      floorA: new THREE.MeshStandardMaterial({ color: pal.floorA, metalness: 0.25, roughness: 0.8 }),
+      floorB: new THREE.MeshStandardMaterial({ color: pal.floorB, metalness: 0.25, roughness: 0.85 }),
+      wall: new THREE.MeshStandardMaterial({ color: pal.wall, metalness: 0.3, roughness: 0.75 }),
+      frame: new THREE.MeshStandardMaterial({ color: pal.frame, metalness: 0.4, roughness: 0.7 }),
+      dark: new THREE.MeshStandardMaterial({ color: pal.dark, metalness: 0.3, roughness: 0.9 }),
+      crate: new THREE.MeshStandardMaterial({ color: pal.crate, metalness: 0.15, roughness: 0.9 }),
+      machine: new THREE.MeshStandardMaterial({ color: pal.machine, metalness: 0.45, roughness: 0.6 }),
+      accent: new THREE.MeshStandardMaterial({
+        color: 0x111111, emissive: new THREE.Color(accent), emissiveIntensity: 1.6,
+        metalness: 0, roughness: 1, toneMapped: false,
+      }),
+      lightPanel: new THREE.MeshStandardMaterial({
+        color: 0x222222, emissive: pal.panel, emissiveIntensity: 1.25, roughness: 1,
+      }),
+    };
+  }
   if (facility) {
     // training-facility whites: bright composite panels, blue trim
     return {
@@ -83,7 +123,7 @@ function makeMats(accent, facility = false) {
 export function buildShipStatic(fs) {
   const g = fs.grid;
   const accent = fs.theme?.accent ?? 0xffa63d;
-  const mats = makeMats(accent, !!g.facility);
+  const mats = makeMats(accent, !!g.facility, g.ship?.deckType || null);
   const buckets = new Map(); // matKey -> geometries[]
   const add = (matKey, geo, x, y, z, rotY = 0) => {
     if (rotY) geo.rotateY(rotY);
@@ -475,6 +515,7 @@ export function buildShipStatic(fs) {
     // floating above it (missions.js spins it and lights it up on red alert)
     const ped = new THREE.Mesh(new THREE.CylinderGeometry(2.0, 2.35, 1.0, 14), mats.machine);
     ped.position.set(cx0, 0.5, cz0);
+    ped.userData.station = 'missions';
     group.add(ped);
     const ring = new THREE.Mesh(new THREE.CylinderGeometry(2.06, 2.06, 0.14, 14, 1, true), mats.accent);
     ring.position.set(cx0, 0.88, cz0);
@@ -482,6 +523,7 @@ export function buildShipStatic(fs) {
     const top = new THREE.Mesh(new THREE.CylinderGeometry(1.85, 1.85, 0.06, 14),
       new THREE.MeshBasicMaterial({ color: 0x1a4a46, toneMapped: false }));
     top.position.set(cx0, 1.06, cz0);
+    top.userData.station = 'missions';
     group.add(top);
     // the hulk, in light: translucent hull + prow + engine block
     const holoMat = new THREE.MeshBasicMaterial({ color: 0x3fe8d8, transparent: true, opacity: 0.5, toneMapped: false });
@@ -513,6 +555,7 @@ export function buildShipStatic(fs) {
     alertNode.position.set(0.8, 0.35, 0);
     holoShip.add(alertNode);
     holoShip.position.set(cx0, 2.15, cz0);
+    holoShip.traverse((n) => { n.userData.station = 'missions'; });
     group.add(holoShip);
     const tlight = new THREE.PointLight(0x2fd6c8, 10, 14, 1.6);
     tlight.position.set(cx0, 2.6, cz0);
@@ -548,9 +591,13 @@ export function buildShipStatic(fs) {
     for (const s of g.screens || []) {
       let scr;
       if (s.kind === 'status') scr = mkScreen(fs.holoTex, 8.4, 4.2);
-      else if (s.kind === 'comms') scr = mkScreen(label('COMMS — JOINT OPS', 'public games · press E'), 4.6, 2.6);
-      else if (s.kind === 'training') scr = mkScreen(label('TRAINING', 'spend skill points · press E'), 4.6, 2.6);
-      else scr = mkScreen(label('SIM DECK', 'change venture · press E'), 4.6, 2.6);
+      else if (s.kind === 'comms') scr = mkScreen(label('COMMS — JOINT OPS', 'public games · touch'), 4.6, 2.6);
+      else if (s.kind === 'training') scr = mkScreen(label('TRAINING', 'spend skill points · touch'), 4.6, 2.6);
+      else if (s.kind === 'armory') scr = mkScreen(label('THE ARMORY', 'buy gear · touch'), 4.6, 2.6);
+      else scr = mkScreen(label('SIM DECK', 'change venture · touch'), 4.6, 2.6);
+      // TOUCH SCREENS: aim at the screen and CLICK — main.js raycasts these
+      const STATION = { comms: 'board', sim: 'mode', training: 'training', armory: 'armory' };
+      if (STATION[s.kind]) scr.userData.station = STATION[s.kind];
       scr.position.set(s.x, s.kind === 'status' ? 3.3 : 3.1, s.z);
       scr.rotation.y = s.ry;
       group.add(scr);

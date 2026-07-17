@@ -1399,14 +1399,12 @@ export function killEnemy(e, source = 'local', fromNet = false) {
     gainXp(Math.round(e.cfg.xp * e.xpMult));
     addMsg(`${e.boss ? `${e.cfg.bossName || 'Boss'} destroyed!` : `${e.elite ? 'Elite ' : ''}${e.cfg.name || 'Hostile'} destroyed`} +${gold} credits`, e.boss || e.elite ? 'gold' : '');
   }
-  // item drops (authority rolls & shares the actual item)
-  if (isAuthority() && !fromNet && source !== 'none') {
-    const chance = e.boss ? 1 : e.elite ? 0.45 : 0.09;
-    if (Math.random() < chance) {
-      const forClass = pickDropClass(source);
-      const item = rollAnyItem(forClass, e.floor, e.boss ? 0.8 : e.elite ? 0.3 : 0);
-      dropItemLoot(floorState(e.floor), item, e.obj.position.x, e.obj.position.z, e.obj.position.y);
-    }
+  // no item drops from hostiles — gear comes from supply pods and THE ARMORY
+  // (bosses still drop: a warden's core is worth prying loose)
+  if (isAuthority() && !fromNet && source !== 'none' && e.boss) {
+    const forClass = pickDropClass(source);
+    const item = rollAnyItem(forClass, e.floor, 0.8);
+    dropItemLoot(floorState(e.floor), item, e.obj.position.x, e.obj.position.z, e.obj.position.y);
   }
   if (e.boss) {
     const fs = floorState(e.floor);

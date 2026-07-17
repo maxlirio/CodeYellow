@@ -9,6 +9,7 @@ import { addMsg } from './ui.js';
 import { sfx } from './audio.js';
 import { saveReport, renderHologram } from './bridge.js';
 import { setSortieOverride } from './ship.js';
+import { startSpaceFlight } from './space.js';
 
 // Each section IS a place: its theme, its hold-role mix, its threat.
 // floorN drives enemy scaling and the midboss floors (3/6) and the reactor (9).
@@ -227,6 +228,29 @@ function renderMap() {
       renderMap();
     };
     list.appendChild(b);
+  }
+  // VOID PATROL: the flight game, unlocked by clearing the SPACE PORT
+  if (cleared.includes('spaceport')) {
+    const b2 = document.createElement('button');
+    b2.className = 'mm-sec' + (selectedSec === 'patrol' ? ' sel' : '');
+    b2.style.left = '18%'; b2.style.top = '12%';
+    b2.textContent = 'VOID PATROL';
+    b2.dataset.threat = 'THREAT ▮▮';
+    b2.onclick = () => { selectedSec = 'patrol'; renderMap(); };
+    list.appendChild(b2);
+  }
+  if (selectedSec === 'patrol') {
+    detail.innerHTML = `
+      <h3>VOID PATROL</h3>
+      <p class="mm-threat">THREAT ▮▮▯▯ · FLIGHT OPS</p>
+      <p>Take a fighter out of the hangar and sweep the drones prowling the hulk. Solo flights only, for now.</p>
+      <button id="mmConfirm">LAUNCH FIGHTER</button>`;
+    document.getElementById('mmConfirm').onclick = () => {
+      if (G.net?.role && G.net.role !== 'solo') { addMsg('Solo patrols only — the squadron comes later.', 'bad'); return; }
+      closeMissionMap();
+      startSpaceFlight();
+    };
+    return;
   }
   const sec = sectionById(selectedSec);
   if (sec) {

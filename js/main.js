@@ -11,7 +11,7 @@ import { generateFloorData, buildFloorMeshes, disposeAllFloors, disposeFloor, up
 import { spawnEnemiesForFloor, updateEnemies, damageEnemy, spawnEnemy, setEnemyState, killEnemy, refreshBossBarForFloor } from './enemies.js';
 import { spawnLootsForFloor, updateLoot, applyTakenSilently, dropItemLoot } from './loot.js';
 import { updateProjectiles, clearProjectiles } from './projectiles.js';
-import { castSpell, castSignature, updateSpells, updateBeams, resetCooldowns, cooldowns, dealSpells, rerollSpell } from './spells.js';
+import { castSpell, castSignature, updateSpells, updateBeams, resetCooldowns, cooldowns, dealSpells, rerollSpell, syncGrantedAbilities } from './spells.js';
 import { giveStartingGear, equipItem, salvageItem, rollTrinket, rollWeapon, rollOffhand, addToBag, rarityOf } from './items.js';
 import { SPELLS, SHOP_TABLES, ENEMIES, RARITIES } from './config.js';
 import { generateTownData, generateArenaData, spawnTownNpcs, updateTownNpcs } from './town.js';
@@ -21,6 +21,7 @@ import {
   onRemoteMission, onRemoteMissionEnd,
 } from './missions.js';
 import { openTrainRoom, setSkillHooks } from './skills.js';
+import { updateSpace, spaceMouse, spaceFire, inSpace } from './space.js';
 import { initViewmodel, updateViewmodel } from './viewmodel.js';
 import { updateWalls, clearWalls } from './walls.js';
 import { initFloorTraps, updateTraps } from './traps.js';
@@ -423,6 +424,7 @@ function startRun(seed, mode = 'campaign') {
   // sci-fi first pass: no spell deck. Signatures, stims and second wind carry
   // the kit; the ability system returns later under a tech name.
   G.run.spells = [];
+  syncGrantedAbilities();
 
   if (mode === 'horde') {
     setLocalFloor(1);
@@ -1009,6 +1011,7 @@ function rerenderInventory() {
       if (item.classId && item.classId !== G.player.classId) { addMsg('Your class can’t use that.', 'bad'); return; }
       equipItem(item);
       refreshEquipVisuals();
+      syncGrantedAbilities();
       sfx.key();
       rerenderInventory();
     },
@@ -1043,12 +1046,26 @@ function lockPointer() {
 
 function setupInput() {
   const canvas = $('game');
+  const stationRay = new THREE.Raycaster();
+  const touchStation = () => {
+    // TOUCH SCREENS: aim at a bridge screen (or the holo table) and click
+    if (G.floor !== 0) return null;
+    const fs = G.floors.get(0);
+    if (!fs?.stationMeshes?.length) return null;
+    stationRay.setFromCamera({ x: 0, y: 0 }, G.camera);
+    stationRay.far = 7.5;
+    const hits = stationRay.intersectObjects(fs.stationMeshes, false);
+    return hits.length ? hits[0].object.userData.station : null;
+  };
   canvas.addEventListener('click', () => {
+    if (G.mode === 'space') { spaceFire(); return; }
     if (G.mode === 'playing' && !invOpen) {
       resumeAudio();
       if (!document.pointerLockElement) { lockPointer(); return; }
       if (machineState.on) { placeCurrentMachine(); return; } // machine mode: click places
       if (buildState.on) { placeCurrentBuild(); return; }     // build mode: click places
+      const st = touchStation();
+      if (st) { sfx.key(); onShopOpened(st); return; }
       tryAttack();
     }
   });
@@ -1169,14 +1186,16 @@ function loop(t) {
   // the host keeps simulating through its own pause/transition/inventory/death.
   const simActive = G.mode === 'playing' || (G.mode !== 'menu' && G.net.role !== 'solo' && G.net.started);
 
-  if (G.mode === 'playing') {
+  if (G.mode === 'space') {
+    updateSpace(dt);
+  } else if (G.mode === 'playing') {
     updatePlayer(dt);
     updateDeath(dt);
     setCrosshairAiming(!!G.player?.aiming);
   } else if (G.player && simActive) {
     G.player.anim.update(dt);
   }
-  updateViewmodel(dt);
+  if (G.mode !== 'space') updateViewmodel(dt);
 
   if (simActive) {
     updateEnemies(dt);

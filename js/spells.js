@@ -3,6 +3,7 @@ import * as THREE from 'three';
 import { G } from './state.js';
 import { SPELLS, SIGNATURES } from './config.js';
 import { spawnBolt } from './projectiles.js';
+import { updateSpellBar } from './ui.js';
 import { spawnBurst, spawnDamageNumber, makeGlowSprite } from './fx.js';
 import { sfx } from './audio.js';
 import { damageEnemy } from './enemies.js';
@@ -1281,4 +1282,13 @@ export function updateBeams(dt) {
 // introspection for tests
 export function spellDebug() {
   return { vortices: vortices.map(v => ({ x: v.x, z: v.z, t: +v.t.toFixed(1) })), wards: wards.length };
+}
+
+// equipped EXOTICS write their granted abilities into the 1-3 slots
+export function syncGrantedAbilities() {
+  G.run.spells = [G.inv?.trinket1, G.inv?.trinket2]
+    .filter(t => t?.grant && SPELLS[t.grant])
+    .map(t => t.grant)
+    .slice(0, 3);
+  updateSpellBar(cooldowns);
 }

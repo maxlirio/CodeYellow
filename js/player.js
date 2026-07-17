@@ -860,8 +860,8 @@ function doAttackHit() {
       x: p.obj.position.x + dir.x * 0.7, z: p.obj.position.z + dir.z * 0.7, y: p.obj.position.y + 1.45,
       dirX: dir.x + sx, dirY: dir.y + sy, dirZ: dir.z + sz,
       speed: w?.ranged ? 40 : 30, dmg: boltDmg, size: boltSize, owner: 'player', basic: true, // lasers are QUICK
-      color: w?.ranged ? 0xddcc99 : (w?.boltColor || p.cls.boltColor || 0xff8833),
-      vis: w?.ranged ? 'arrow' : (w?.boltVis || p.cls.boltVis || 'fire'),
+      color: w?.boltColor || p.cls.boltColor || 0x8cf2ff,
+      vis: w?.boltVis || p.cls.boltVis || 'laser', // guns fire LASERS, never arrows
       slow: wfx?.slow || null, poison: wfx?.poison || null, lifesteal: wfx?.lifesteal || 0,
     };
     spawnBolt(b);

@@ -100,7 +100,8 @@ function itemStatsHtml(item) {
 function itemHtml(item) {
   const r = rarityOf(item);
   return `<div class="item-name" style="color:${r.color}">${item.icon} ${item.name}</div>
-    <div class="item-stats">${r.name} · ${itemStatsHtml(item)}</div>`;
+    <div class="item-stats">${r.name} · ${itemStatsHtml(item)}</div>${
+    item.desc ? `<div class="item-stats" style="color:#5fd8cc">${item.desc}</div>` : ''}`;
 }
 
 export function renderInventory({ onEquip, onSalvage, statsHtml }) {

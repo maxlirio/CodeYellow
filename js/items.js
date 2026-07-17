@@ -2,7 +2,7 @@
 import { G } from './state.js';
 import {
   RARITIES, WEAPON_TYPES, OFFHAND_TYPES, OFFHAND_ROLLS, NAME_PREFIX, NAME_SUFFIX,
-  TRINKET_NAMES, TRINKET_STATS, CLASSES, AFFIXES, SIGNATURES,
+  TRINKET_NAMES, TRINKET_STATS, CLASSES, AFFIXES, SIGNATURES, EXOTICS,
 } from './config.js';
 
 let uidCounter = 1;
@@ -86,6 +86,18 @@ export function rollOffhand(classId, floor, luck = 0) {
 
 export function rollTrinket(floor, luck = 0) {
   const rarity = pickRarity(floor, luck);
+  // exotics: hardware that grants an ABILITY into your 1-3 slots
+  if (Math.random() < 0.4) {
+    const ex = pick(EXOTICS);
+    const t2 = pick(TRINKET_STATS);
+    const v2 = +(t2.min + (t2.max - t2.min) * Math.random() * rarity.mult * 0.5).toFixed(1);
+    return {
+      uid: uidCounter++, slot: 'trinket', classId: null, mesh: [], model: 'implant',
+      grant: ex.grant, exotic: true, desc: ex.desc,
+      name: ex.name, rarity: rarity.id, icon: '',
+      stats: { [t2.stat]: t2.stat === 'hp' || t2.stat === 'armor' ? Math.round(v2) : v2 },
+    };
+  }
   const t = pick(TRINKET_STATS);
   const val = +(t.min + (t.max - t.min) * Math.random() * rarity.mult * 0.75).toFixed(1);
   return {
@@ -170,13 +182,26 @@ export function salvageItem(item) {
   return v;
 }
 
-export function giveStartingGear(classId) {
+// a trooper musters with a BLADE in hand and a SIDEARM in the bag — swap
+// them in the inventory; everything better is bought or found
+function issueWeapon(classId, wtypeId) {
+  const wt = WEAPON_TYPES[classId].find(x => x.id === wtypeId);
   const w = rollWeapon(classId, 1, -0.5);
   w.rarity = 'common';
-  w.name = itemName(RARITIES[0], WEAPON_TYPES[classId][0].noun);
-  w.wtype = WEAPON_TYPES[classId][0].id;
-  w.mesh = WEAPON_TYPES[classId][0].mesh;
-  w.model = WEAPON_TYPES[classId][0].model;
+  w.name = itemName(RARITIES[0], wt.noun);
+  w.wtype = wt.id; w.mesh = wt.mesh; w.model = wt.model;
+  w.held = wt.held || null; w.held2 = !!wt.held2; w.verb = wt.verb;
+  w.ranged = !!wt.ranged; w.cast = !!wt.cast;
+  w.manaAttack = wt.manaAttack || null; w.boltVis = wt.boltVis || null; w.boltColor = wt.boltColor || null;
+  w.atkTime = wt.atkTime || null; w.rangeAdd = wt.rangeAdd || 0; w.arcAdd = wt.arcAdd || 0; w.stunHit = wt.stunHit || 0;
+  w.sig = null;
   w.stats = { dmg: CLASSES[classId].dmg };
-  G.inv = { weapon: w, offhand: null, trinket1: null, trinket2: null, bag: [] };
+  return w;
+}
+export function giveStartingGear(classId) {
+  G.inv = {
+    weapon: issueWeapon(classId, 'arcblade'),
+    offhand: null, trinket1: null, trinket2: null,
+    bag: [issueWeapon(classId, 'sidearm')],
+  };
 }
