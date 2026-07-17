@@ -683,25 +683,10 @@ export function updatePlayer(dt) {
     }
   }
 
-  // GRAV LIFT: step into the beam and it carries you to the balcony above —
-  // the ship's levitating elevators (no button, the field just takes you)
-  let inLift = false;
-  for (const gl of G.grid?.gravlifts || []) {
-    if (Math.hypot(pos.x - gl.x, pos.z - gl.z) > 1.35) continue;
-    if (pos.y < gl.top - 0.04) {
-      inLift = true;
-      p.vy = Math.max(p.vy, 5.2);
-      pos.y = Math.min(gl.top, pos.y + p.vy * dt);
-      if (Math.random() < dt * 10) spawnBurst(pos.clone().setY(pos.y + 0.3), 0x4fe8e0, 2, 1.2, 0.07, 0.4);
-    }
-    break;
-  }
-
-  // gravity & ground snap (platforms, stairs)
+  // gravity & ground snap (platforms, stairs — and the grav-lift DISC, which
+  // groundHeightAt reports as moving ground: you ride it up AND down)
   const ground = groundHeightAt(pos.x, pos.z, pos.y);
-  if (inLift) {
-    // rising in the beam — gravity holds its breath
-  } else if (p.levitateT > 0) {
+  if (p.levitateT > 0) {
     // LEVITATE: glide serenely above the stones
     p.levitateT -= dt;
     pos.y += ((ground + 2.6) - pos.y) * Math.min(1, dt * 3);

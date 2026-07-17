@@ -815,7 +815,27 @@ export function buildFloorMeshes(fs) {
   group.visible = false;
   G.scene.add(group);
   fs.meshGroup = group;
+  // cache the grav-lift discs for the per-frame ride animation
+  fs.liftDiscs = [];
+  group.traverse((n) => { if (n.userData.gravlift) fs.liftDiscs.push(n); });
   fs.built = true;
+}
+
+// ---- grav lifts: a platform disc that cycles deck ↔ balcony ----
+// Height is a pure function of time so physics (groundHeightAt) and the
+// rendered disc always agree: rise, hold at the top, sink, hold at the base.
+export function liftDiscY(gl) {
+  const T = 9, p = (((G.time || 0) / T) + (gl.seed || 0)) % 1;
+  const ss = (t) => t * t * (3 - 2 * t);
+  const lo = 0.18, top = gl.top;
+  if (p < 0.35) return lo + ss(p / 0.35) * (top - lo);
+  if (p < 0.5) return top;
+  if (p < 0.85) return lo + (1 - ss((p - 0.5) / 0.35)) * (top - lo);
+  return lo;
+}
+export function updateGravLifts(fs) {
+  if (!fs?.liftDiscs) return;
+  for (const d of fs.liftDiscs) d.position.y = liftDiscY(d.userData.gravlift) - 0.14;
 }
 
 // throw away one floor entirely — the next ensureFloor() regenerates it fresh.
@@ -862,6 +882,15 @@ export function groundHeightAt(x, z, curY = 0, grid = null) {
     const fls = b.floors.get(idx);
     if (fls) {
       for (const h of fls) if (h <= curY + 1.6) ground = Math.max(ground, h);
+    }
+  }
+  // grav-lift discs are MOVING ground: stand on one and it carries you up or
+  // down with it (the disc's height is a pure function of time)
+  if (g.gravlifts) {
+    for (const gl of g.gravlifts) {
+      if ((x - gl.x) ** 2 + (z - gl.z) ** 2 > 4.84) continue; // disc r 1.9 + grace
+      const dy = liftDiscY(gl);
+      if (dy <= curY + 1.7 && dy > ground) ground = dy;
     }
   }
   // solid props & buildings: their measured tops are standable — jump onto a

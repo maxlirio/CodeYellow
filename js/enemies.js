@@ -538,7 +538,9 @@ function simulateEnemy(e, fs, players, dt, mine) {
         if (e.cfg.ranged && t?.minion) {
           damageMinion(t.minion, e.dmg); // arrows find mercenaries directly
         } else if (e.cfg.ranged && t) {
-          const from = e.obj.position.clone().setY(e.obj.position.y + 1.6 * e.scale);
+          // squat rigs (the spider-walker) carry guns LOW — 1.6*scale put the
+          // muzzle a body-height above the model
+          const from = e.obj.position.clone().setY(e.obj.position.y + (e.cfg.muzzleY ?? 1.6 * e.scale));
           const to = new THREE.Vector3(t.pos.x, t.pos.y + 1.3, t.pos.z);
           const dir = to.sub(from).normalize();
           const bolt = {

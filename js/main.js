@@ -7,7 +7,7 @@ import { loadAll, makeCharacter, applyLook, applyClassFinish } from './assets.js
 import { initFx, buildTorchFx, updateFx, clearTransientFx } from './fx.js';
 import { updateFireFx, clearFireFx, spawnFireImpact } from './firefx.js';
 import { initAudio, resumeAudio, toggleMute, sfx } from './audio.js';
-import { generateFloorData, buildFloorMeshes, disposeAllFloors, disposeFloor } from './dungeon.js';
+import { generateFloorData, buildFloorMeshes, disposeAllFloors, disposeFloor, updateGravLifts } from './dungeon.js';
 import { spawnEnemiesForFloor, updateEnemies, damageEnemy, spawnEnemy, setEnemyState, killEnemy, refreshBossBarForFloor } from './enemies.js';
 import { spawnLootsForFloor, updateLoot, applyTakenSilently, dropItemLoot } from './loot.js';
 import { updateProjectiles, clearProjectiles } from './projectiles.js';
@@ -1195,6 +1195,7 @@ function loop(t) {
     updateMachines(dt);
     updateHorde(dt);
     if (runMode === 'campaign') updateMissions(dt);
+    updateGravLifts(G.floors.get(G.floor));
     updateBuildGhost();
     updateMachineGhost();
     if (G.runMode === 'duel' && G.mode === 'playing') {

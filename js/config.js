@@ -210,7 +210,7 @@ export const ENEMIES = {
   // ---- the hulk's machine crew (RobotExpressive family: one rig, many frames) ----
   minion:   { name: 'Scrap Drone', model: 'RobotExpressive', animMap: 'robot', hp: 32, dmg: 9,  speed: 4.8, range: 2.2, xp: 12, gold: [2, 7],  attackTime: 0.9, aggro: 11, scale: 0.42, paint: 0x4aa8ff },
   rogue:    { name: 'Scuttle Unit', model: 'RobotExpressive', animMap: 'robot', hp: 26, dmg: 7,  speed: 6.6, range: 2.1, xp: 15, gold: [3, 8],  attackTime: 0.7, aggro: 13, scale: 0.36, paint: 0x2fe8d0 },
-  warrior:  { name: 'Warframe', model: 'Cyber_Enemy_2Legs_Gun', animMap: 'cyber', hp: 62, dmg: 12, speed: 3.9, range: 12, xp: 24, gold: [5, 12], attackTime: 1.3, aggro: 12, scale: 2.0, ranged: true, boltVis: 'laser', boltColor: 0x7fffd0, boltSpeed: 27 },
+  warrior:  { name: 'Warframe', model: 'Cyber_Enemy_2Legs_Gun', animMap: 'cyber', hp: 62, dmg: 12, speed: 3.9, range: 12, xp: 24, gold: [5, 12], attackTime: 1.3, aggro: 12, scale: 2.0, ranged: true, boltVis: 'laser', boltColor: 0x7fffd0, boltSpeed: 27, muzzleY: 1.0 },
   bomber:   { name: 'Volatile Cell', model: 'RobotExpressive', animMap: 'robot', hp: 24, dmg: 22, speed: 6.6, range: 1.8, xp: 20, gold: [4, 9],  attackTime: 0.4, aggro: 13, scale: 0.34, paint: 0x8aff2e, explode: 3.6 },
   berserker:{ name: 'Feral Husk', model: 'Enemy_Large', animMap: 'husk', hp: 44, dmg: 11, speed: 5.6, range: 2.2, xp: 36, gold: [8, 16], attackTime: 0.55, aggro: 14, scale: 0.7, tint: 0xffb4a4, enrage: true },
   brute:    { name: 'Loader Frame', model: 'Cyber_Enemy_Large', animMap: 'cyber', hp: 55, dmg: 15, speed: 4.0, range: 2.4, xp: 30, gold: [7, 14], attackTime: 1.1, aggro: 11, scale: 2.1, kbHit: 7 },
@@ -229,7 +229,7 @@ export const ENEMIES = {
   juggernaut:{ name: 'Siegewalker', model: 'Mike', animMap: 'mech', hp: 120, dmg: 18, speed: 2.7, range: 2.6, xp: 55, gold: [14, 26], attackTime: 1.3, aggro: 10, scale: 0.55, tint: 0xb8b8cc, stalwart: true },
   ogre:     { name: 'Wrecking Frame', model: 'Stan', animMap: 'mech', hp: 140, dmg: 24, speed: 3.4, range: 2.9, xp: 60, gold: [15, 28], attackTime: 1.5, aggro: 11, scale: 0.58, stalwart: true, kbHit: 8 },
   // ---- void vermin: what got in through the breaches ----
-  imp:      { name: 'Gun Drone', model: 'Cyber_Enemy_Flying_Gun', animMap: 'cyberfly', hp: 30, dmg: 10, speed: 5.5, range: 9, xp: 28, gold: [7, 13], attackTime: 1.3, aggro: 15, scale: 1.7, fly: true, ranged: true, boltVis: 'laser', boltColor: 0x88ccff, boltSpeed: 26 },
+  imp:      { name: 'Gun Drone', model: 'Cyber_Enemy_Flying_Gun', animMap: 'cyberfly', hp: 30, dmg: 10, speed: 5.5, range: 9, xp: 28, gold: [7, 13], attackTime: 1.3, aggro: 15, scale: 1.7, fly: true, ranged: true, boltVis: 'laser', boltColor: 0x88ccff, boltSpeed: 26, muzzleY: 0.5 },
   slime:    { name: 'Nanite Mass', model: 'Slime', animMap: 'critter', hp: 40, dmg: 8, speed: 3.4, range: 2.0, xp: 24, gold: [5, 10], attackTime: 1.0, aggro: 11, scale: 0.7, tint: 0xa8fff0, splitInto: 'slimelet' },
   slimelet: { name: 'Nanite Glob', model: 'Slime', animMap: 'critter', hp: 14, dmg: 5, speed: 5.4, range: 1.7, xp: 8, gold: [1, 3], attackTime: 0.8, aggro: 14, scale: 0.4, tint: 0xd0fff6 },
   glub:     { name: 'Void Drifter', model: 'Enemy_Flying', animMap: 'void', hp: 34, dmg: 11, speed: 4.6, range: 2.2, xp: 30, gold: [8, 14], attackTime: 1.0, aggro: 15, scale: 0.55, fly: true },

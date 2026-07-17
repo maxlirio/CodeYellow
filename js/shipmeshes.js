@@ -13,6 +13,7 @@ import { makePiece } from './assets.js';
 
 const WALL_H = 7;    // bulkhead height
 const CEIL_H = 7;    // deck ceiling
+const TALL_H = 12;   // cathedral height for the great halls (grid.tall cells)
 
 // deterministic per-cell hash for panel variation (no rng needed)
 const cellHash = (cx, cy) => {
@@ -113,10 +114,13 @@ export function buildShipStatic(fs) {
         if (h % 23 === 0) box('accent', x, 0.011, z, 0.5, 0.012, CELL * 0.9); // guide strip
       }
 
-      // ceiling slab + occasional light panel (open-sky grids skip the roof)
+      // ceiling slab + occasional light panel (open-sky grids skip the roof).
+      // TALL cells lift the roof to cathedral height — big halls SOAR.
+      const isTall = !!g.tall?.[cy * g.w + cx];
+      const ceilY = isTall ? TALL_H : CEIL_H;
       if (!g.noCeil) {
-        box('dark', x, CEIL_H + 0.15, z, CELL, 0.3, CELL);
-        if (h % 3 === 0) box('lightPanel', x, CEIL_H - 0.02, z, 2.4, 0.06, 2.4);
+        box('dark', x, ceilY + 0.15, z, CELL, 0.3, CELL);
+        if (h % 3 === 0) box('lightPanel', x, ceilY - 0.02, z, 2.4, 0.06, 2.4);
       }
 
       // bulkhead faces toward solid neighbours
@@ -125,6 +129,7 @@ export function buildShipStatic(fs) {
         const wx = x + dx * (CELL / 2 + 0.3), wz = z + dy * (CELL / 2 + 0.3);
         const along = dx !== 0; // wall runs along z if the normal is x
         const L = CELL + 0.6;
+        const wallTop = isTall ? TALL_H : WALL_H; // walls climb with the roof
         if (mouthSet.has(`${cx},${cy},${dx},${dy}`)) continue; // the hangar mouth is OPEN
         if (windowSet.has(`${cx},${cy},${dx},${dy}`)) {
           // VIEWPORT: sill + header + mullions — the gap between shows space
@@ -139,14 +144,19 @@ export function buildShipStatic(fs) {
         }
         // main panel, two-tone: plated lower half, darker upper
         box('wall', wx, 1.6, wz, along ? 0.6 : L, 3.2, along ? L : 0.6);
-        box('dark', wx, 3.2 + (WALL_H - 3.2) / 2, wz, along ? 0.6 : L, WALL_H - 3.2, along ? L : 0.6);
+        box('dark', wx, 3.2 + (wallTop - 3.2) / 2, wz, along ? 0.6 : L, wallTop - 3.2, along ? L : 0.6);
         // accent light strip at eye height — the ship's veins
         box('accent', x + dx * (CELL / 2 - 0.02), 2.6, z + dy * (CELL / 2 - 0.02),
           along ? 0.05 : CELL * 0.92, 0.16, along ? CELL * 0.92 : 0.05);
+        // a second vein up high where the hall soars
+        if (isTall) {
+          box('accent', x + dx * (CELL / 2 - 0.02), 8.2, z + dy * (CELL / 2 - 0.02),
+            along ? 0.05 : CELL * 0.92, 0.12, along ? CELL * 0.92 : 0.05);
+        }
         // rib columns at the panel seams
         const rx = along ? 0 : CELL / 2, rz = along ? CELL / 2 : 0;
-        box('frame', wx + rx, WALL_H / 2, wz + rz, 0.5, WALL_H, 0.5);
-        box('frame', wx - rx, WALL_H / 2, wz - rz, 0.5, WALL_H, 0.5);
+        box('frame', wx + rx, wallTop / 2, wz + rz, 0.5, wallTop, 0.5);
+        box('frame', wx - rx, wallTop / 2, wz - rz, 0.5, wallTop, 0.5);
       }
     }
   }
@@ -320,13 +330,15 @@ export function buildShipStatic(fs) {
     const xs = g.mouth.map(m => m.cx * CELL);
     const mx0 = Math.min(...xs) - CELL / 2, mx1 = Math.max(...xs) + CELL / 2;
     const mz = (g.mouth[0].cy + 0.5) * CELL + 0.3;
+    // the hangar hall soars — the mouth opens the FULL height of it
+    const MH = g.tall?.[g.mouth[0].cy * g.w + g.mouth[0].cx] ? TALL_H : WALL_H;
     box('dark', (mx0 + mx1) / 2, 0.25, mz, mx1 - mx0, 0.5, 0.7);        // knee sill
     box('accent', (mx0 + mx1) / 2, 0.54, mz - 0.1, mx1 - mx0, 0.06, 0.5); // sill warning light
-    box('dark', (mx0 + mx1) / 2, WALL_H - 0.5, mz, mx1 - mx0, 1.0, 0.9); // header beam
-    box('accent', (mx0 + mx1) / 2, WALL_H - 1.05, mz - 0.1, mx1 - mx0, 0.1, 0.5);
+    box('dark', (mx0 + mx1) / 2, MH - 0.5, mz, mx1 - mx0, 1.0, 0.9); // header beam
+    box('accent', (mx0 + mx1) / 2, MH - 1.05, mz - 0.1, mx1 - mx0, 0.1, 0.5);
     for (let x = mx0; x <= mx1 + 0.1; x += CELL * 5) {
-      box('frame', x, WALL_H / 2, mz, 1.2, WALL_H, 1.3);                 // heavy mullion columns
-      box('accent', x, WALL_H / 2, mz - 0.75, 0.16, WALL_H - 1.5, 0.06);
+      box('frame', x, MH / 2, mz, 1.2, MH, 1.3);                 // heavy mullion columns
+      box('accent', x, MH / 2, mz - 0.75, 0.16, MH - 1.5, 0.06);
     }
     // hazard stripe painted on the deck along the opening
     box('accent', (mx0 + mx1) / 2, 0.012, mz - 2.2, mx1 - mx0, 0.012, 0.35);
@@ -389,21 +401,37 @@ export function buildShipStatic(fs) {
     }
   }
 
-  // GRAV LIFTS: a standing light beam from deck to balcony — step in, ride up
+  // GRAV LIFTS: a real PLATFORM disc rides the light column deck ↔ balcony
+  // (dungeon.liftDiscY animates it; groundHeightAt makes it carry you)
   for (const gl of g.gravlifts || []) {
     const beam = new THREE.Mesh(
-      new THREE.CylinderGeometry(0.9, 1.1, gl.top + 0.4, 10, 1, true),
-      new THREE.MeshBasicMaterial({ color: 0x4fe8e0, transparent: true, opacity: 0.18, toneMapped: false, side: THREE.DoubleSide, depthWrite: false }));
-    beam.position.set(gl.x, (gl.top + 0.4) / 2, gl.z);
+      new THREE.CylinderGeometry(1.75, 1.85, gl.top + 0.3, 12, 1, true),
+      new THREE.MeshBasicMaterial({ color: 0x4fe8e0, transparent: true, opacity: 0.09, toneMapped: false, side: THREE.DoubleSide, depthWrite: false }));
+    beam.position.set(gl.x, (gl.top + 0.3) / 2, gl.z);
     group.add(beam);
-    const pad = new THREE.Mesh(new THREE.CylinderGeometry(1.15, 1.3, 0.12, 10), mats.machine);
-    pad.position.set(gl.x, 0.06, gl.z);
+    // base plinth
+    const pad = new THREE.Mesh(new THREE.CylinderGeometry(2.05, 2.2, 0.1, 12), mats.dark);
+    pad.position.set(gl.x, 0.05, gl.z);
     group.add(pad);
-    const ringB = new THREE.Mesh(new THREE.CylinderGeometry(1.2, 1.2, 0.1, 10, 1, true), mats.accent);
-    ringB.position.set(gl.x, 0.18, gl.z);
+    const ringB = new THREE.Mesh(new THREE.CylinderGeometry(2.08, 2.08, 0.08, 12, 1, true), mats.accent);
+    ringB.position.set(gl.x, 0.1, gl.z);
     group.add(ringB);
-    const ringT = new THREE.Mesh(new THREE.CylinderGeometry(1.05, 1.05, 0.08, 10, 1, true), mats.accent);
-    ringT.position.set(gl.x, gl.top + 0.28, gl.z);
+    // THE DISC — the thing you actually ride
+    const disc = new THREE.Mesh(new THREE.CylinderGeometry(1.9, 1.7, 0.28, 12), mats.machine);
+    disc.position.set(gl.x, 0.04, gl.z);
+    disc.userData.gravlift = gl;
+    const edge = new THREE.Mesh(new THREE.CylinderGeometry(1.93, 1.93, 0.12, 12, 1, true), mats.accent);
+    edge.position.y = 0.05;
+    disc.add(edge);
+    const topGlow = new THREE.Mesh(new THREE.CircleGeometry(1.55, 12),
+      new THREE.MeshBasicMaterial({ color: 0x1a4a46, toneMapped: false }));
+    topGlow.rotation.x = -Math.PI / 2;
+    topGlow.position.y = 0.15;
+    disc.add(topGlow);
+    group.add(disc);
+    // top-side docking ring at the balcony edge
+    const ringT = new THREE.Mesh(new THREE.CylinderGeometry(2.0, 2.0, 0.08, 12, 1, true), mats.accent);
+    ringT.position.set(gl.x, gl.top + 0.12, gl.z);
     group.add(ringT);
   }
 
@@ -412,14 +440,15 @@ export function buildShipStatic(fs) {
     const xs = g.mouth.map(m => m.cx * CELL);
     const mx0 = Math.min(...xs) - CELL / 2, mx1 = Math.max(...xs) + CELL / 2;
     const mz = (g.mouth[0].cy + 0.5) * CELL + 0.3;
+    const MH2 = g.tall?.[g.mouth[0].cy * g.w + g.mouth[0].cx] ? TALL_H : WALL_H;
     const field = new THREE.Mesh(
-      new THREE.PlaneGeometry(mx1 - mx0, WALL_H - 1.4),
+      new THREE.PlaneGeometry(mx1 - mx0, MH2 - 1.4),
       new THREE.MeshBasicMaterial({
         color: 0x59e8ff, transparent: true, opacity: 0.13, toneMapped: false,
         side: THREE.DoubleSide, depthWrite: false,
       })
     );
-    field.position.set((mx0 + mx1) / 2, (WALL_H - 1.4) / 2 + 0.5, mz);
+    field.position.set((mx0 + mx1) / 2, (MH2 - 1.4) / 2 + 0.5, mz);
     group.add(field);
     const stars = new THREE.Mesh(
       new THREE.PlaneGeometry(mx1 - mx0 + 70, 34),
@@ -561,8 +590,8 @@ export function buildShipStatic(fs) {
   const rooms = g.noCeil ? [] : (g.rooms || []).slice(0, 10);
   for (const r of rooms) {
     // physical lighting units (r155+): match the portal light's scale (18)
-    const pl = new THREE.PointLight(0xe6f0f8, 22, 38, 1.4);
-    pl.position.set(r.cx * CELL, CEIL_H - 1.4, r.cy * CELL);
+    const pl = new THREE.PointLight(0xe6f0f8, r.tall ? 34 : 22, r.tall ? 48 : 38, 1.4);
+    pl.position.set(r.cx * CELL, (r.tall ? TALL_H : CEIL_H) - 1.6, r.cy * CELL);
     group.add(pl);
   }
   return group;

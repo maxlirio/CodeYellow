@@ -332,6 +332,15 @@ export function generateShipDeck(seedStr, floor) {
     else l.role = dealt ? flavorRoles[dealIdx++ % flavorRoles.length] : rng.pick(flavorRoles);
   }
 
+  // SOARING CEILINGS: the big halls rise to cathedral height — a great hold
+  // should feel like a hold, not a corridor with a wide floor
+  const tall = new Uint8Array(w * h);
+  for (const l of holds) {
+    l.tall = l.w * l.h >= 110 || l.role === 'bay';
+    if (!l.tall) continue;
+    for (let y = l.y; y < l.y + l.h; y++) for (let x = l.x; x < l.x + l.w; x++) tall[idxOf(x, y)] = 1;
+  }
+
   // ---- interiors ----
   const colliders = [];
   const shipDecor = [];
@@ -367,7 +376,9 @@ export function generateShipDeck(seedStr, floor) {
         if (run.length > bestRun.length) bestRun = run.slice();
       } else run = [];
     }
-    if (bestRun.length < 4) continue;
+    if (bestRun.length < 5) continue;
+    // the END cell hosts the lift disc, flush with the cut end of the walkway
+    const endC = rng.chance(0.5) ? bestRun.pop() : bestRun.shift();
     for (const c of bestRun) { elev[idxOf(c.x, c.y)] = 1; occupied.add(idxOf(c.x, c.y)); }
     platforms.push({ cells: bestRun, ramps: [], room: l });
     bestRun.forEach((c, ci) => {
@@ -375,8 +386,8 @@ export function generateShipDeck(seedStr, floor) {
       colliders.push({ x: c.x * CELL, z: c.y * CELL, r: 0.5, y0: 0, h: PLATFORM_H - 0.4 });
       shipDecor.push({ kind: 'pillar', x: c.x * CELL, z: c.y * CELL, w: 1, d: 1, h: PLATFORM_H, yaw: 0 });
     });
-    const endC = rng.chance(0.5) ? bestRun[0] : bestRun[bestRun.length - 1];
-    gravlifts.push({ x: endC.x * CELL, z: endC.y * CELL, top: PLATFORM_H });
+    gravlifts.push({ x: endC.x * CELL, z: endC.y * CELL, top: PLATFORM_H, seed: rng.next() });
+    occupied.add(idxOf(endC.x, endC.y));
   }
 
   for (const l of holds) {
@@ -565,12 +576,13 @@ export function generateShipDeck(seedStr, floor) {
       const along = l.w >= l.h;
       if (theme.id === 'engineering' && inset.w >= 5 && inset.h >= 5) {
         const n = Math.max(2, Math.floor((along ? inset.w : inset.h) / 4));
+        const th = l.tall ? 11.2 : 6.4; // turbines climb to the hall's true ceiling
         for (let i = 0; i < n; i++) {
           const t = (along ? inset.x : inset.y) + 2 + i * 4;
           const cx2 = along ? t : l.cx + rng.int(-1, 1), cy2 = along ? l.cy + rng.int(-1, 1) : t;
           if (!free(cx2, cy2) || !free(cx2 + (along ? 1 : 0), cy2 + (along ? 0 : 1))) continue;
-          colliders.push({ x: cx2 * CELL, z: cy2 * CELL, r: 2.3, y0: 0, h: 6.4, noMesh: true });
-          shipDecor.push({ kind: 'turbine', x: cx2 * CELL, z: cy2 * CELL, w: 4.6, d: 4.6, h: 6.4, yaw: 0 });
+          colliders.push({ x: cx2 * CELL, z: cy2 * CELL, r: 2.3, y0: 0, h: th, noMesh: true });
+          shipDecor.push({ kind: 'turbine', x: cx2 * CELL, z: cy2 * CELL, w: 4.6, d: 4.6, h: th, yaw: 0 });
           for (let dy = -1; dy <= 1; dy++) for (let dx = -1; dx <= 1; dx++) occupied.add(idxOf(cx2 + dx, cy2 + dy));
         }
       }
@@ -653,14 +665,9 @@ export function generateShipDeck(seedStr, floor) {
     traps.push({ x: b.x * CELL, z: b.y * CELL, cx: b.x, cy: b.y, cd: 0 });
   }
 
-  // ---- hanging cables (the rope system, re-dressed by the art pass) ----
+  // no ropes on a warship — vertical play is grav lifts, balconies, and jumps
+  // (the old hanging knots read as MUSHROOMS from across a hold)
   const ropes = [];
-  for (const l of holds) {
-    if ((l.role !== 'gantry' && l.role !== 'hangar') || !rng.chance(0.5)) continue;
-    const rx = l.cx + rng.int(-2, 2), ry = l.cy + rng.int(-2, 2);
-    if (at(rx, ry) !== FLOOR || elev[idxOf(rx, ry)] || occupied.has(idxOf(rx, ry))) continue;
-    ropes.push({ x: rx * CELL + rng.next() * 1.5 - 0.75, z: ry * CELL + rng.next() * 1.5 - 0.75, ay: 7.4, len: 5.0 });
-  }
 
   // ================= placements (temporary: existing pieces) =================
   const placements = [];
@@ -845,7 +852,7 @@ export function generateShipDeck(seedStr, floor) {
 
   const grid = {
     w, h, cells, elev, ramps, rooms: holds, colliders,
-    mouth, gravlifts,
+    mouth, gravlifts, tall,
     spawn: { x: spawnCell.x * CELL, z: spawnCell.y * CELL },
     spawnYaw,
     stairs: { x: portal.x * CELL, z: portal.y * CELL, cx: portal.x, cy: portal.y },
