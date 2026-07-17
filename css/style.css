@@ -344,3 +344,28 @@ button.orange-btn:hover { filter: brightness(1.15); }
   letter-spacing: 3px; cursor: pointer;
 }
 #mmConfirm:hover { background: #2fd6c8; color: #06181a; box-shadow: 0 0 22px rgba(47,214,200,0.6); }
+
+/* ---- training room ---- */
+.tr-panel { max-width: 640px; width: min(94vw, 640px); }
+.tr-pts { color: #ffce2e; letter-spacing: 2px; font-size: 15px; margin-bottom: 12px; }
+#trList { display: flex; flex-direction: column; gap: 8px; max-height: 52vh; overflow-y: auto; }
+.tr-skill {
+  display: flex; align-items: center; justify-content: space-between; gap: 12px;
+  background: rgba(8, 20, 24, 0.75); border: 1px solid #1c3a3f; border-radius: 8px;
+  padding: 10px 14px; text-align: left;
+}
+.tr-skill.maxed { border-color: #2fd6c8; }
+.tr-info b { color: #c9fff8; letter-spacing: 1px; }
+.tr-desc { color: #7fa8a3; font-size: 12.5px; margin-top: 2px; }
+.tr-pips { margin-left: 8px; }
+.tr-pip {
+  display: inline-block; width: 10px; height: 10px; border-radius: 2px;
+  border: 1px solid #2b6a63; margin-right: 3px; vertical-align: middle;
+}
+.tr-pip.on { background: #2fd6c8; box-shadow: 0 0 6px rgba(47,214,200,0.7); }
+.tr-buy {
+  background: #123b36; color: #7fffee; border: 1px solid #2fd6c8; border-radius: 6px;
+  padding: 8px 18px; font-family: inherit; letter-spacing: 2px; cursor: pointer; flex-shrink: 0;
+}
+.tr-buy:hover:not(:disabled) { background: #2fd6c8; color: #06181a; }
+.tr-buy:disabled { opacity: 0.35; cursor: default; border-color: #2b4a46; color: #6f8a86; }

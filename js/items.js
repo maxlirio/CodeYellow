@@ -1,7 +1,7 @@
 // Equipment: procedural weapon/offhand/trinket generation, inventory ops, stat aggregation.
 import { G } from './state.js';
 import {
-  RARITIES, WEAPON_TYPES, OFFHAND_TYPES, NAME_PREFIX, NAME_SUFFIX,
+  RARITIES, WEAPON_TYPES, OFFHAND_TYPES, OFFHAND_ROLLS, NAME_PREFIX, NAME_SUFFIX,
   TRINKET_NAMES, TRINKET_STATS, CLASSES, AFFIXES, SIGNATURES,
 } from './config.js';
 
@@ -39,6 +39,7 @@ export function rollWeapon(classId, floor, luck = 0) {
     held: wt.held || null, held2: !!wt.held2, verb: wt.verb || 'slash',
     name: itemName(rarity, wt.noun), rarity: rarity.id, icon: wt.ranged ? '' : '',
     ranged: !!wt.ranged, atkTime: wt.atkTime || null,
+    cast: !!wt.cast, manaAttack: wt.manaAttack || null, boltVis: wt.boltVis || null, boltColor: wt.boltColor || null,
     rangeAdd: wt.rangeAdd || 0, arcAdd: wt.arcAdd || 0, stunHit: wt.stunHit || 0,
     stats: { dmg },
   };
@@ -72,13 +73,12 @@ export function affixOf(item) {
 
 export function rollOffhand(classId, floor, luck = 0) {
   const rarity = pickRarity(floor, luck);
-  const ot = OFFHAND_TYPES[classId];
-  const idx = Math.floor(Math.random() * ot.meshes.length);
+  const ot = pick(OFFHAND_ROLLS); // classless: the roll decides the flavor
   const val = ot.stat === 'armor' ? Math.round((8 + floor * 1.2) * rarity.mult)
     : ot.stat === 'crit' ? +(5 * rarity.mult + floor * 0.5).toFixed(1)
     : +(2.5 * rarity.mult + floor * 0.3).toFixed(1);
   return {
-    uid: uidCounter++, slot: 'offhand', classId, mesh: [ot.meshes[idx]], model: ot.models[idx] || ot.models[0],
+    uid: uidCounter++, slot: 'offhand', classId, mesh: [], model: ot.models[0],
     name: itemName(rarity, ot.noun), rarity: rarity.id, icon: '',
     stats: { [ot.stat]: Math.min(ot.stat === 'armor' ? 30 : 99, val) },
   };

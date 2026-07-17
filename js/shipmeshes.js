@@ -502,6 +502,7 @@ export function buildShipStatic(fs) {
       let scr;
       if (s.kind === 'status') scr = mkScreen(fs.holoTex, 8.4, 4.2);
       else if (s.kind === 'comms') scr = mkScreen(label('COMMS — JOINT OPS', 'public games · press E'), 4.6, 2.6);
+      else if (s.kind === 'training') scr = mkScreen(label('TRAINING', 'spend skill points · press E'), 4.6, 2.6);
       else scr = mkScreen(label('SIM DECK', 'change venture · press E'), 4.6, 2.6);
       scr.position.set(s.x, s.kind === 'status' ? 3.3 : 3.1, s.z);
       scr.rotation.y = s.ry;

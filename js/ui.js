@@ -305,7 +305,8 @@ export function updateMinimap() {
 export function buildClassCards(onSelect) {
   const wrap = $('classCards');
   wrap.innerHTML = '';
-  let selected = localStorage.getItem('codeyellow_class') || 'knight';
+  let selected = localStorage.getItem('codeyellow_class');
+  if (!CLASSES[selected]) selected = Object.keys(CLASSES)[0]; // old class saves fall back to the trooper
   for (const [id, c] of Object.entries(CLASSES)) {
     const div = document.createElement('div');
     div.className = 'ccard' + (id === selected ? ' sel' : '');

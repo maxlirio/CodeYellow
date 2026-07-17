@@ -594,6 +594,16 @@ function simulateEnemy(e, fs, players, dt, mine) {
     } else if (ground > e.obj.position.y) { // <=1.6 was narrower than the 1.7 groundHeightAt offers — they waded inside ramps
       e.obj.position.y = ground;
       e.vy = 0;
+    } else if (e.state === 'chase' && t && !t.minion) {
+      // JUMP: high ground is not safety — a chaser under your ledge leaps up.
+      // (Same physics as falling: the curY gate in groundHeightAt catches the
+      // platform top at the apex and the frame lands.)
+      e.jumpT = (e.jumpT || 0) - dt;
+      if (e.jumpT <= 0 && t.pos.y - e.obj.position.y > 2 && t.dist < 7 && dy3 > 2) {
+        e.vy = 15; // clears PLATFORM_H with a little to spare
+        e.obj.position.y += 0.05;
+        e.jumpT = 1.4 + Math.random() * 0.8;
+      }
     }
   }
 
@@ -1361,7 +1371,7 @@ export function killEnemy(e, source = 'local', fromNet = false) {
       fs2.summons.push({ id, type: e.cfg.splitInto, x: sx, z: sz, y: e.obj.position.y });
       netSend({ t: 'espawn', f: fs2.n, id, type: e.cfg.splitInto, x: sx, z: sz, y: e.obj.position.y });
     }
-    if (onMyFloor(e)) addMsg('The slime splits apart!', 'bad');
+    if (onMyFloor(e)) addMsg(`The ${(e.cfg.name || 'mass').toLowerCase()} splits apart!`, 'bad');
   }
   // plaguebearers burst into a poison cloud
   if (e.cfg.deathCloud && isAuthority()) {
@@ -1385,7 +1395,7 @@ export function killEnemy(e, source = 'local', fromNet = false) {
     G.run.gold += gold;
     G.run.kills++;
     gainXp(Math.round(e.cfg.xp * e.xpMult));
-    addMsg(`${e.boss ? 'Boss defeated!' : e.elite ? 'Elite destroyed!' : 'Skeleton destroyed'} +${gold}g`, e.boss || e.elite ? 'gold' : '');
+    addMsg(`${e.boss ? `${e.cfg.bossName || 'Boss'} destroyed!` : `${e.elite ? 'Elite ' : ''}${e.cfg.name || 'Hostile'} destroyed`} +${gold} credits`, e.boss || e.elite ? 'gold' : '');
   }
   // item drops (authority rolls & shares the actual item)
   if (isAuthority() && !fromNet && source !== 'none') {

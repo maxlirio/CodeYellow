@@ -95,6 +95,15 @@ function attachHeldWeapon(obj, held, held2) {
   }
 }
 
+// dress a menu-preview rig with the class's actual STARTING weapon — the
+// character you pick must hold what you'll be holding
+export function dressPreviewWeapon(obj, classId) {
+  const w0 = WEAPON_TYPES[classId][0];
+  const heldName = w0.held || (!w0.mesh?.length ? w0.model : null);
+  setEquipMeshes(obj, heldName ? [] : w0.mesh);
+  attachHeldWeapon(obj, heldName, !!w0.held2);
+}
+
 export function refreshEquipVisuals() {
   const p = G.player;
   if (!p) return;
@@ -146,29 +155,36 @@ function bannerMult() {
   return 1;
 }
 
+// trained skill rank (the training station writes G.run.skills)
+export function skillRank(id) { return G.run?.skills?.[id] || 0; }
+
 export function effectiveDamage() {
   const p = G.player;
   let d = weaponDamage(p.cls) + G.run.atkBonus + (G.run.level - 1) * 2;
+  d *= 1 + 0.09 * skillRank('drills');
   if (p.buff) d *= p.buff.dmgMult;
   d *= bannerMult();
   return Math.round(d);
 }
 export function effectiveSpeed() {
   const p = G.player;
-  let s = p.cls.speed + G.run.speedBonus + gearStat('speed');
+  let s = p.cls.speed + G.run.speedBonus + gearStat('speed') + 0.5 * skillRank('servos');
   if (p.buff) s *= p.buff.speedMult;
   if (p.slowT > 0) s *= 0.55;
   if (p.aiming) s *= 0.6;
   return s;
 }
 export function effectiveMaxHp() {
-  return G.player.cls.hp + G.run.hpBonus + (G.run.level - 1) * 8 + Math.round(gearStat('hp'));
+  return G.player.cls.hp + G.run.hpBonus + 22 * skillRank('frame') + (G.run.level - 1) * 8 + Math.round(gearStat('hp'));
+}
+export function effectiveMaxMana() {
+  return G.player.cls.mana + 25 * skillRank('capacitors');
 }
 export function effectiveCrit() {
-  return G.player.cls.crit + gearStat('crit') / 100;
+  return G.player.cls.crit + gearStat('crit') / 100 + 0.06 * skillRank('optics');
 }
 export function effectiveArmor() {
-  let a = gearStat('armor') / 100 + (G.player.cls.armorBase || 0);
+  let a = gearStat('armor') / 100 + (G.player.cls.armorBase || 0) + 0.08 * skillRank('plating');
   if (G.player.buff?.armorAdd) a += G.player.buff.armorAdd;
   return Math.min(0.75, a);
 }
@@ -234,7 +250,7 @@ function refreshSigSlot() {
 }
 export { refreshSigSlot };
 export function effectiveManaRegen() {
-  return (G.player.cls.manaRegen || 0) + gearStat('mregen');
+  return (G.player.cls.manaRegen || 0) + gearStat('mregen') + skillRank('capacitors');
 }
 
 export function gainXp(amount) {
@@ -247,8 +263,10 @@ export function gainXp(amount) {
     const p = G.player;
     p.maxHp = effectiveMaxHp();
     p.hp = p.maxHp;
+    G.run.skillPts = (G.run.skillPts || 0) + 1;
     sfx.levelup();
     addMsg(`Level ${G.run.level}! Fully healed.`, 'gold');
+    addMsg('+1 training point — spend it at the TRAINING station on the bridge.', 'gold');
     spawnBurst(p.obj.position.clone().setY(p.obj.position.y + 1.2), 0xffd35c, 24, 6, 0.16, 0.9);
   }
   refreshHud();
@@ -269,7 +287,7 @@ export function damageLocalPlayer(amount, effects = null) {
   p.hp -= reduced;
   if (effects?.slow) p.slowT = Math.max(p.slowT, effects.slow.dur);
   if (effects?.poison) { p.poisonT = effects.poison.dur; p.poisonDps = effects.poison.dps; addMsg('You are poisoned!', 'bad'); }
-  if (effects?.kb && !p.cls.kbImmune) { p.kbX += effects.kb.x; p.kbZ += effects.kb.z; }
+  if (effects?.kb && !p.cls.kbImmune && skillRank('frame') < 2) { p.kbX += effects.kb.x; p.kbZ += effects.kb.z; }
   if (effects?.shake) G.shake = Math.max(G.shake || 0, effects.shake);
   if (effects?.lashbreak && p.lash) {
     releaseLash(p);
@@ -493,7 +511,8 @@ export function updatePlayer(dt) {
   }
 
   if (!p.lash) p.mana = Math.min(p.maxMana, p.mana + effectiveManaRegen() * dt);
-  if (p.cls.hpRegen && p.hp < p.maxHp) p.hp = Math.min(p.maxHp, p.hp + p.cls.hpRegen * dt); // android self-repair
+  const hpr = (p.cls.hpRegen || 0) + 0.5 * skillRank('nanorepair');
+  if (hpr && p.hp < p.maxHp) p.hp = Math.min(p.maxHp, p.hp + hpr * dt); // nano-repair
   p.aiming = !!(G.keys['ShiftLeft'] || G.keys['ShiftRight']);
   if (G.spectate) { spectateBot(p, dt); p.obj.visible = true; p.anim.update(dt); }
 
@@ -809,23 +828,25 @@ function doAttackHit() {
   const dmg = effectiveDamage();
   const dir = aimDir();
   const wfx = weaponHitEffects(dmg);
-  // arrows fly only from a bow/crossbow in hand; the mage's bolt is innate mana
-  const rangedAtk = G.inv.weapon?.ranged || !!cls.manaAttack;
+  // cells fly from guns; projectors burn energy — the WEAPON decides, not a class
+  const w = G.inv.weapon;
+  const isCast = !!(w?.cast || (!w && cls.manaAttack));
+  const rangedAtk = w?.ranged || isCast;
   if (rangedAtk) {
-    if (G.inv.weapon?.ranged && meleeTargetInReach()) {
+    if (w?.ranged && meleeTargetInReach()) {
       offhandDaggerSwipe(p, dmg, wfx);
       return;
     }
-    if (G.inv.weapon?.ranged) {
+    if (w?.ranged) {
       if ((G.run.arrows || 0) <= 0) return;
       G.run.arrows--;
       refreshHud();
     }
-    // mage bolts burn mana and scale with what was actually spent: a full-cost
-    // shot is a cannonball, a dry-tank shot is a feeble cantrip spark
+    // projector bolts burn energy and scale with what was actually spent: a
+    // full-cost shot is a cannonball, a dry-tank shot is a feeble spark
     let boltDmg = dmg, boltSize = 1;
-    if (cls.manaAttack && !G.inv.weapon?.ranged) {
-      const fullCost = Math.ceil(p.maxMana * cls.manaAttack);
+    if (isCast) {
+      const fullCost = Math.ceil(p.maxMana * (w?.manaAttack || cls.manaAttack || 0.16));
       const spend = Math.min(p.mana, fullCost);
       p.mana -= spend;
       const mult = 0.25 + 0.75 * (spend / fullCost);
@@ -837,9 +858,9 @@ function doAttackHit() {
     const b = {
       x: p.obj.position.x + dir.x * 0.7, z: p.obj.position.z + dir.z * 0.7, y: p.obj.position.y + 1.45,
       dirX: dir.x + sx, dirY: dir.y + sy, dirZ: dir.z + sz,
-      speed: G.inv.weapon?.ranged ? 40 : 30, dmg: boltDmg, size: boltSize, owner: 'player', basic: true, // lasers are QUICK
-      color: G.inv.weapon?.ranged ? 0xddcc99 : (p.cls.boltColor || 0xff8833),
-      vis: G.inv.weapon?.ranged ? 'arrow' : (p.cls.boltVis || 'fire'),
+      speed: w?.ranged ? 40 : 30, dmg: boltDmg, size: boltSize, owner: 'player', basic: true, // lasers are QUICK
+      color: w?.ranged ? 0xddcc99 : (w?.boltColor || p.cls.boltColor || 0xff8833),
+      vis: w?.ranged ? 'arrow' : (w?.boltVis || p.cls.boltVis || 'fire'),
       slow: wfx?.slow || null, poison: wfx?.poison || null, lifesteal: wfx?.lifesteal || 0,
     };
     spawnBolt(b);
@@ -907,6 +928,7 @@ export function tryAttack() {
   let animName;
   if (daggerReach) animName = p.anim.has('1H_Melee_Attack_Slice_Horizontal') ? '1H_Melee_Attack_Slice_Horizontal' : p.cls.attackAnims[0];
   else if (G.inv.weapon?.ranged && p.anim.has('2H_Ranged_Shoot')) animName = '2H_Ranged_Shoot';
+  else if (G.inv.weapon?.cast) animName = 'Spellcast_Shoot'; // alias layer maps it per rig
   else animName = p.cls.attackAnims[p.attackIdx % p.cls.attackAnims.length];
   p.attackIdx++;
   const act = p.anim.play(animName, { once: true });
@@ -1198,7 +1220,7 @@ export function notifyHit(crit) { hitmarker(crit); }
 // ---------- remote players ----------
 export function addRemotePlayer(pid, name, classId, look, equip) {
   if (G.remotes.has(pid)) return G.remotes.get(pid);
-  const cls = CLASSES[classId] || CLASSES.knight;
+  const cls = CLASSES[classId] || CLASSES.trooper;
   const lk = look || { cape: true, helmet: true, capeColor: 0 };
   const modelName = cls.model;
   const { obj, anim } = makeCharacter('char', modelName, equip || cls.show);

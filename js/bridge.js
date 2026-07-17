@@ -52,6 +52,8 @@ export function generateBridgeData() {
       label: 'COMMS — JOINT OPS', x: 11.9 * CELL, z: C * CELL },
     { model: null, noModel: true, sign: false, name: 'Sim Deck', shop: 'mode',
       label: 'SIM DECK — CHANGE VENTURE', x: 9 * CELL, z: 11.7 * CELL },
+    { model: null, noModel: true, sign: false, name: 'Training', shop: 'training',
+      label: 'TRAINING — SPEND SKILL POINTS', x: 4.4 * CELL, z: 10.9 * CELL },
   ];
 
   const grid = {
@@ -62,6 +64,7 @@ export function generateBridgeData() {
       { kind: 'status', x: 1.5 * CELL + 0.15, z: C * CELL, ry: Math.PI / 2 },
       { kind: 'comms', x: 12.5 * CELL - 0.15, z: C * CELL, ry: -Math.PI / 2 },
       { kind: 'sim', x: 9 * CELL, z: 12.5 * CELL - 0.15, ry: Math.PI },
+      { kind: 'training', x: 4 * CELL, z: 11.5 * CELL + 0.15, ry: Math.PI },
     ],
     rooms: [{ x: 2, y: 2, w: 11, h: 11, cx: C, cy: C }],
     spawn: { x: C * CELL, z: 9.6 * CELL }, spawnYaw: 0, // wake facing table + stars

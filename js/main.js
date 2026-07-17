@@ -20,6 +20,7 @@ import {
   setMissionHooks, updateMissions, openMissionMap, enterSortie, tryExtract,
   onRemoteMission, onRemoteMissionEnd,
 } from './missions.js';
+import { openTrainRoom, setSkillHooks } from './skills.js';
 import { initViewmodel, updateViewmodel } from './viewmodel.js';
 import { updateWalls, clearWalls } from './walls.js';
 import { initFloorTraps, updateTraps } from './traps.js';
@@ -37,6 +38,7 @@ import {
   drinkPotion, onMouseMove, damageLocalPlayer, sendPos, effectiveMaxHp, effectiveDamage,
   effectiveSpeed, effectiveCrit, effectiveArmor, effectiveManaRegen, refreshEquipVisuals,
   refreshRemoteVisibility, effectiveAttackTime, weaponHitEffects, addSigCharge,
+  dressPreviewWeapon,
 } from './player.js';
 import {
   show, hide, setHidden, addMsg, refreshHud, updateMinimap, updateDodgeCooldown,
@@ -50,7 +52,7 @@ import {
 } from './net.js';
 
 const $ = (id) => document.getElementById(id);
-let getClass = () => 'knight';
+let getClass = () => 'trooper';
 let invOpen = false;
 let runMode = 'campaign';
 
@@ -105,7 +107,7 @@ async function boot() {
   const params = new URLSearchParams(location.search);
   if (params.get('auto')) {
     initAudio();
-    if (params.get('class')) getClass = () => params.get('class'); // probe hook
+    if (params.get('class')) getClass = () => (CLASSES[params.get('class')] ? params.get('class') : 'trooper'); // probe hook
     startRun(params.get('seed') || randomSeed(), params.get('mode') || 'campaign');
     // ?boss=1 — playtest kit: a seasoned delver dropped at the dragon's door
     if (params.get('boss')) {
@@ -175,6 +177,7 @@ function rebuildPreview() {
   const { obj } = makeCharacter('char', modelName, cls.show);
   applyLook(obj, G.look);
   applyClassFinish(obj, cls);
+  dressPreviewWeapon(obj, classId); // hold the ACTUAL starting weapon
   obj.scale.setScalar(cls.scale || 1);
   pvChar = obj;
   pvScene.add(obj);
@@ -326,6 +329,7 @@ function setupMenu() {
     onMissionEnd: () => onRemoteMissionEnd(),
   });
   setMissionHooks({ goto: descendTo, disposeFloor, lock: lockPointer });
+  setSkillHooks({ lock: lockPointer });
 }
 
 function renderLobby() {
@@ -333,7 +337,7 @@ function renderLobby() {
   ul.innerHTML = '';
   for (const [pid, p] of G.net.players) {
     const li = document.createElement('li');
-    const cls = p.classId || 'knight';
+    const cls = p.classId || 'trooper';
     li.textContent = `${pid === 'host' ? '' : ''}${p.name} — ${cls[0].toUpperCase() + cls.slice(1)}`;
     ul.appendChild(li);
   }
@@ -394,10 +398,10 @@ function startRun(seed, mode = 'campaign') {
   G.floor = mode === 'horde' ? 1 : 0;
   G.endless = false;
   G.pendingVictory = false;
-  G.run = { gold: mode === 'horde' ? 60 : 0, potions: 1, keys: 0, atkBonus: 0, hpBonus: 0, speedBonus: 0, speedBuys: 0, level: 1, xp: 0, kills: 0, chests: 0, startTime: performance.now(), buys: {}, deepest: 0 };
+  G.run = { gold: mode === 'horde' ? 60 : 0, potions: 1, keys: 0, atkBonus: 0, hpBonus: 0, speedBonus: 0, speedBuys: 0, level: 1, xp: 0, kills: 0, chests: 0, startTime: performance.now(), buys: {}, deepest: 0, skills: {}, skillPts: 0 };
   resetCooldowns();
   stopHorde();
-  hide('menu'); hide('lobby'); hide('merchant'); hide('dead'); hide('victory'); hide('inventory'); hide('stairsDialog'); hide('tavernBoard'); hide('modeDialog'); hide('tomeDialog'); hide('missionMap');
+  hide('menu'); hide('lobby'); hide('merchant'); hide('dead'); hide('victory'); hide('inventory'); hide('stairsDialog'); hide('tavernBoard'); hide('modeDialog'); hide('tomeDialog'); hide('missionMap'); hide('trainRoom');
   invOpen = false;
   setHidden('hud', false);
 
@@ -847,7 +851,7 @@ function applyModeSwitch(mode) {
     level: keep.level, xp: keep.xp, kills: keep.kills, chests: keep.chests,
     atkBonus: keep.atkBonus, hpBonus: keep.hpBonus, speedBonus: keep.speedBonus,
     speedBuys: keep.speedBuys, buys: keep.buys, deepest: keep.deepest,
-    spells: keep.spells,
+    spells: keep.spells, skills: keep.skills || {}, skillPts: keep.skillPts || 0,
   });
   G.inv.weapon = inv.weapon; G.inv.offhand = inv.offhand; G.inv.trinket = inv.trinket; G.inv.bag = inv.bag;
   refreshEquipVisuals();
@@ -860,6 +864,7 @@ function applyModeSwitch(mode) {
 
 function onShopOpened(type) {
   if (type === 'missions') { openMissionMap(); return; }
+  if (type === 'training') { openTrainRoom(); return; }
   if (type === 'board') { document.exitPointerLock?.(); window.openTavernBoard(); return; }
   if (type === 'mode') { openModeDialog(); return; }
   if (type === 'codex') { openCodex(); return; }

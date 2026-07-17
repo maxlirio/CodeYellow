@@ -158,7 +158,7 @@ try {
   G.scene.add(fsMock.enemyGroup);
   const { CLASSES } = await import('./js/config.js');
   G.player = {
-    obj: new THREE.Group(), dead: false, name: 't', classId: 'knight', cls: CLASSES.knight,
+    obj: new THREE.Group(), dead: false, name: 't', classId: 'trooper', cls: CLASSES.trooper,
     hp: 500, maxHp: 500, iframes: 0, mana: 60, maxMana: 60, slowT: 0, dodgeT: 0, buff: null, deadT: 0, vy: 0,
   };
   G.player.obj.position.set(30, 0, 30);
