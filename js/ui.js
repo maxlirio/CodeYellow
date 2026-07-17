@@ -389,8 +389,8 @@ export function renderBoardList(games, onJoin) {
 // ---------- transitions & end screens ----------
 export function showTransition(floor, cb, subtitle = null, warning = null) {
   const t = $('transition');
-  $('transTitle').textContent = floor === 0 ? 'HOMEWARD' : floor <= 9 ? `FLOOR ${floor}` : `FLOOR ${floor} — THE ENDLESS DARK`;
-  $('transSub').innerHTML = (subtitle || 'Deeper still…') +
+  $('transTitle').textContent = floor === 0 ? 'THE BRIDGE' : floor <= 9 ? `SECTOR ${floor}` : `SECTOR ${floor} — THE DEAD HULL`;
+  $('transSub').innerHTML = (subtitle || 'Into the hulk…') +
     (warning ? `<br><span style="color:#ff8c4a;letter-spacing:4px">${warning}</span>` : '');
   t.classList.remove('hidden');
   t.style.opacity = '1';
@@ -406,7 +406,7 @@ export function showTransition(floor, cb, subtitle = null, warning = null) {
 export function runStatsHtml() {
   const secs = Math.floor((performance.now() - G.run.startTime) / 1000);
   const mm = Math.floor(secs / 60), ss = (secs % 60).toString().padStart(2, '0');
-  return `Floor reached: <b>${G.floor}</b><br>
+  return `Sector reached: <b>${G.floor}</b><br>
     Level: <b>${G.run.level}</b> · Kills: <b>${G.run.kills}</b><br>
     Credits gathered: <b>${G.run.gold}</b> · Chests: <b>${G.run.chests}</b><br>
     Time: <b>${mm}:${ss}</b>`;

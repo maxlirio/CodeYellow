@@ -100,9 +100,19 @@ export function generateShipDeck(seedStr, floor) {
   // strip forward, and the whole south wall open to space (the mouth)
   const hangarMode = !!(sortieOverride && floor === sortieOverride.floorN && sortieOverride.special === 'hangar');
 
+  // each section ARCHITECTURE differs structurally, not just in paint:
+  // cargo carves canyon halls, hab warrens small rooms, engineering opens
+  // big machine floors strung with balconies, command splits wide galleries
+  const ARCH = {
+    cargo: { target: [4, 5], maxw: 22, maxh: 16, balcony: 0.45 },
+    hab: { target: [7, 8], maxw: 12, maxh: 10, balcony: 0.3 },
+    engineering: { target: [4, 6], maxw: 20, maxh: 15, balcony: 0.75 },
+    command: { target: [5, 7], maxw: 16, maxh: 12, balcony: 0.6 },
+  }[theme.id] || { target: [5, 7], maxw: 18, maxh: 14, balcony: 0.4 };
+
   // ---- BSP the deck into holds ----
   const MINROOM = 8, WALL = 3;   // bulkhead thickness between holds
-  const MAXW = 18, MAXH = 14;    // a hold larger than this must keep splitting
+  const MAXW = ARCH.maxw, MAXH = ARCH.maxh; // a hold larger than this must keep splitting
   let leaves = [{ x: 1, y: 1, w: w - 2, h: h - 2 }];
   if (hangarMode) {
     leaves = [
@@ -114,7 +124,7 @@ export function generateShipDeck(seedStr, floor) {
   } else {
     const canSplit = (l) => l.w >= MINROOM * 2 + WALL || l.h >= MINROOM * 2 + WALL;
     const oversized = (l) => l.w > MAXW || l.h > MAXH;
-    const target = rng.int(5, 7);
+    const target = rng.int(ARCH.target[0], ARCH.target[1]);
     for (let guard = 0; guard < 60; guard++) {
       const mustSplit = leaves.some(l => oversized(l) && canSplit(l));
       if (leaves.length >= 8 || (leaves.length >= target && !mustSplit)) break;
@@ -338,6 +348,36 @@ export function generateShipDeck(seedStr, floor) {
     occupied.add(idxOf(x, y));
     return true;
   };
+
+  // ---- BALCONIES: a second level along one wall of the big holds, reached
+  // by a GRAV LIFT beam at one end — step in and the field carries you up.
+  // Overwatch spawns up there; below stays a clean underpass.
+  const gravlifts = [];
+  for (const l of holds) {
+    if (l.w < 8 || l.h < 8 || !rng.chance(ARCH.balcony)) continue;
+    const along = l.w >= l.h;
+    const lane = along ? (rng.chance(0.5) ? l.y + 1 : l.y + l.h - 2)
+      : (rng.chance(0.5) ? l.x + 1 : l.x + l.w - 2);
+    const a0 = (along ? l.x : l.y) + 1, a1 = (along ? l.x + l.w : l.y + l.h) - 2;
+    let run = [], bestRun = [];
+    for (let a = a0; a <= a1; a++) {
+      const x = along ? a : lane, y = along ? lane : a;
+      if (at(x, y) === FLOOR && !keepClear.has(idxOf(x, y)) && !elev[idxOf(x, y)]) {
+        run.push({ x, y });
+        if (run.length > bestRun.length) bestRun = run.slice();
+      } else run = [];
+    }
+    if (bestRun.length < 4) continue;
+    for (const c of bestRun) { elev[idxOf(c.x, c.y)] = 1; occupied.add(idxOf(c.x, c.y)); }
+    platforms.push({ cells: bestRun, ramps: [], room: l });
+    bestRun.forEach((c, ci) => {
+      if (ci % 3 !== 1) return;
+      colliders.push({ x: c.x * CELL, z: c.y * CELL, r: 0.5, y0: 0, h: PLATFORM_H - 0.4 });
+      shipDecor.push({ kind: 'pillar', x: c.x * CELL, z: c.y * CELL, w: 1, d: 1, h: PLATFORM_H, yaw: 0 });
+    });
+    const endC = rng.chance(0.5) ? bestRun[0] : bestRun[bestRun.length - 1];
+    gravlifts.push({ x: endC.x * CELL, z: endC.y * CELL, top: PLATFORM_H });
+  }
 
   for (const l of holds) {
     const inset = { x: l.x + 1, y: l.y + 1, w: l.w - 2, h: l.h - 2 };
@@ -805,7 +845,7 @@ export function generateShipDeck(seedStr, floor) {
 
   const grid = {
     w, h, cells, elev, ramps, rooms: holds, colliders,
-    mouth,
+    mouth, gravlifts,
     spawn: { x: spawnCell.x * CELL, z: spawnCell.y * CELL },
     spawnYaw,
     stairs: { x: portal.x * CELL, z: portal.y * CELL, cx: portal.x, cy: portal.y },

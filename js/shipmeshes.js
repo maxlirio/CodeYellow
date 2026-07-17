@@ -389,6 +389,24 @@ export function buildShipStatic(fs) {
     }
   }
 
+  // GRAV LIFTS: a standing light beam from deck to balcony — step in, ride up
+  for (const gl of g.gravlifts || []) {
+    const beam = new THREE.Mesh(
+      new THREE.CylinderGeometry(0.9, 1.1, gl.top + 0.4, 10, 1, true),
+      new THREE.MeshBasicMaterial({ color: 0x4fe8e0, transparent: true, opacity: 0.18, toneMapped: false, side: THREE.DoubleSide, depthWrite: false }));
+    beam.position.set(gl.x, (gl.top + 0.4) / 2, gl.z);
+    group.add(beam);
+    const pad = new THREE.Mesh(new THREE.CylinderGeometry(1.15, 1.3, 0.12, 10), mats.machine);
+    pad.position.set(gl.x, 0.06, gl.z);
+    group.add(pad);
+    const ringB = new THREE.Mesh(new THREE.CylinderGeometry(1.2, 1.2, 0.1, 10, 1, true), mats.accent);
+    ringB.position.set(gl.x, 0.18, gl.z);
+    group.add(ringB);
+    const ringT = new THREE.Mesh(new THREE.CylinderGeometry(1.05, 1.05, 0.08, 10, 1, true), mats.accent);
+    ringT.position.set(gl.x, gl.top + 0.28, gl.z);
+    group.add(ringT);
+  }
+
   // THE MOUTH's translucent skin + the space beyond (post-merge: transparent)
   if (g.mouth?.length) {
     const xs = g.mouth.map(m => m.cx * CELL);

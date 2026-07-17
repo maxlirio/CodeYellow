@@ -321,7 +321,7 @@ function setupMenu() {
         moveMinionsToFloor(pid, n);
       }
       const p = G.net.players.get(pid);
-      addMsg(`${p?.name || 'A teammate'} ${n === 0 ? 'returned to town' : 'moved to floor ' + n}`);
+      addMsg(`${p?.name || 'A teammate'} ${n === 0 ? 'returned to the bridge' : 'moved to sector ' + n}`);
     },
     ensureFloorSim: (n) => ensureFloor(n),
     onFstate: (m) => applyFstate(m),
@@ -584,7 +584,7 @@ function onStairsUsed() {
   }
   G.mode = 'merchant';
   document.exitPointerLock?.();
-  $('stairsSub').textContent = `Floor ${G.floor} cleared? Floor ${G.floor + 1} awaits below — or head home to spend your gold.`;
+  $('stairsSub').textContent = `Sector ${G.floor} cleared? Sector ${G.floor + 1} waits — or head back to the bridge.`;
   show('stairsDialog');
 }
 
