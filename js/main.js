@@ -21,7 +21,7 @@ import {
   onRemoteMission, onRemoteMissionEnd,
 } from './missions.js';
 import { openTrainRoom, setSkillHooks } from './skills.js';
-import { updateSpace, spaceMouse, spaceFire, inSpace } from './space.js';
+import { updateSpace, spaceMouse, spaceFire, inSpace, startSpaceFlight } from './space.js';
 import { initViewmodel, updateViewmodel } from './viewmodel.js';
 import { updateWalls, clearWalls } from './walls.js';
 import { initFloorTraps, updateTraps } from './traps.js';
@@ -110,6 +110,8 @@ async function boot() {
     initAudio();
     if (params.get('class')) getClass = () => (CLASSES[params.get('class')] ? params.get('class') : 'trooper'); // probe hook
     startRun(params.get('seed') || randomSeed(), params.get('mode') || 'campaign');
+    // ?fly=1 — straight into the cockpit, no clears required
+    if (params.get('fly')) setTimeout(() => startSpaceFlight(), 600);
     // ?boss=1 — playtest kit: a seasoned delver dropped at the dragon's door
     if (params.get('boss')) {
       const classId = getClass();
@@ -1089,6 +1091,7 @@ function setupInput() {
     G.mouse.locked = document.pointerLockElement === canvas;
   });
   document.addEventListener('mousemove', (e) => {
+    if (G.mouse.locked && G.mode === 'space') { spaceMouse(e.movementX, e.movementY); return; }
     if (G.mouse.locked && G.mode === 'playing' && !invOpen) onMouseMove(e.movementX, e.movementY);
   });
   addEventListener('keydown', (e) => {

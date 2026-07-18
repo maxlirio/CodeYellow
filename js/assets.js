@@ -9,14 +9,12 @@ import { WEAPON_MESHES, CAPE_COLORS } from './config.js';
 
 const CHAR_MODELS = ['Knight', 'Mage', 'Rogue', 'Rogue_Hooded', 'Barbarian'];
 const ENEMY_MODELS = ['Skeleton_Minion', 'Skeleton_Warrior', 'Skeleton_Rogue', 'Skeleton_Mage'];
-// Quaternius Ultimate Monsters (CC0) — same low-poly big-head style as KayKit
-// only the shapes the machine roster still wears (Slime = the Nanite Mass blob);
-// the fantasy menagerie (orcs, mushrooms, dragons-as-models) is gone
-const MONSTER_MODELS = ['Slime'];
+// zero fantasy/organic monsters remain — the roster is machines and crew
+const MONSTER_MODELS = [];
 // ---- sci-fi packs (branch: scifi) — Quaternius + Kenney, all CC0 ----
 const SCIFI_CHARS = ['Astronaut_BarbaraTheBee', 'Astronaut_FernandoTheFlamingo', 'Astronaut_FinnTheFrog', 'Astronaut_RaeTheRedPanda'];
 const SCIFI_TOON = ['Character_Soldier', 'Character_Hazmat', 'Character_Enemy']; // self-contained .gltf
-const SCIFI_BOTS = ['RobotExpressive', 'George', 'Leela', 'Mike', 'Stan', 'Enemy_Small', 'Enemy_ExtraSmall', 'Enemy_Flying', 'Enemy_Large',
+const SCIFI_BOTS = ['RobotExpressive', 'George', 'Leela', 'Mike', 'Stan',
   'Cyber_Enemy_2Legs_Gun', 'Cyber_Enemy_Flying_Gun', 'Cyber_Enemy_Large', 'Cyber_Character'];
 const SCIFI_GUNS = ['blaster-a', 'blaster-b', 'blaster-c', 'blaster-d', 'blaster-e', 'blaster-f', 'blaster-g', 'blaster-h', 'blaster-i', 'blaster-j', 'blaster-k', 'blaster-n', 'blaster-p', 'blaster-r'];
 const SCIFI_PROPS = ['machine_generator', 'machine_generatorLarge', 'machine_wirelessCable', 'machine_barrelLarge', 'desk_computer', 'desk_computerScreen', 'barrel', 'barrels', 'craft_speederA', 'craft_cargoA', 'satelliteDish'];
