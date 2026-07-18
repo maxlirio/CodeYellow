@@ -44,19 +44,28 @@ function buildFighter(hostile = false) {
   const trim = new THREE.MeshStandardMaterial({
     color: 0x111111, emissive: hostile ? 0xff4433 : 0x4fe8e0, emissiveIntensity: 1.6, toneMapped: false,
   });
-  const M = (geo, mat, x, y, z, rx = 0, rz = 0) => {
+  const M = (geo, mat, x, y, z, rx = 0, rz = 0, ry = 0) => {
     const m = new THREE.Mesh(geo, mat);
-    m.position.set(x, y, z); m.rotation.x = rx; m.rotation.z = rz;
+    m.position.set(x, y, z);
+    m.rotation.set(rx, ry, rz);
     vis.add(m); return m;
   };
-  M(new THREE.BoxGeometry(1.1, 0.9, 4.4), body, 0, 0, 0);                    // fuselage
-  M(new THREE.ConeGeometry(0.55, 1.6, 4), body, 0, 0, 2.9, Math.PI / 2);    // nose
-  M(new THREE.BoxGeometry(0.7, 0.5, 1.0), trim, 0, 0.35, 1.7).name = 'canopy'; // canopy
-  for (const [sx, sy] of [[1, 1], [1, -1], [-1, 1], [-1, -1]]) {            // X wings
-    M(new THREE.BoxGeometry(2.8, 0.14, 1.2), body, sx * 1.85, sy * 0.55, -0.9, 0, sx * sy * 0.35);
-    M(new THREE.BoxGeometry(0.3, 0.3, 0.9), trim, sx * 3.1, sy * 1.05, -1.1, 0, 0); // wingtip gun/engine
+  // DART interceptor: flat wedge hull, two swept delta wings, twin nacelles,
+  // a dorsal fin — a fighter, but nobody's X-wing
+  M(new THREE.BoxGeometry(1.35, 0.55, 4.4), body, 0, 0, 0);                  // flat wedge hull
+  const nose = M(new THREE.ConeGeometry(0.72, 2.0, 4), body, 0, 0, 3.1, Math.PI / 2);
+  nose.scale.y = 0.42; // squashed diamond nose
+  M(new THREE.BoxGeometry(0.66, 0.42, 1.1), trim, 0, 0.32, 1.5).name = 'canopy';
+  for (const sx of [-1, 1]) {                                               // swept delta wings
+    M(new THREE.BoxGeometry(2.7, 0.1, 1.7), body, sx * 1.85, 0, -0.7, 0, 0, sx * -0.55);
+    M(new THREE.BoxGeometry(0.34, 0.26, 1.1), trim, sx * 2.95, 0, -1.5, 0, 0, sx * -0.55); // wingtip cannon
+    // twin engine nacelles hugging the tail
+    const nac = M(new THREE.CylinderGeometry(0.34, 0.42, 1.9, 8), body, sx * 0.85, 0, -2.2, Math.PI / 2);
+    void nac;
+    M(new THREE.BoxGeometry(0.5, 0.5, 0.14), trim, sx * 0.85, 0, -3.2);     // engine glow
   }
-  M(new THREE.BoxGeometry(0.5, 0.5, 0.3), trim, 0, 0, -2.3);                // engine glow
+  M(new THREE.BoxGeometry(0.12, 0.85, 1.5), hostile ? trim : body, 0, 0.65, -1.9); // dorsal fin
+  if (hostile) M(new THREE.BoxGeometry(0.4, 0.4, 1.3), trim, 0, -0.45, 0.9); // underslung gun pod
   return grp;
 }
 
@@ -173,7 +182,7 @@ export function spaceFire() {
   S.fireCd = 0.16;
   const dir = new THREE.Vector3(0, 0, -1).applyQuaternion(S.ship.quaternion);
   for (const side of [-1, 1]) {
-    const off = new THREE.Vector3(side * 3.1, 0, -1).applyQuaternion(S.ship.quaternion);
+    const off = new THREE.Vector3(side * 2.95, 0, -1.5).applyQuaternion(S.ship.quaternion);
     const b = new THREE.Mesh(new THREE.BoxGeometry(0.14, 0.14, 2.6),
       new THREE.MeshBasicMaterial({ color: 0x4fe8e0, toneMapped: false }));
     b.position.copy(S.ship.position).add(off);
