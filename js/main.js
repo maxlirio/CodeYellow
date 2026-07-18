@@ -1060,7 +1060,12 @@ function setupInput() {
     return hits.length ? hits[0].object.userData.station : null;
   };
   canvas.addEventListener('click', () => {
-    if (G.mode === 'space') { spaceFire(); return; }
+    if (G.mode === 'space') {
+      resumeAudio();
+      if (!document.pointerLockElement) { lockPointer(); return; } // capture the stick first
+      spaceFire();
+      return;
+    }
     if (G.mode === 'playing' && !invOpen) {
       resumeAudio();
       if (!document.pointerLockElement) { lockPointer(); return; }

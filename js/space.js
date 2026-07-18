@@ -32,9 +32,14 @@ function starSphere() {
     new THREE.MeshBasicMaterial({ map: t, side: THREE.BackSide, toneMapped: false, fog: false }));
 }
 
-// a boxy X-wing style fighter; `hostile` swaps the trim red
+// a boxy X-wing style fighter; `hostile` swaps the trim red.
+// The player's visual is flipped so the nose points along -z (camera forward);
+// foes keep +z noses because Object3D.lookAt points +z at the target.
 function buildFighter(hostile = false) {
   const grp = new THREE.Group();
+  const vis = new THREE.Group();
+  grp.add(vis);
+  grp.userData.vis = vis;
   const body = new THREE.MeshStandardMaterial({ color: hostile ? 0x5a4a4c : 0x9aa6b4, metalness: 0.4, roughness: 0.6 });
   const trim = new THREE.MeshStandardMaterial({
     color: 0x111111, emissive: hostile ? 0xff4433 : 0x4fe8e0, emissiveIntensity: 1.6, toneMapped: false,
@@ -42,11 +47,11 @@ function buildFighter(hostile = false) {
   const M = (geo, mat, x, y, z, rx = 0, rz = 0) => {
     const m = new THREE.Mesh(geo, mat);
     m.position.set(x, y, z); m.rotation.x = rx; m.rotation.z = rz;
-    grp.add(m); return m;
+    vis.add(m); return m;
   };
   M(new THREE.BoxGeometry(1.1, 0.9, 4.4), body, 0, 0, 0);                    // fuselage
   M(new THREE.ConeGeometry(0.55, 1.6, 4), body, 0, 0, 2.9, Math.PI / 2);    // nose
-  M(new THREE.BoxGeometry(0.7, 0.5, 1.0), trim, 0, 0.35, 1.7);              // canopy
+  M(new THREE.BoxGeometry(0.7, 0.5, 1.0), trim, 0, 0.35, 1.7).name = 'canopy'; // canopy
   for (const [sx, sy] of [[1, 1], [1, -1], [-1, 1], [-1, -1]]) {            // X wings
     M(new THREE.BoxGeometry(2.8, 0.14, 1.2), body, sx * 1.85, sy * 0.55, -0.9, 0, sx * sy * 0.35);
     M(new THREE.BoxGeometry(0.3, 0.3, 0.9), trim, sx * 3.1, sy * 1.05, -1.1, 0, 0); // wingtip gun/engine
@@ -83,13 +88,30 @@ export function startSpaceFlight() {
   group.add(sun, new THREE.AmbientLight(0x445066, 1.4));
 
   const ship = buildFighter(false);
+  ship.userData.vis.rotation.y = Math.PI; // nose along -z = where you look
+  ship.getObjectByName('canopy').visible = false; // you're INSIDE the canopy
+  // cockpit dashboard: a sill + struts you see from the pilot seat
+  const dashM = new THREE.MeshStandardMaterial({ color: 0x2b3038, metalness: 0.4, roughness: 0.7 });
+  const dash = new THREE.Mesh(new THREE.BoxGeometry(1.5, 0.34, 0.5), dashM);
+  dash.position.set(0, 0.22, -1.15);
+  ship.add(dash);
+  const dashGlow = new THREE.Mesh(new THREE.BoxGeometry(1.2, 0.05, 0.16),
+    new THREE.MeshBasicMaterial({ color: 0x4fe8e0, toneMapped: false }));
+  dashGlow.position.set(0, 0.41, -1.1);
+  ship.add(dashGlow);
+  for (const sx of [-1, 1]) {
+    const strut = new THREE.Mesh(new THREE.BoxGeometry(0.09, 0.9, 0.09), dashM);
+    strut.position.set(sx * 0.78, 0.55, -1.05);
+    strut.rotation.z = sx * 0.35;
+    ship.add(strut);
+  }
   group.add(ship);
   const foes = [];
   for (let i = 0; i < 6; i++) {
     const f = buildFighter(true);
     const a = (i / 6) * Math.PI * 2;
     f.position.set(Math.cos(a) * 120, (Math.random() - 0.5) * 60, Math.sin(a) * 120 - 60);
-    f.userData = { hp: 3, fireT: 1 + Math.random() * 2, veerT: 0, veer: null };
+    f.userData = { hp: 3, fireT: 1 + Math.random() * 2, veerT: 0, veer: null, vel: new THREE.Vector3() };
     group.add(f);
     foes.push(f);
   }
@@ -97,7 +119,7 @@ export function startSpaceFlight() {
 
   S = {
     group, ship, foes, bolts: [],
-    yaw: 0, pitch: 0, speed: 26, hull: 100, t: 0, kills: 0, fireCd: 0,
+    yaw: 0, pitch: 0, vel: new THREE.Vector3(0, 0, -6), hull: 100, t: 0, kills: 0, fireCd: 0,
     gold0: G.run.gold, time0: G.time || 0,
     prevFog: G.scene.fog.density, prevBg: G.scene.background.getHex(),
     prevFar: G.camera.far,
@@ -112,7 +134,8 @@ export function startSpaceFlight() {
   for (const c of G.camera.children) c.visible = false;
   const wh = document.getElementById('waveHud');
   wh?.classList.remove('hidden');
-  addMsg('VOID PATROL — W/S throttle, mouse to steer, click to fire. Clear the drones.', 'gold');
+  addMsg('VOID PATROL — mouse aims the nose, W burns, S counter-burns, A/D lateral RCS, SPACE/C vertical.', 'gold');
+  addMsg('Space keeps your speed: you DRIFT until you burn the other way. Click to fire. ESC recovers.', 'gold');
   sfx.stairs();
 }
 
@@ -168,23 +191,36 @@ export function updateSpace(dt) {
   S.fireCd -= dt;
   if (G.keys['Escape']) { endSpaceFlight('RECOVERED'); return; }
 
-  // flight: mouse steers, W/S throttle, always moving
-  if (G.keys['KeyW']) S.speed = Math.min(48, S.speed + 26 * dt);
-  if (G.keys['KeyS']) S.speed = Math.max(10, S.speed - 30 * dt);
+  // NEWTONIAN flight: thrust changes VELOCITY, nothing slows you but a
+  // counter-burn. Rotation is flight-assisted (dampers), translation is honest.
   const q = new THREE.Quaternion().setFromEuler(new THREE.Euler(S.pitch, S.yaw, 0, 'YXZ'));
-  S.ship.quaternion.slerp(q, Math.min(1, dt * 6));
+  S.ship.quaternion.slerp(q, Math.min(1, dt * 9));
   const fwd = new THREE.Vector3(0, 0, -1).applyQuaternion(S.ship.quaternion);
-  S.ship.position.addScaledVector(fwd, S.speed * dt);
-  // leash: the patrol zone is finite
-  if (S.ship.position.length() > 380) S.ship.position.setLength(380);
+  const right = new THREE.Vector3(1, 0, 0).applyQuaternion(S.ship.quaternion);
+  const up = new THREE.Vector3(0, 1, 0).applyQuaternion(S.ship.quaternion);
+  const acc = new THREE.Vector3();
+  if (G.keys['KeyW']) acc.addScaledVector(fwd, 26);        // main drive
+  if (G.keys['KeyS']) acc.addScaledVector(fwd, -18);       // retro burn
+  if (G.keys['KeyA']) acc.addScaledVector(right, -11);     // RCS strafe
+  if (G.keys['KeyD']) acc.addScaledVector(right, 11);
+  if (G.keys['Space']) acc.addScaledVector(up, 11);        // RCS lift
+  if (G.keys['KeyC']) acc.addScaledVector(up, -11);
+  S.vel.addScaledVector(acc, dt);
+  if (S.vel.length() > 120) S.vel.setLength(120); // structural limit, not drag
+  S.ship.position.addScaledVector(S.vel, dt);
+  // leash: drifting out of the patrol zone kills your outward velocity
+  if (S.ship.position.length() > 380) {
+    const n = S.ship.position.clone().normalize();
+    const out = S.vel.dot(n);
+    if (out > 0) S.vel.addScaledVector(n, -out);
+    S.ship.position.setLength(380);
+  }
 
-  // chase camera
-  const camPos = S.ship.position.clone().addScaledVector(fwd, -8.5);
-  camPos.y += 2.6;
-  camPos.add(ORIGIN);
-  G.camera.position.lerp(camPos, Math.min(1, dt * 8));
-  const look = S.ship.position.clone().addScaledVector(fwd, 14).add(ORIGIN);
-  G.camera.lookAt(look);
+  // FIRST-PERSON cockpit: you sit in the canopy, nose ahead, wings out the sides
+  const camPos = S.ship.position.clone()
+    .addScaledVector(up, 0.85).addScaledVector(fwd, 0.9).add(ORIGIN);
+  G.camera.position.copy(camPos);
+  G.camera.quaternion.copy(S.ship.quaternion);
 
   // foes: seek, veer, fire
   for (const f of S.foes) {
@@ -198,7 +234,9 @@ export function updateSpace(dt) {
       f.userData.veerT = 1.6;
     }
     const dir = f.userData.veerT > 0 && f.userData.veer ? f.userData.veer : toP;
-    f.position.addScaledVector(dir, 21 * dt);
+    f.userData.vel.addScaledVector(dir, 16 * dt); // they burn and drift too
+    if (f.userData.vel.length() > 34) f.userData.vel.setLength(34);
+    f.position.addScaledVector(f.userData.vel, dt);
     f.lookAt(S.ship.position.clone().add(ORIGIN)); // face the player (world coords)
     f.userData.fireT -= dt;
     if (f.userData.fireT <= 0 && d < 70 && f.userData.veerT <= 0) {
@@ -245,7 +283,7 @@ export function updateSpace(dt) {
   // HUD line
   const alive = S.foes.filter(f => f.userData.hp > 0).length;
   const wh = document.getElementById('waveHud');
-  if (wh) wh.textContent = `VOID PATROL — HULL ${Math.max(0, Math.round(S.hull))} · DRONES ${alive} · SPEED ${Math.round(S.speed)}`;
+  if (wh) wh.textContent = `VOID PATROL — HULL ${Math.max(0, Math.round(S.hull))} · DRONES ${alive} · VEL ${Math.round(S.vel.length())} m/s`;
   if (alive === 0) endSpaceFlight('CLEARED');
 }
 
