@@ -122,9 +122,12 @@ export function startSpaceFlight() {
   const foes = [];
   for (let i = 0; i < 6; i++) {
     const f = buildFighter(true);
+    const vis = f.userData.vis;
+    vis.rotation.y = Math.PI; // every ship flies nose = -z now
     const a = (i / 6) * Math.PI * 2;
     f.position.set(Math.cos(a) * 120, (Math.random() - 0.5) * 60, Math.sin(a) * 120 - 60);
-    f.userData = { hp: 3, fireT: 1 + Math.random() * 2, veerT: 0, veer: null, vel: new THREE.Vector3() };
+    f.quaternion.setFromEuler(new THREE.Euler(0, a + Math.PI / 2, 0)); // start on a tangent
+    f.userData = { hp: 3, fireT: 1 + Math.random() * 2, state: 'approach', breakT: 0, breakDir: null, speed: 24 + Math.random() * 6, vis };
     group.add(f);
     foes.push(f);
   }
@@ -132,7 +135,7 @@ export function startSpaceFlight() {
 
   S = {
     group, ship, foes, bolts: [],
-    yaw: 0, pitch: 0, vel: new THREE.Vector3(0, 0, -6), hull: 100, t: 0, kills: 0, fireCd: 0,
+    yaw: 0, pitch: 0, vel: new THREE.Vector3(0, 0, -20), speed: 26, roll: 0, prevYaw: 0, hull: 100, t: 0, kills: 0, fireCd: 0,
     gold0: G.run.gold, time0: G.time || 0,
     prevFog: G.scene.fog.density, prevBg: G.scene.background.getHex(),
     prevFar: G.camera.far,
@@ -147,8 +150,7 @@ export function startSpaceFlight() {
   for (const c of G.camera.children) c.visible = false;
   const wh = document.getElementById('waveHud');
   wh?.classList.remove('hidden');
-  addMsg('VOID PATROL — mouse aims the nose, W burns, S counter-burns, A/D lateral RCS, SPACE/C vertical.', 'gold');
-  addMsg('Space keeps your speed: you DRIFT until you burn the other way. Click to fire. ESC recovers.', 'gold');
+  addMsg('VOID PATROL — mouse flies the ship, W/S throttle, click to fire. ESC recovers to the bridge.', 'gold');
   sfx.stairs();
 }
 
@@ -204,22 +206,21 @@ export function updateSpace(dt) {
   S.fireCd -= dt;
   if (G.keys['Escape']) { endSpaceFlight('RECOVERED'); return; }
 
-  // NEWTONIAN flight: thrust changes VELOCITY, nothing slows you but a
-  // counter-burn. Rotation is flight-assisted (dampers), translation is honest.
-  const q = new THREE.Quaternion().setFromEuler(new THREE.Euler(S.pitch, S.yaw, 0, 'YXZ'));
-  S.ship.quaternion.slerp(q, Math.min(1, dt * 9));
+  // STANDARD SCI-FI flight: you fly where you point. Throttle sets speed,
+  // the ship banks into turns, and a touch of drift keeps some weight in it.
+  if (G.keys['KeyW']) S.speed = Math.min(70, (S.speed ?? 26) + 30 * dt);
+  if (G.keys['KeyS']) S.speed = Math.max(12, (S.speed ?? 26) - 34 * dt);
+  S.speed = S.speed ?? 26;
+  // auto-bank: roll into the turn, proportional to yaw rate
+  const yawRate = (S.yaw - (S.prevYaw ?? S.yaw)) / Math.max(dt, 0.001);
+  S.prevYaw = S.yaw;
+  const bankTarget = Math.max(-0.85, Math.min(0.85, yawRate * 0.55));
+  S.roll = (S.roll ?? 0) + (bankTarget - (S.roll ?? 0)) * Math.min(1, dt * 5);
+  const q = new THREE.Quaternion().setFromEuler(new THREE.Euler(S.pitch, S.yaw, S.roll, 'YXZ'));
+  S.ship.quaternion.slerp(q, Math.min(1, dt * 10));
   const fwd = new THREE.Vector3(0, 0, -1).applyQuaternion(S.ship.quaternion);
-  const right = new THREE.Vector3(1, 0, 0).applyQuaternion(S.ship.quaternion);
   const up = new THREE.Vector3(0, 1, 0).applyQuaternion(S.ship.quaternion);
-  const acc = new THREE.Vector3();
-  if (G.keys['KeyW']) acc.addScaledVector(fwd, 26);        // main drive
-  if (G.keys['KeyS']) acc.addScaledVector(fwd, -18);       // retro burn
-  if (G.keys['KeyA']) acc.addScaledVector(right, -11);     // RCS strafe
-  if (G.keys['KeyD']) acc.addScaledVector(right, 11);
-  if (G.keys['Space']) acc.addScaledVector(up, 11);        // RCS lift
-  if (G.keys['KeyC']) acc.addScaledVector(up, -11);
-  S.vel.addScaledVector(acc, dt);
-  if (S.vel.length() > 120) S.vel.setLength(120); // structural limit, not drag
+  S.vel.lerp(fwd.clone().multiplyScalar(S.speed), Math.min(1, dt * 4)); // slight drift, no math homework
   S.ship.position.addScaledVector(S.vel, dt);
   // leash: drifting out of the patrol zone kills your outward velocity
   if (S.ship.position.length() > 380) {
@@ -235,36 +236,51 @@ export function updateSpace(dt) {
   G.camera.position.copy(camPos);
   G.camera.quaternion.copy(S.ship.quaternion);
 
-  // foes: seek, veer, fire
+  // foes: ATTACK RUNS — fly straight along the nose, turn on a rate limit
+  // (wide banked arcs), overshoot, break away, come around again
+  const TURN = 1.15; // rad/s — how hard a drone can pull
   for (const f of S.foes) {
-    if (f.userData.hp <= 0) continue;
+    const ud = f.userData;
+    if (ud.hp <= 0) continue;
     const toP = S.ship.position.clone().sub(f.position);
     const d = toP.length();
     toP.normalize();
-    f.userData.veerT -= dt;
-    if (d < 14 && f.userData.veerT <= 0) {
-      f.userData.veer = new THREE.Vector3((Math.random() - 0.5) * 2, (Math.random() - 0.5) * 2, (Math.random() - 0.5) * 2).normalize();
-      f.userData.veerT = 1.6;
+    // pick the desired heading by state
+    ud.breakT -= dt;
+    if (ud.state === 'approach' && d < 16) {
+      // overshoot: break to a side and climb/dive away
+      const side = new THREE.Vector3().crossVectors(toP, new THREE.Vector3(0, 1, 0)).normalize();
+      ud.breakDir = side.multiplyScalar(Math.random() < 0.5 ? 1 : -1)
+        .addScaledVector(toP, 0.35).setY((Math.random() - 0.5) * 1.2).normalize();
+      ud.state = 'break';
+      ud.breakT = 2.0 + Math.random();
+    } else if (ud.state === 'break' && ud.breakT <= 0) {
+      ud.state = 'approach';
     }
-    const dir = f.userData.veerT > 0 && f.userData.veer ? f.userData.veer : toP;
-    f.userData.vel.addScaledVector(dir, 16 * dt); // they burn and drift too
-    if (f.userData.vel.length() > 34) f.userData.vel.setLength(34);
-    f.position.addScaledVector(f.userData.vel, dt);
-    f.lookAt(S.ship.position.clone().add(ORIGIN)); // face the player (world coords)
-    f.userData.fireT -= dt;
-    if (f.userData.fireT <= 0 && d < 70 && f.userData.veerT <= 0) {
-      f.userData.fireT = 1.3 + Math.random() * 1.4;
+    const desired = ud.state === 'break' ? ud.breakDir : toP;
+    // rate-limited turn toward the desired heading — this MAKES the arcs
+    const targetQ = new THREE.Quaternion().setFromUnitVectors(new THREE.Vector3(0, 0, -1), desired);
+    f.quaternion.rotateTowards(targetQ, TURN * dt);
+    const nose = new THREE.Vector3(0, 0, -1).applyQuaternion(f.quaternion);
+    f.position.addScaledVector(nose, ud.speed * dt);
+    // bank the airframe into the turn
+    const turnDir = new THREE.Vector3().crossVectors(nose, desired).y;
+    ud.vis.rotation.z = (ud.vis.rotation.z ?? 0) + ((-turnDir * 0.9) - (ud.vis.rotation.z ?? 0)) * Math.min(1, dt * 4);
+    // guns only speak when the nose agrees
+    ud.fireT -= dt;
+    if (ud.fireT <= 0 && ud.state === 'approach' && d < 70 && nose.angleTo(toP) < 0.22) {
+      ud.fireT = 1.2 + Math.random() * 1.3;
       const b = new THREE.Mesh(new THREE.BoxGeometry(0.16, 0.16, 2.2),
         new THREE.MeshBasicMaterial({ color: 0xff5533, toneMapped: false }));
       b.position.copy(f.position);
-      b.userData = { dir: toP.clone(), vel: 60, life: 2.2, mine: false };
-      b.lookAt(f.position.clone().add(toP));
+      b.userData = { dir: nose.clone(), vel: 60, life: 2.2, mine: false };
+      b.lookAt(f.position.clone().add(nose));
       S.group.add(b);
       S.bolts.push(b);
     }
     // ramming hurts both
     if (d < 3.2) {
-      f.userData.hp = 0;
+      ud.hp = 0;
       killFoe(f);
       hurtPlayer(16);
     }
