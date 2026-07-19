@@ -98,22 +98,26 @@ export function startSpaceFlight() {
 
   const ship = buildFighter(false);
   ship.userData.vis.rotation.y = Math.PI; // nose along -z = where you look
-  ship.getObjectByName('canopy').visible = false; // you're INSIDE the canopy
+  ship.userData.vis.visible = false; // pure WINDOW cockpit: no hull in your face
   // cockpit dashboard: a sill + struts you see from the pilot seat
   const dashM = new THREE.MeshStandardMaterial({ color: 0x2b3038, metalness: 0.4, roughness: 0.7 });
   const dash = new THREE.Mesh(new THREE.BoxGeometry(1.5, 0.34, 0.5), dashM);
   dash.position.set(0, 0.22, -1.15);
   ship.add(dash);
-  const dashGlow = new THREE.Mesh(new THREE.BoxGeometry(1.2, 0.05, 0.16),
-    new THREE.MeshBasicMaterial({ color: 0x4fe8e0, toneMapped: false }));
-  dashGlow.position.set(0, 0.41, -1.1);
+  const dashGlow = new THREE.Mesh(new THREE.BoxGeometry(0.8, 0.025, 0.07),
+    new THREE.MeshBasicMaterial({ color: 0x2fa89e, toneMapped: false }));
+  dashGlow.position.set(0, 0.4, -1.12);
   ship.add(dashGlow);
   for (const sx of [-1, 1]) {
-    const strut = new THREE.Mesh(new THREE.BoxGeometry(0.09, 0.9, 0.09), dashM);
-    strut.position.set(sx * 0.78, 0.55, -1.05);
-    strut.rotation.z = sx * 0.35;
+    const strut = new THREE.Mesh(new THREE.BoxGeometry(0.09, 1.4, 0.09), dashM);
+    strut.position.set(sx * 0.95, 0.85, -1.0);
+    strut.rotation.z = sx * 0.42;
     ship.add(strut);
   }
+  // overhead canopy rail — the top edge of the glass
+  const rail = new THREE.Mesh(new THREE.BoxGeometry(1.7, 0.09, 0.09), dashM);
+  rail.position.set(0, 1.52, -0.85);
+  ship.add(rail);
   group.add(ship);
   const foes = [];
   for (let i = 0; i < 6; i++) {
@@ -227,7 +231,7 @@ export function updateSpace(dt) {
 
   // FIRST-PERSON cockpit: you sit in the canopy, nose ahead, wings out the sides
   const camPos = S.ship.position.clone()
-    .addScaledVector(up, 0.85).addScaledVector(fwd, 0.9).add(ORIGIN);
+    .addScaledVector(up, 0.78).addScaledVector(fwd, 0.35).add(ORIGIN);
   G.camera.position.copy(camPos);
   G.camera.quaternion.copy(S.ship.quaternion);
 

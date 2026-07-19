@@ -1039,7 +1039,7 @@ function toggleInventory(open = !invOpen) {
 
 // ---------------- input ----------------
 function lockPointer() {
-  if (G.mode !== 'playing' || invOpen) return;
+  if ((G.mode !== 'playing' && G.mode !== 'space') || invOpen) return; // the cockpit needs the stick too
   try {
     const r = $('game').requestPointerLock?.();
     if (r && r.catch) r.catch(() => {});
@@ -1096,7 +1096,7 @@ function setupInput() {
     G.mouse.locked = document.pointerLockElement === canvas;
   });
   document.addEventListener('mousemove', (e) => {
-    if (G.mouse.locked && G.mode === 'space') { spaceMouse(e.movementX, e.movementY); return; }
+    if (G.mode === 'space') { spaceMouse(e.movementX, e.movementY); return; } // steer locked OR not — the whole screen is the stick
     if (G.mouse.locked && G.mode === 'playing' && !invOpen) onMouseMove(e.movementX, e.movementY);
   });
   addEventListener('keydown', (e) => {
