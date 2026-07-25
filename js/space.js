@@ -15,7 +15,14 @@ import { netSend, myId } from './net.js';
 const ORIGIN = new THREE.Vector3(0, 800, 0);
 const FIELD_R = 380;
 const CAP = new THREE.Vector3(0, -70, -150);   // the carrier, group-local
-const DOCK = new THREE.Vector3(36, -34, -96);  // bay mouth on her upper flank
+const DOCK = new THREE.Vector3(36, -46, -122); // bay mouth on the forward deck
+// hull-segment colliders (group-local): fore+mid hull, prow, aft+engines, tower
+const CARRIER_BOXES = [
+  { x: CAP.x + 20, y: CAP.y, z: CAP.z, hx: 101, hy: 20, hz: 29 },   // fore + mid hull (+ keel)
+  { x: CAP.x + 150, y: CAP.y, z: CAP.z, hx: 32, hy: 9, hz: 15 },    // prow wedge
+  { x: CAP.x - 128, y: CAP.y, z: CAP.z, hx: 55, hy: 20, hz: 31 },   // aft block + engines
+  { x: CAP.x - 18, y: CAP.y + 31, z: CAP.z, hx: 37, hy: 15, hz: 18 }, // superstructure + bridge
+];
 let S = null;
 let hooks = { onCarrierLost: null };
 export function setSpaceHooks(h) { hooks = { ...hooks, ...h }; }
@@ -122,8 +129,15 @@ function buildCarrier() {
   beacon.position.z = 6;
   bay.add(beacon);
   bay.position.copy(DOCK).sub(CAP);
-  bay.rotation.x = -0.25;
+  bay.rotation.x = -Math.PI / 2 + 0.35; // mouth tilted up off the deck, catching approach
   ship.add(bay);
+  // guidance pillar: a light column you can see across the dome (dock phase only)
+  const pillar = new THREE.Mesh(new THREE.CylinderGeometry(1.4, 1.4, 260, 8, 1, true),
+    new THREE.MeshBasicMaterial({ color: 0x7fffee, transparent: true, opacity: 0.25, toneMapped: false, side: THREE.DoubleSide, depthWrite: false }));
+  pillar.name = 'dockPillar';
+  pillar.visible = false;
+  pillar.position.copy(DOCK).sub(CAP).add(new THREE.Vector3(0, 130, 0));
+  ship.add(pillar);
   ship.position.copy(CAP);
   return ship;
 }
@@ -463,11 +477,14 @@ export function updateSpace(dt) {
   G.camera.quaternion.copy(S.ship.quaternion);
   G.camera.quaternion.multiply(new THREE.Quaternion().setFromEuler(new THREE.Euler(0, 0, S.bank)));
 
-  // the carrier is SOLID
-  {
+  // the carrier is SOLID — per-SEGMENT boxes that hug the hull, not one slab.
+  // During the dock phase the bay tractor owns the last 40m: no collision there,
+  // or the approach corridor would bounce you off the deck you're landing on.
+  const docking = S.phase === 'dock' && S.ship.position.distanceTo(DOCK) < 40;
+  if (!docking) {
     const hp2 = S.ship.position;
-    const HB = { x: CAP.x - 20, y: CAP.y, z: CAP.z, hx: 190, hy: 40, hz: 45 };
-    if (Math.abs(hp2.x - HB.x) < HB.hx && Math.abs(hp2.y - HB.y) < HB.hy && Math.abs(hp2.z - HB.z) < HB.hz) {
+    for (const HB of CARRIER_BOXES) {
+      if (Math.abs(hp2.x - HB.x) >= HB.hx || Math.abs(hp2.y - HB.y) >= HB.hy || Math.abs(hp2.z - HB.z) >= HB.hz) continue;
       const dx = HB.hx - Math.abs(hp2.x - HB.x), dy = HB.hy - Math.abs(hp2.y - HB.y), dz = HB.hz - Math.abs(hp2.z - HB.z);
       const sgn = (v) => (v >= 0 ? 1 : -1);
       if (dx < dy && dx < dz) { hp2.x += sgn(hp2.x - HB.x) * (dx + 0.5); S.vel.x *= -0.4; }
@@ -476,6 +493,7 @@ export function updateSpace(dt) {
       if (S.t > S.scrapeT) { S.scrapeT = S.t + 0.6; hurtPlayer(10); }
       if (!S) return;
       spawnBurst(hp2.clone().add(ORIGIN), 0xffaa55, 14, 5, 0.14, 0.5);
+      break;
     }
   }
 
@@ -640,6 +658,8 @@ export function updateSpace(dt) {
     beacon.visible = S.phase === 'dock';
     if (beacon.visible) beacon.scale.setScalar(1 + 0.5 * Math.sin(S.t * 6));
   }
+  const pillar = S.group.getObjectByName('dockPillar');
+  if (pillar) pillar.visible = S.phase === 'dock';
   if (S.phase === 'dock' && S.ship.position.distanceTo(DOCK) < 12) { endSpaceFlight('CLEARED'); return; }
   const wh = document.getElementById('waveHud');
   if (wh) {
