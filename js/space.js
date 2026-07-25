@@ -40,9 +40,9 @@ function buildFighter(hostile = false) {
   const vis = new THREE.Group();
   grp.add(vis);
   grp.userData.vis = vis;
-  const body = new THREE.MeshStandardMaterial({ color: hostile ? 0x5a4a4c : 0x9aa6b4, metalness: 0.4, roughness: 0.6 });
+  const body = new THREE.MeshStandardMaterial({ color: hostile ? 0xe8734d : 0x9aa6b4, metalness: 0.3, roughness: 0.55 });
   const trim = new THREE.MeshStandardMaterial({
-    color: 0x111111, emissive: hostile ? 0xff4433 : 0x4fe8e0, emissiveIntensity: 1.6, toneMapped: false,
+    color: 0x111111, emissive: hostile ? 0xff3322 : 0x4fe8e0, emissiveIntensity: hostile ? 2.6 : 1.6, toneMapped: false,
   });
   const M = (geo, mat, x, y, z, rx = 0, rz = 0, ry = 0) => {
     const m = new THREE.Mesh(geo, mat);
@@ -150,7 +150,7 @@ export function startSpaceFlight() {
   for (const c of G.camera.children) c.visible = false;
   const wh = document.getElementById('waveHud');
   wh?.classList.remove('hidden');
-  addMsg('VOID PATROL — mouse flies the ship, W/S throttle, click to fire. ESC recovers to the bridge.', 'gold');
+  addMsg('VOID PATROL — mouse flies, W/S throttle, A/D barrel roll, click to fire. ESC recovers.', 'gold');
   sfx.stairs();
 }
 
@@ -216,7 +216,17 @@ export function updateSpace(dt) {
   S.prevYaw = S.yaw;
   const bankTarget = Math.max(-0.85, Math.min(0.85, yawRate * 0.55));
   S.roll = (S.roll ?? 0) + (bankTarget - (S.roll ?? 0)) * Math.min(1, dt * 5);
-  const q = new THREE.Quaternion().setFromEuler(new THREE.Euler(S.pitch, S.yaw, S.roll, 'YXZ'));
+  // BARREL ROLLS: A/D spin the airframe; release and it eases back level
+  S.rollManual = S.rollManual ?? 0;
+  if (G.keys['KeyA']) S.rollManual += 3.6 * dt;
+  else if (G.keys['KeyD']) S.rollManual -= 3.6 * dt;
+  else {
+    let r = S.rollManual % (Math.PI * 2);
+    if (r > Math.PI) r -= Math.PI * 2;
+    if (r < -Math.PI) r += Math.PI * 2;
+    S.rollManual = r * Math.max(0, 1 - dt * 4); // settle to wings-level
+  }
+  const q = new THREE.Quaternion().setFromEuler(new THREE.Euler(S.pitch, S.yaw, S.roll + S.rollManual, 'YXZ'));
   S.ship.quaternion.slerp(q, Math.min(1, dt * 10));
   const fwd = new THREE.Vector3(0, 0, -1).applyQuaternion(S.ship.quaternion);
   const up = new THREE.Vector3(0, 1, 0).applyQuaternion(S.ship.quaternion);
@@ -245,9 +255,10 @@ export function updateSpace(dt) {
     const toP = S.ship.position.clone().sub(f.position);
     const d = toP.length();
     toP.normalize();
-    // pick the desired heading by state
+    // pick the desired heading by state — they want GUN RANGE, never contact
+    ud.offset = ud.offset || new THREE.Vector3((Math.random() - 0.5) * 10, (Math.random() - 0.5) * 6, (Math.random() - 0.5) * 10);
     ud.breakT -= dt;
-    if (ud.state === 'approach' && d < 16) {
+    if (ud.state === 'approach' && d < 30) {
       // overshoot: break to a side and climb/dive away
       const side = new THREE.Vector3().crossVectors(toP, new THREE.Vector3(0, 1, 0)).normalize();
       ud.breakDir = side.multiplyScalar(Math.random() < 0.5 ? 1 : -1)
@@ -257,7 +268,8 @@ export function updateSpace(dt) {
     } else if (ud.state === 'break' && ud.breakT <= 0) {
       ud.state = 'approach';
     }
-    const desired = ud.state === 'break' ? ud.breakDir : toP;
+    const desired = ud.state === 'break' ? ud.breakDir
+      : S.ship.position.clone().add(ud.offset).sub(f.position).normalize(); // strafe PAST, not through
     // rate-limited turn toward the desired heading — this MAKES the arcs
     const targetQ = new THREE.Quaternion().setFromUnitVectors(new THREE.Vector3(0, 0, -1), desired);
     f.quaternion.rotateTowards(targetQ, TURN * dt);
@@ -268,8 +280,8 @@ export function updateSpace(dt) {
     ud.vis.rotation.z = (ud.vis.rotation.z ?? 0) + ((-turnDir * 0.9) - (ud.vis.rotation.z ?? 0)) * Math.min(1, dt * 4);
     // guns only speak when the nose agrees
     ud.fireT -= dt;
-    if (ud.fireT <= 0 && ud.state === 'approach' && d < 70 && nose.angleTo(toP) < 0.22) {
-      ud.fireT = 1.2 + Math.random() * 1.3;
+    if (ud.fireT <= 0 && ud.state === 'approach' && d < 90 && nose.angleTo(toP) < 0.3) {
+      ud.fireT = 0.9 + Math.random() * 1.1;
       const b = new THREE.Mesh(new THREE.BoxGeometry(0.16, 0.16, 2.2),
         new THREE.MeshBasicMaterial({ color: 0xff5533, toneMapped: false }));
       b.position.copy(f.position);
@@ -278,11 +290,35 @@ export function updateSpace(dt) {
       S.group.add(b);
       S.bolts.push(b);
     }
-    // ramming hurts both
-    if (d < 3.2) {
-      ud.hp = 0;
-      killFoe(f);
-      hurtPlayer(16);
+    // collision: metal on metal — both hulls pay, both ships bounce
+    if (d < 4.4) {
+      ud.hp -= 2;
+      spawnBurst(f.position.clone().add(ORIGIN), 0xffcc66, 18, 6, 0.15, 0.6);
+      sfx.cannon();
+      if (ud.hp <= 0) killFoe(f);
+      hurtPlayer(14);
+      if (!S) return; // that hit may have ended the flight
+      const away = S.ship.position.clone().sub(f.position).normalize();
+      S.vel.addScaledVector(away, 26); // shove apart
+      f.position.addScaledVector(away, -3);
+    }
+  }
+
+  // THE HULK IS SOLID: fly into the derelict and the derelict wins
+  {
+    const hp2 = S.ship.position; // group-local
+    const HB = { x: 0, y: -90, z: -140, hx: 113, hy: 23, hz: 38 }; // hull + margin
+    if (Math.abs(hp2.x - HB.x) < HB.hx && Math.abs(hp2.y - HB.y) < HB.hy && Math.abs(hp2.z - HB.z) < HB.hz) {
+      // push out along the shallowest axis and scrape the paint
+      const dx = HB.hx - Math.abs(hp2.x - HB.x), dy = HB.hy - Math.abs(hp2.y - HB.y), dz = HB.hz - Math.abs(hp2.z - HB.z);
+      const sgn = (v) => (v >= 0 ? 1 : -1); // Math.sign(0) strands you dead-center
+      if (dx < dy && dx < dz) { hp2.x += sgn(hp2.x - HB.x) * (dx + 0.5); S.vel.x *= -0.4; }
+      else if (dy < dz) { hp2.y += sgn(hp2.y - HB.y) * (dy + 0.5); S.vel.y *= -0.4; }
+      else { hp2.z += sgn(hp2.z - HB.z) * (dz + 0.5); S.vel.z *= -0.4; }
+      S.scrapeT = S.scrapeT ?? 0;
+      if (S.t > S.scrapeT) { S.scrapeT = S.t + 0.6; hurtPlayer(10); } // scrape, not a blender
+      if (!S) return;
+      spawnBurst(hp2.clone().add(ORIGIN), 0xffaa55, 14, 5, 0.14, 0.5);
     }
   }
 
@@ -304,7 +340,7 @@ export function updateSpace(dt) {
         }
       }
     } else if (!dead && !b.userData.mine) {
-      if (b.position.distanceTo(S.ship.position) < 2.2) { hurtPlayer(9); dead = true; }
+      if (b.position.distanceTo(S.ship.position) < 2.2) { hurtPlayer(9); if (!S) return; dead = true; }
     }
     if (dead) { S.group.remove(b); S.bolts.splice(i, 1); }
   }
