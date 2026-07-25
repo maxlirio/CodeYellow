@@ -78,18 +78,30 @@ export function startSpaceFlight() {
   group.add(starSphere());
   // the hulk drifts huge and dark below — orientation anchor
   const hulk = new THREE.Group();
-  const hm = new THREE.MeshStandardMaterial({ color: 0x2c3138, metalness: 0.5, roughness: 0.7 });
+  const hm = new THREE.MeshStandardMaterial({ color: 0x6a7480, metalness: 0.45, roughness: 0.6 });
   const hull = new THREE.Mesh(new THREE.BoxGeometry(220, 40, 70), hm);
   hulk.add(hull);
   const spine = new THREE.Mesh(new THREE.BoxGeometry(120, 22, 40), hm);
   spine.position.set(-30, 30, 0);
   hulk.add(spine);
-  for (let i = 0; i < 7; i++) { // running lights
-    const l = new THREE.Mesh(new THREE.BoxGeometry(1.4, 1.4, 1.4),
-      new THREE.MeshBasicMaterial({ color: 0xffce2e, toneMapped: false }));
-    l.position.set(-100 + i * 32, 21, 36);
-    hulk.add(l);
+  // lit like a working ship: amber running lights BOTH flanks + teal edge strips
+  for (let i = 0; i < 7; i++) {
+    for (const sz of [36, -36]) {
+      const l = new THREE.Mesh(new THREE.BoxGeometry(1.8, 1.8, 1.8),
+        new THREE.MeshBasicMaterial({ color: 0xffce2e, toneMapped: false }));
+      l.position.set(-100 + i * 32, 21, sz);
+      hulk.add(l);
+    }
   }
+  for (const [y, z] of [[20.2, 35.2], [20.2, -35.2], [-20.2, 35.2], [-20.2, -35.2]]) {
+    const strip = new THREE.Mesh(new THREE.BoxGeometry(218, 0.7, 0.7),
+      new THREE.MeshBasicMaterial({ color: 0x4fe8e0, toneMapped: false }));
+    strip.position.set(0, y, z);
+    hulk.add(strip);
+  }
+  const flood = new THREE.PointLight(0xdfeaf8, 30000, 600, 1.8);
+  flood.position.set(0, 120, 80);
+  hulk.add(flood);
   hulk.position.set(0, -90, -140);
   group.add(hulk);
   const sun = new THREE.DirectionalLight(0xfff2dd, 2.2);
@@ -150,7 +162,7 @@ export function startSpaceFlight() {
   for (const c of G.camera.children) c.visible = false;
   const wh = document.getElementById('waveHud');
   wh?.classList.remove('hidden');
-  addMsg('VOID PATROL — mouse flies, W/S throttle, A/D barrel roll, click to fire. ESC recovers.', 'gold');
+  addMsg('VOID PATROL — ARROWS steer, W/S throttle, A/D barrel roll, SPACE fires. ESC recovers.', 'gold');
   sfx.stairs();
 }
 
@@ -177,11 +189,7 @@ function endSpaceFlight(result) {
   refreshHud();
 }
 
-export function spaceMouse(dx, dy) {
-  if (!S) return;
-  S.yaw -= dx * 0.0022;
-  S.pitch = Math.max(-1.2, Math.min(1.2, S.pitch - dy * 0.0022));
-}
+export function spaceMouse() { /* flight went fully button-driven — arrows steer */ }
 
 export function spaceFire() {
   if (!S || S.fireCd > 0) return;
@@ -193,7 +201,7 @@ export function spaceFire() {
       new THREE.MeshBasicMaterial({ color: 0x4fe8e0, toneMapped: false }));
     b.position.copy(S.ship.position).add(off);
     b.quaternion.copy(S.ship.quaternion);
-    b.userData = { dir, vel: 95, life: 1.4, mine: true };
+    b.userData = { dir, vel: 230, life: 1.1, mine: true };
     S.group.add(b);
     S.bolts.push(b);
   }
@@ -206,11 +214,16 @@ export function updateSpace(dt) {
   S.fireCd -= dt;
   if (G.keys['Escape']) { endSpaceFlight('RECOVERED'); return; }
 
-  // STANDARD SCI-FI flight: you fly where you point. Throttle sets speed,
-  // the ship banks into turns, and a touch of drift keeps some weight in it.
+  // STANDARD SCI-FI flight, FULLY BUTTON-DRIVEN: arrows steer, W/S throttle,
+  // A/D roll, SPACE fires. The ship banks into turns; drift adds weight.
   if (G.keys['KeyW']) S.speed = Math.min(70, (S.speed ?? 26) + 30 * dt);
   if (G.keys['KeyS']) S.speed = Math.max(12, (S.speed ?? 26) - 34 * dt);
   S.speed = S.speed ?? 26;
+  const yawIn = (G.keys['ArrowLeft'] ? 1 : 0) - (G.keys['ArrowRight'] ? 1 : 0);
+  const pitchIn = (G.keys['ArrowUp'] ? 1 : 0) - (G.keys['ArrowDown'] ? 1 : 0);
+  S.yaw += yawIn * 1.7 * dt;
+  S.pitch = Math.max(-1.35, Math.min(1.35, S.pitch + pitchIn * 1.25 * dt));
+  if (G.keys['Space']) spaceFire(); // hold to hose, cadence-limited
   // auto-bank: roll into the turn, proportional to yaw rate
   const yawRate = (S.yaw - (S.prevYaw ?? S.yaw)) / Math.max(dt, 0.001);
   S.prevYaw = S.yaw;
@@ -285,7 +298,7 @@ export function updateSpace(dt) {
       const b = new THREE.Mesh(new THREE.BoxGeometry(0.16, 0.16, 2.2),
         new THREE.MeshBasicMaterial({ color: 0xff5533, toneMapped: false }));
       b.position.copy(f.position);
-      b.userData = { dir: nose.clone(), vel: 60, life: 2.2, mine: false };
+      b.userData = { dir: nose.clone(), vel: 115, life: 2.0, mine: false };
       b.lookAt(f.position.clone().add(nose));
       S.group.add(b);
       S.bolts.push(b);

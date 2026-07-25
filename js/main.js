@@ -1096,11 +1096,12 @@ function setupInput() {
     G.mouse.locked = document.pointerLockElement === canvas;
   });
   document.addEventListener('mousemove', (e) => {
-    if (G.mode === 'space') { spaceMouse(e.movementX, e.movementY); return; } // steer locked OR not — the whole screen is the stick
+    if (G.mode === 'space') return; // flight is button-driven now
     if (G.mouse.locked && G.mode === 'playing' && !invOpen) onMouseMove(e.movementX, e.movementY);
   });
   addEventListener('keydown', (e) => {
     G.keys[e.code] = true;
+    if (G.mode === 'space' && (e.code.startsWith('Arrow') || e.code === 'Space')) { e.preventDefault(); return; }
     if (e.code === 'Tab') { e.preventDefault(); toggleInventory(); return; }
     if (invOpen) { if (e.code === 'Escape') toggleInventory(false); return; }
     if (e.code === 'Space') { e.preventDefault(); tryDodge(); }
