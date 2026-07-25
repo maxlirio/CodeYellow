@@ -21,7 +21,7 @@ import {
   onRemoteMission, onRemoteMissionEnd,
 } from './missions.js';
 import { openTrainRoom, setSkillHooks } from './skills.js';
-import { updateSpace, spaceMouse, spaceFire, inSpace, startSpaceFlight } from './space.js';
+import { updateSpace, spaceMouse, spaceFire, inSpace, startSpaceFlight, setSpaceHooks } from './space.js';
 import { initViewmodel, updateViewmodel } from './viewmodel.js';
 import { updateWalls, clearWalls } from './walls.js';
 import { initFloorTraps, updateTraps } from './traps.js';
@@ -333,6 +333,10 @@ function setupMenu() {
   });
   setMissionHooks({ goto: descendTo, disposeFloor, lock: lockPointer });
   setSkillHooks({ lock: lockPointer });
+  setSpaceHooks({ onCarrierLost: () => {
+    addMsg('THE CARRIER IS GONE. There is no ship to come home to.', 'bad');
+    gameOver();
+  } });
 }
 
 function renderLobby() {

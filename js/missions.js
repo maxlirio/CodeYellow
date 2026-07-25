@@ -234,19 +234,19 @@ function renderMap() {
     const b2 = document.createElement('button');
     b2.className = 'mm-sec' + (selectedSec === 'patrol' ? ' sel' : '');
     b2.style.left = '18%'; b2.style.top = '12%';
-    b2.textContent = 'VOID PATROL';
+    b2.textContent = `VOID PATROL LV${(G.run.patrolLvl || 0) + 1}`;
     b2.dataset.threat = 'THREAT ▮▮';
     b2.onclick = () => { selectedSec = 'patrol'; renderMap(); };
     list.appendChild(b2);
   }
   if (selectedSec === 'patrol') {
+    const lvl = (G.run.patrolLvl || 0) + 1;
     detail.innerHTML = `
-      <h3>VOID PATROL</h3>
-      <p class="mm-threat">THREAT ▮▮▯▯ · FLIGHT OPS</p>
-      <p>Take a fighter out of the hangar and sweep the drones prowling the hulk. Solo flights only, for now.</p>
-      <button id="mmConfirm">LAUNCH FIGHTER</button>`;
+      <h3>VOID PATROL — LEVEL ${lvl}</h3>
+      <p class="mm-threat">FLIGHT OPS · ${lvl >= 3 ? 'BOMBERS EXPECTED — DEFEND THE CARRIER' : 'FIGHTER SWEEP'}</p>
+      <p>Launch fighters inside the force-field dome and clear the intruders. Every trooper on the bridge flies. Clear the sky, then return to the docking bay.</p>
+      <button id="mmConfirm">LAUNCH FIGHTERS</button>`;
     document.getElementById('mmConfirm').onclick = () => {
-      if (G.net?.role && G.net.role !== 'solo') { addMsg('Solo patrols only — the squadron comes later.', 'bad'); return; }
       closeMissionMap();
       startSpaceFlight();
     };

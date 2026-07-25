@@ -1,15 +1,33 @@
-// VOID PATROL — the first taste of the flight game: hop in a fighter, clear
-// the drones prowling the hulk. Unlocked by clearing the SPACE PORT.
-// Solo arena at y+800, its own tiny sim: chase cam, twin lasers, drone foes.
+// VOID PATROL — the flight game. Leveled defense missions inside the carrier's
+// force-field dome: fighters fly STRAFING RUNS, bombers press torpedo attacks
+// on the carrier itself (lose it and the campaign dies with it), everything
+// explodes properly, and when the sky is clear you fly home to the docking
+// bay. Co-op: everyone on the bridge launches together; the host simulates
+// the foes, wingmates see each other's fighters and lasers.
 import * as THREE from 'three';
 import { G } from './state.js';
 import { addMsg, refreshHud } from './ui.js';
 import { sfx } from './audio.js';
 import { spawnBurst } from './fx.js';
 import { saveReport } from './bridge.js';
+import { netSend, myId } from './net.js';
 
 const ORIGIN = new THREE.Vector3(0, 800, 0);
-let S = null; // flight state
+const FIELD_R = 380;
+const CAP = new THREE.Vector3(0, -70, -150);   // the carrier, group-local
+const DOCK = new THREE.Vector3(36, -34, -96);  // bay mouth on her upper flank
+let S = null;
+let hooks = { onCarrierLost: null };
+export function setSpaceHooks(h) { hooks = { ...hooks, ...h }; }
+
+// patrol level -> enemy composition (variety climbs with your record)
+function compositionFor(lvl) {
+  if (lvl <= 1) return { name: 'SWEEP', fighters: 4, bombers: 0 };
+  if (lvl === 2) return { name: 'SWEEP II', fighters: 6, bombers: 0 };
+  if (lvl === 3) return { name: 'BOMBER INTERCEPT', fighters: 3, bombers: 2 };
+  if (lvl === 4) return { name: 'BOMBER INTERCEPT II', fighters: 4, bombers: 4 };
+  return { name: `SIEGE ${lvl - 4}`, fighters: 6, bombers: 5 };
+}
 
 function starSphere() {
   const c = document.createElement('canvas');
@@ -32,17 +50,96 @@ function starSphere() {
     new THREE.MeshBasicMaterial({ map: t, side: THREE.BackSide, toneMapped: false, fog: false }));
 }
 
-// a boxy X-wing style fighter; `hostile` swaps the trim red.
-// The player's visual is flipped so the nose points along -z (camera forward);
-// foes keep +z noses because Object3D.lookAt points +z at the target.
-function buildFighter(hostile = false) {
+// ---- THE CARRIER: an actual warship, not two boxes ----
+function buildCarrier() {
+  const ship = new THREE.Group();
+  const hull = new THREE.MeshStandardMaterial({ color: 0x77828e, metalness: 0.45, roughness: 0.6 });
+  const dark = new THREE.MeshStandardMaterial({ color: 0x4a525c, metalness: 0.4, roughness: 0.7 });
+  const teal = new THREE.MeshBasicMaterial({ color: 0x4fe8e0, toneMapped: false });
+  const amber = new THREE.MeshBasicMaterial({ color: 0xffce2e, toneMapped: false });
+  const B = (mat, sx, sy, sz, x, y, z, ry = 0) => {
+    const m = new THREE.Mesh(new THREE.BoxGeometry(sx, sy, sz), mat);
+    m.position.set(x, y, z); m.rotation.y = ry;
+    ship.add(m); return m;
+  };
+  // hull line, prow (+x) to engines (-x): tapered segments
+  const prow = new THREE.Mesh(new THREE.ConeGeometry(16, 60, 4), hull);
+  prow.rotation.z = -Math.PI / 2;
+  prow.rotation.y = Math.PI / 4;
+  prow.scale.z = 2.2;
+  prow.position.set(150, 0, 0);
+  ship.add(prow);
+  B(hull, 90, 22, 40, 76, 0, 0);       // fore hull
+  B(hull, 120, 30, 54, -20, 0, 0);     // mid hull
+  B(dark, 70, 36, 60, -110, 0, 0);     // aft block
+  B(dark, 26, 26, 44, -158, 0, 0);     // engine housing
+  for (const oz of [-14, 0, 14]) {     // engine bells + glow
+    const bell = new THREE.Mesh(new THREE.CylinderGeometry(6, 7.5, 10, 8), dark);
+    bell.rotation.z = Math.PI / 2;
+    bell.position.set(-176, 0, oz);
+    ship.add(bell);
+    const glow = new THREE.Mesh(new THREE.CircleGeometry(5.4, 12),
+      new THREE.MeshBasicMaterial({ color: 0x7fd8ff, toneMapped: false }));
+    glow.rotation.y = -Math.PI / 2;
+    glow.position.set(-181.5, 0, oz);
+    ship.add(glow);
+  }
+  // dorsal superstructure + bridge tower
+  B(hull, 70, 10, 34, -10, 20, 0);
+  B(hull, 34, 16, 22, -28, 33, 0);
+  B(dark, 14, 12, 12, -20, 47, 0);     // bridge
+  B(teal, 12, 0.9, 0.9, -20, 44, 6.4); // bridge window strips
+  B(teal, 12, 0.9, 0.9, -20, 44, -6.4);
+  B(dark, 2, 26, 2, -44, 46, 0);       // comm mast
+  B(amber, 1.4, 1.4, 1.4, -44, 60, 0); // mast beacon
+  // ventral keel
+  B(dark, 90, 14, 8, -10, -20, 0);
+  // side sponsons, turrets, window rows, edge strips
+  for (const sz of [-1, 1]) {
+    B(dark, 130, 10, 10, -14, -2, sz * 32);
+    for (const tx of [40, -5, -60]) {
+      B(dark, 8, 5, 8, tx, 17, sz * 20);
+      B(dark, 10, 1.6, 1.6, tx + 6, 18, sz * 20); // barrels
+    }
+    for (const wy of [4, -4]) B(amber, 100, 0.7, 0.7, 10, wy, sz * 27.4);
+    B(teal, 200, 0.8, 0.8, -30, 15.4, sz * 27.5);
+    B(teal, 200, 0.8, 0.8, -30, -15.4, sz * 27.5);
+  }
+  // THE DOCKING BAY: a glowing mouth on the upper starboard flank
+  const bay = new THREE.Group();
+  const frame = new THREE.Mesh(new THREE.BoxGeometry(24, 14, 1.6), teal);
+  frame.position.z = 0.9;
+  const hole = new THREE.Mesh(new THREE.BoxGeometry(21, 11, 2.4),
+    new THREE.MeshBasicMaterial({ color: 0x062026, toneMapped: false }));
+  hole.position.z = 1;
+  bay.add(frame, hole);
+  const bayLight = new THREE.PointLight(0x4fe8e0, 4000, 120, 1.8);
+  bayLight.position.z = 8;
+  bay.add(bayLight);
+  const beacon = new THREE.Mesh(new THREE.SphereGeometry(1.6, 10, 8),
+    new THREE.MeshBasicMaterial({ color: 0x7fffee, toneMapped: false }));
+  beacon.name = 'dockBeacon';
+  beacon.position.z = 6;
+  bay.add(beacon);
+  bay.position.copy(DOCK).sub(CAP);
+  bay.rotation.x = -0.25;
+  ship.add(bay);
+  ship.position.copy(CAP);
+  return ship;
+}
+
+// a boxy dart fighter; hostile = hi-vis orange, friendly wingmates get blue trim.
+// Nose along -z for everyone.
+function buildFighter(hostile = false, friendly = false) {
   const grp = new THREE.Group();
   const vis = new THREE.Group();
+  vis.rotation.y = Math.PI;
   grp.add(vis);
   grp.userData.vis = vis;
   const body = new THREE.MeshStandardMaterial({ color: hostile ? 0xe8734d : 0x9aa6b4, metalness: 0.3, roughness: 0.55 });
   const trim = new THREE.MeshStandardMaterial({
-    color: 0x111111, emissive: hostile ? 0xff3322 : 0x4fe8e0, emissiveIntensity: hostile ? 2.6 : 1.6, toneMapped: false,
+    color: 0x111111, emissive: hostile ? 0xff3322 : (friendly ? 0x7fd8ff : 0x4fe8e0),
+    emissiveIntensity: hostile ? 2.6 : 1.6, toneMapped: false,
   });
   const M = (geo, mat, x, y, z, rx = 0, rz = 0, ry = 0) => {
     const m = new THREE.Mesh(geo, mat);
@@ -50,68 +147,70 @@ function buildFighter(hostile = false) {
     m.rotation.set(rx, ry, rz);
     vis.add(m); return m;
   };
-  // DART interceptor: flat wedge hull, two swept delta wings, twin nacelles,
-  // a dorsal fin — a fighter, but nobody's X-wing
-  M(new THREE.BoxGeometry(1.35, 0.55, 4.4), body, 0, 0, 0);                  // flat wedge hull
+  M(new THREE.BoxGeometry(1.35, 0.55, 4.4), body, 0, 0, 0);
   const nose = M(new THREE.ConeGeometry(0.72, 2.0, 4), body, 0, 0, 3.1, Math.PI / 2);
-  nose.scale.y = 0.42; // squashed diamond nose
+  nose.scale.y = 0.42;
   M(new THREE.BoxGeometry(0.66, 0.42, 1.1), trim, 0, 0.32, 1.5).name = 'canopy';
-  for (const sx of [-1, 1]) {                                               // swept delta wings
+  for (const sx of [-1, 1]) {
     M(new THREE.BoxGeometry(2.7, 0.1, 1.7), body, sx * 1.85, 0, -0.7, 0, 0, sx * -0.55);
-    M(new THREE.BoxGeometry(0.34, 0.26, 1.1), trim, sx * 2.95, 0, -1.5, 0, 0, sx * -0.55); // wingtip cannon
-    // twin engine nacelles hugging the tail
-    const nac = M(new THREE.CylinderGeometry(0.34, 0.42, 1.9, 8), body, sx * 0.85, 0, -2.2, Math.PI / 2);
-    void nac;
-    M(new THREE.BoxGeometry(0.5, 0.5, 0.14), trim, sx * 0.85, 0, -3.2);     // engine glow
+    M(new THREE.BoxGeometry(0.34, 0.26, 1.1), trim, sx * 2.95, 0, -1.5, 0, 0, sx * -0.55);
+    M(new THREE.CylinderGeometry(0.34, 0.42, 1.9, 8), body, sx * 0.85, 0, -2.2, Math.PI / 2);
+    M(new THREE.BoxGeometry(0.5, 0.5, 0.14), trim, sx * 0.85, 0, -3.2);
   }
-  M(new THREE.BoxGeometry(0.12, 0.85, 1.5), hostile ? trim : body, 0, 0.65, -1.9); // dorsal fin
-  if (hostile) M(new THREE.BoxGeometry(0.4, 0.4, 1.3), trim, 0, -0.45, 0.9); // underslung gun pod
+  M(new THREE.BoxGeometry(0.12, 0.85, 1.5), hostile ? trim : body, 0, 0.65, -1.9);
+  if (hostile) M(new THREE.BoxGeometry(0.4, 0.4, 1.3), trim, 0, -0.45, 0.9);
+  return grp;
+}
+
+// BOMBER: fat, slow, green-lit, full of torpedoes
+function buildBomber() {
+  const grp = new THREE.Group();
+  const vis = new THREE.Group();
+  vis.rotation.y = Math.PI;
+  grp.add(vis);
+  grp.userData.vis = vis;
+  const body = new THREE.MeshStandardMaterial({ color: 0xc9a23e, metalness: 0.35, roughness: 0.6 });
+  const trim = new THREE.MeshStandardMaterial({ color: 0x111111, emissive: 0x66ff44, emissiveIntensity: 2.4, toneMapped: false });
+  const M = (geo, mat, x, y, z, rx = 0) => {
+    const m = new THREE.Mesh(geo, mat);
+    m.position.set(x, y, z); m.rotation.x = rx;
+    vis.add(m); return m;
+  };
+  M(new THREE.BoxGeometry(2.6, 1.6, 6.4), body, 0, 0, 0);          // slab fuselage
+  M(new THREE.BoxGeometry(1.4, 0.9, 2.2), trim, 0, 0.9, 1.6);      // green canopy hump
+  for (const sx of [-1, 1]) {
+    M(new THREE.BoxGeometry(2.2, 0.3, 3.2), body, sx * 2.3, 0, -0.4);
+    M(new THREE.CylinderGeometry(0.55, 0.62, 2.6, 8), body, sx * 3.2, 0, -1.2, Math.PI / 2);
+    M(new THREE.BoxGeometry(0.8, 0.8, 0.16), trim, sx * 3.2, 0, -2.6);
+  }
+  M(new THREE.BoxGeometry(1.2, 0.5, 2.8), trim, 0, -0.95, 0.6);    // torpedo rack glow
   return grp;
 }
 
 export function inSpace() { return !!S; }
 
-export function startSpaceFlight() {
+export function startSpaceFlight(level = null, fromNet = false) {
   if (S) return;
+  if (fromNet && (G.mode !== 'playing' || G.floor !== 0)) { addMsg('The patrol launched without you — you were off the bridge.'); return; }
+  const lvl = level ?? (G.run.patrolLvl || 0) + 1;
+  const comp = compositionFor(lvl);
+
   const group = new THREE.Group();
   group.position.copy(ORIGIN);
   group.add(starSphere());
-  // the hulk drifts huge and dark below — orientation anchor
-  const hulk = new THREE.Group();
-  const hm = new THREE.MeshStandardMaterial({ color: 0x6a7480, metalness: 0.45, roughness: 0.6 });
-  const hull = new THREE.Mesh(new THREE.BoxGeometry(220, 40, 70), hm);
-  hulk.add(hull);
-  const spine = new THREE.Mesh(new THREE.BoxGeometry(120, 22, 40), hm);
-  spine.position.set(-30, 30, 0);
-  hulk.add(spine);
-  // lit like a working ship: amber running lights BOTH flanks + teal edge strips
-  for (let i = 0; i < 7; i++) {
-    for (const sz of [36, -36]) {
-      const l = new THREE.Mesh(new THREE.BoxGeometry(1.8, 1.8, 1.8),
-        new THREE.MeshBasicMaterial({ color: 0xffce2e, toneMapped: false }));
-      l.position.set(-100 + i * 32, 21, sz);
-      hulk.add(l);
-    }
-  }
-  for (const [y, z] of [[20.2, 35.2], [20.2, -35.2], [-20.2, 35.2], [-20.2, -35.2]]) {
-    const strip = new THREE.Mesh(new THREE.BoxGeometry(218, 0.7, 0.7),
-      new THREE.MeshBasicMaterial({ color: 0x4fe8e0, toneMapped: false }));
-    strip.position.set(0, y, z);
-    hulk.add(strip);
-  }
-  const flood = new THREE.PointLight(0xdfeaf8, 30000, 600, 1.8);
-  flood.position.set(0, 120, 80);
-  hulk.add(flood);
-  hulk.position.set(0, -90, -140);
-  group.add(hulk);
+  group.add(buildCarrier());
+  // THE FORCE FIELD: the dome the raiders punched through — you defend inside it
+  const field = new THREE.Mesh(
+    new THREE.SphereGeometry(FIELD_R, 32, 20),
+    new THREE.MeshBasicMaterial({ color: 0x4fe8e0, transparent: true, opacity: 0.05, side: THREE.BackSide, depthWrite: false, toneMapped: false }));
+  field.name = 'field';
+  group.add(field);
   const sun = new THREE.DirectionalLight(0xfff2dd, 2.2);
   sun.position.set(300, 200, 100);
   group.add(sun, new THREE.AmbientLight(0x445066, 1.4));
 
   const ship = buildFighter(false);
-  ship.userData.vis.rotation.y = Math.PI; // nose along -z = where you look
-  ship.userData.vis.visible = false; // pure WINDOW cockpit: no hull in your face
-  // cockpit dashboard: a sill + struts you see from the pilot seat
+  ship.userData.vis.visible = false; // pure window cockpit
   const dashM = new THREE.MeshStandardMaterial({ color: 0x2b3038, metalness: 0.4, roughness: 0.7 });
   const dash = new THREE.Mesh(new THREE.BoxGeometry(1.5, 0.34, 0.5), dashM);
   dash.position.set(0, 0.22, -1.15);
@@ -126,70 +225,132 @@ export function startSpaceFlight() {
     strut.rotation.z = sx * 0.42;
     ship.add(strut);
   }
-  // overhead canopy rail — the top edge of the glass
   const rail = new THREE.Mesh(new THREE.BoxGeometry(1.7, 0.09, 0.09), dashM);
   rail.position.set(0, 1.52, -0.85);
   ship.add(rail);
+  ship.position.set(0, 0, 120);
   group.add(ship);
+
+  // the intruders
   const foes = [];
-  for (let i = 0; i < 6; i++) {
+  let idx = 0;
+  const place = (f, r) => {
+    const a = Math.random() * Math.PI * 2;
+    f.position.set(Math.cos(a) * r, (Math.random() - 0.5) * 80, Math.sin(a) * r - 40);
+    f.quaternion.setFromEuler(new THREE.Euler(0, a + Math.PI / 2, 0));
+  };
+  for (let i = 0; i < comp.fighters; i++) {
     const f = buildFighter(true);
-    const vis = f.userData.vis;
-    vis.rotation.y = Math.PI; // every ship flies nose = -z now
-    const a = (i / 6) * Math.PI * 2;
-    f.position.set(Math.cos(a) * 120, (Math.random() - 0.5) * 60, Math.sin(a) * 120 - 60);
-    f.quaternion.setFromEuler(new THREE.Euler(0, a + Math.PI / 2, 0)); // start on a tangent
-    f.userData = { hp: 3, fireT: 1 + Math.random() * 2, state: 'approach', breakT: 0, breakDir: null, speed: 24 + Math.random() * 6, vis };
-    group.add(f);
-    foes.push(f);
+    place(f, 150);
+    f.userData = { ...f.userData, i: idx++, type: 'fighter', hp: 3, state: 'lineup', stateT: 0, fireT: 1, speed: (30 + Math.random() * 6) * (lvl >= 5 ? 1.15 : 1) };
+    group.add(f); foes.push(f);
+  }
+  for (let i = 0; i < comp.bombers; i++) {
+    const f = buildBomber();
+    place(f, 260);
+    f.userData = { ...f.userData, i: idx++, type: 'bomber', hp: 8, state: 'attack', stateT: 0, fireT: 2, speed: 13, aim: CAP.clone().add(new THREE.Vector3((Math.random() - 0.5) * 80, (Math.random() - 0.5) * 16, (Math.random() - 0.5) * 30)) };
+    group.add(f); foes.push(f);
   }
   G.scene.add(group);
 
   S = {
-    group, ship, foes, bolts: [],
-    yaw: 0, pitch: 0, vel: new THREE.Vector3(0, 0, -20), speed: 26, roll: 0, prevYaw: 0, hull: 100, t: 0, kills: 0, fireCd: 0,
-    gold0: G.run.gold, time0: G.time || 0,
-    prevFog: G.scene.fog.density, prevBg: G.scene.background.getHex(),
-    prevFar: G.camera.far,
+    group, ship, foes, bolts: [], fx: [], remote: new Map(),
+    speed: 26, vel: new THREE.Vector3(0, 0, -20), bank: 0,
+    hull: 100, carrierHp: 100, kills: 0, t: 0, fireCd: 0, level: lvl, comp,
+    phase: 'fight', netT: 0, foeT: 0, scrapeT: 0,
+    time0: G.time || 0, prevFog: G.scene.fog.density, prevBg: G.scene.background.getHex(), prevFar: G.camera.far,
+    isHost: G.net.role !== 'guest',
   };
-  G.camera.far = 2400; // space is DEEP — the deck camera's 130u would cull the stars
+  G.camera.far = 2400;
   G.camera.updateProjectionMatrix();
-  ship.position.set(0, 0, 60);
-  G.scene.fog.density = 0.00012; // space is CLEAR
+  G.scene.fog.density = 0.00012;
   G.scene.background.setHex(0x020409);
   G.mode = 'space';
-  // the FP viewmodel has no business in a cockpit
   for (const c of G.camera.children) c.visible = false;
-  const wh = document.getElementById('waveHud');
-  wh?.classList.remove('hidden');
-  addMsg('VOID PATROL — ARROWS steer, W/S throttle, A/D barrel roll, SPACE fires. ESC recovers.', 'gold');
+  document.getElementById('waveHud')?.classList.remove('hidden');
+  addMsg(`VOID PATROL LV${lvl} — ${comp.name}. ARROWS steer, W/S throttle, A/D roll, SPACE fires.`, 'gold');
+  if (comp.bombers) addMsg('BOMBERS INBOUND — they are here for the CARRIER. Lose her and the campaign is over.', 'bad');
   sfx.stairs();
+  if (!fromNet && G.net.role !== 'solo') netSend({ t: 'spatrol', lvl });
 }
 
 function endSpaceFlight(result) {
   if (!S) return;
-  const credits = result === 'CLEARED' ? 120 + S.kills * 30 : 0;
+  const credits = result === 'CLEARED' ? 100 + S.level * 40 + S.kills * 25 : 0;
   G.run.gold += credits;
-  saveReport({
-    section: 'VOID PATROL', result, kills: S.kills, credits,
-    time: Math.round((G.time || 0) - S.time0),
-  });
+  if (result === 'CLEARED') G.run.patrolLvl = Math.max(G.run.patrolLvl || 0, S.level);
+  saveReport({ section: `VOID PATROL LV${S.level}`, result, kills: S.kills, credits, time: Math.round((G.time || 0) - S.time0) });
+  if (G.net.role !== 'solo') netSend({ t: 'sleave' });
   G.scene.remove(S.group);
   G.scene.fog.density = S.prevFog;
   G.scene.background.setHex(S.prevBg);
   G.camera.far = S.prevFar;
   G.camera.updateProjectionMatrix();
-  G.keys['Escape'] = false; // don't insta-abort the next launch
+  G.keys['Escape'] = false;
   for (const c of G.camera.children) c.visible = true;
   document.getElementById('waveHud')?.classList.add('hidden');
+  const lost = result === 'CARRIER LOST';
   S = null;
   G.mode = 'playing';
-  if (result === 'CLEARED') { addMsg(`Patrol clear — all drones down. +${credits} credits.`, 'gold'); sfx.victory(); }
-  else addMsg('Fighter recovered by tether. The drones remain.', 'bad');
+  if (result === 'CLEARED') { addMsg(`Docked. Patrol LV${G.run.patrolLvl} clear — +${credits} credits.`, 'gold'); sfx.victory(); }
+  else if (!lost) addMsg('Fighter recovered by tether.', 'bad');
   refreshHud();
+  if (lost) hooks.onCarrierLost?.();
 }
 
-export function spaceMouse() { /* flight went fully button-driven — arrows steer */ }
+// ---- explosions that FEEL like explosions ----
+function explode(pos, big = false) {
+  if (!S) return;
+  spawnBurst(pos.clone().add(ORIGIN), 0xffcc66, big ? 34 : 22, big ? 10 : 7, 0.16, big ? 1.1 : 0.8);
+  spawnBurst(pos.clone().add(ORIGIN), 0xff5522, big ? 24 : 14, big ? 7 : 5, 0.14, 0.7);
+  const flash = new THREE.Mesh(new THREE.SphereGeometry(big ? 3.4 : 2.0, 10, 8),
+    new THREE.MeshBasicMaterial({ color: 0xffd9a0, transparent: true, opacity: 0.9, toneMapped: false }));
+  flash.position.copy(pos);
+  S.group.add(flash);
+  S.fx.push({ mesh: flash, t: 0, dur: 0.45, kind: 'flash' });
+  for (let i = 0; i < (big ? 7 : 4); i++) {
+    const d = new THREE.Mesh(new THREE.BoxGeometry(0.5 + Math.random() * 0.6, 0.4, 0.5),
+      new THREE.MeshStandardMaterial({ color: 0x66564a, metalness: 0.4, roughness: 0.8 }));
+    d.position.copy(pos);
+    d.userData.v = new THREE.Vector3(Math.random() - 0.5, Math.random() - 0.5, Math.random() - 0.5).normalize().multiplyScalar(9 + Math.random() * 14);
+    d.userData.rot = new THREE.Vector3(Math.random() * 5, Math.random() * 5, Math.random() * 5);
+    S.group.add(d);
+    S.fx.push({ mesh: d, t: 0, dur: 1.5, kind: 'debris' });
+  }
+  sfx.cannon();
+  if (big) sfx.rumble();
+}
+
+function killFoe(f, broadcast = true) {
+  if (f.userData.hp > 0) f.userData.hp = 0;
+  explode(f.position, f.userData.type === 'bomber');
+  f.visible = false;
+  S.kills++;
+  if (broadcast && S.isHost && G.net.role !== 'solo') netSend({ t: 'sboom', i: f.userData.i });
+}
+
+function hurtPlayer(n) {
+  S.hull -= n;
+  G.shake = Math.max(G.shake || 0, 0.5);
+  sfx.hurt();
+  if (S.hull <= 0) endSpaceFlight('RECOVERED');
+}
+
+function hurtCarrier(n, at) {
+  S.carrierHp -= n;
+  explode(at || CAP.clone().add(new THREE.Vector3(0, 20, 0)), true);
+  addMsg(`The CARRIER is hit! Integrity ${Math.max(0, Math.round(S.carrierHp))}%`, 'bad');
+  if (S.carrierHp <= 0) {
+    // she goes up — and the campaign goes with her
+    for (let i = 0; i < 6; i++) {
+      explode(CAP.clone().add(new THREE.Vector3((Math.random() - 0.5) * 220, (Math.random() - 0.5) * 40, (Math.random() - 0.5) * 50)), true);
+    }
+    if (S.isHost && G.net.role !== 'solo') netSend({ t: 'slost' });
+    endSpaceFlight('CARRIER LOST');
+  }
+}
+
+export function spaceMouse() { /* flight is fully button-driven */ }
 
 export function spaceFire() {
   if (!S || S.fireCd > 0) return;
@@ -206,6 +367,60 @@ export function spaceFire() {
     S.bolts.push(b);
   }
   sfx.bolt();
+  if (G.net.role !== 'solo') {
+    const p = S.ship.position;
+    netSend({ t: 'sbolt', p: [+p.x.toFixed(1), +p.y.toFixed(1), +p.z.toFixed(1)], d: [+dir.x.toFixed(3), +dir.y.toFixed(3), +dir.z.toFixed(3)] });
+  }
+}
+
+// wingmates, remote fire, host foe sync — every s* message lands here
+export function onSpaceNet(m, pid) {
+  if (m.t === 'spatrol') { startSpaceFlight(m.lvl, true); return; }
+  if (!S) return;
+  const who = m.pid || pid;
+  if (m.t === 'sp') {
+    let r = S.remote.get(who);
+    if (!r) {
+      const grp = buildFighter(false, true);
+      S.group.add(grp);
+      r = { grp, tp: new THREE.Vector3(), tq: new THREE.Quaternion() };
+      S.remote.set(who, r);
+    }
+    r.tp.fromArray(m.p);
+    r.tq.fromArray(m.q);
+  } else if (m.t === 'sbolt') {
+    const b = new THREE.Mesh(new THREE.BoxGeometry(0.14, 0.14, 2.6),
+      new THREE.MeshBasicMaterial({ color: 0x7fd8ff, toneMapped: false }));
+    b.position.fromArray(m.p);
+    b.userData = { dir: new THREE.Vector3().fromArray(m.d), vel: 230, life: 1.1, mine: false, cosmetic: true };
+    b.lookAt(b.position.clone().add(b.userData.dir));
+    S.group.add(b);
+    S.bolts.push(b);
+  } else if (m.t === 'sdmg' && S.isHost) {
+    const f = S.foes[m.i];
+    if (f && f.userData.hp > 0) {
+      f.userData.hp -= m.d;
+      if (f.userData.hp <= 0) killFoe(f);
+    }
+  } else if (m.t === 'sfoe' && !S.isHost) {
+    for (const row of m.f) {
+      const f = S.foes[row[0]];
+      if (!f) continue;
+      f.position.set(row[1], row[2], row[3]);
+      f.quaternion.set(row[4], row[5], row[6], row[7]);
+      if (row[8] <= 0 && f.userData.hp > 0) { f.userData.hp = 0; f.visible = false; }
+      else f.userData.hp = row[8];
+    }
+    if (m.c !== undefined) S.carrierHp = m.c;
+  } else if (m.t === 'sboom') {
+    const f = S.foes[m.i];
+    if (f && f.visible) { f.userData.hp = 0; killFoe(f, false); }
+  } else if (m.t === 'slost' && !S.isHost) {
+    endSpaceFlight('CARRIER LOST');
+  } else if (m.t === 'sleave') {
+    const r = S.remote.get(who);
+    if (r) { S.group.remove(r.grp); S.remote.delete(who); }
+  }
 }
 
 export function updateSpace(dt) {
@@ -214,156 +429,244 @@ export function updateSpace(dt) {
   S.fireCd -= dt;
   if (G.keys['Escape']) { endSpaceFlight('RECOVERED'); return; }
 
-  // FULLY BUTTON-DRIVEN, TRUE COCKPIT AXES: arrows pitch/yaw around the
-  // SHIP's own frame — loops, inverted flight, endless rolls all work.
-  // W/S throttle, A/D roll, SPACE fires.
-  if (G.keys['KeyW']) S.speed = Math.min(70, (S.speed ?? 26) + 30 * dt);
-  if (G.keys['KeyS']) S.speed = Math.max(12, (S.speed ?? 26) - 34 * dt);
-  S.speed = S.speed ?? 26;
+  // FULLY BUTTON-DRIVEN, TRUE COCKPIT AXES — loops, rolls, inverted, all of it
+  if (G.keys['KeyW']) S.speed = Math.min(70, S.speed + 30 * dt);
+  if (G.keys['KeyS']) S.speed = Math.max(12, S.speed - 34 * dt);
   const yawIn = (G.keys['ArrowLeft'] ? 1 : 0) - (G.keys['ArrowRight'] ? 1 : 0);
   const pitchIn = (G.keys['ArrowUp'] ? 1 : 0) - (G.keys['ArrowDown'] ? 1 : 0);
   const rollIn = (G.keys['KeyA'] ? 1 : 0) - (G.keys['KeyD'] ? 1 : 0);
-  if (G.keys['Space']) spaceFire(); // hold to hose, cadence-limited
+  if (G.keys['Space']) spaceFire();
   const qd = new THREE.Quaternion().setFromEuler(
     new THREE.Euler(pitchIn * 1.35 * dt, yawIn * 1.6 * dt, rollIn * 3.2 * dt, 'YXZ'));
-  S.ship.quaternion.multiply(qd); // LOCAL rotation: no gimbal, no ceiling
+  S.ship.quaternion.multiply(qd);
   const fwd = new THREE.Vector3(0, 0, -1).applyQuaternion(S.ship.quaternion);
   const up = new THREE.Vector3(0, 1, 0).applyQuaternion(S.ship.quaternion);
-  S.vel.lerp(fwd.clone().multiplyScalar(S.speed), Math.min(1, dt * 4)); // slight drift for weight
+  S.vel.lerp(fwd.clone().multiplyScalar(S.speed), Math.min(1, dt * 4));
   S.ship.position.addScaledVector(S.vel, dt);
-  // cosmetic bank into yaw (applied to the camera below, not the flight frame)
-  S.bank = (S.bank ?? 0) + ((yawIn * 0.4) - (S.bank ?? 0)) * Math.min(1, dt * 5);
-  // leash: drifting out of the patrol zone kills your outward velocity
-  if (S.ship.position.length() > 380) {
+  S.bank = S.bank + ((yawIn * 0.4) - S.bank) * Math.min(1, dt * 5);
+
+  // the force field is the wall — and you can SEE it complain
+  if (S.ship.position.length() > FIELD_R - 4) {
     const n = S.ship.position.clone().normalize();
     const out = S.vel.dot(n);
     if (out > 0) S.vel.addScaledVector(n, -out);
-    S.ship.position.setLength(380);
+    S.ship.position.setLength(FIELD_R - 4);
+    const field = S.group.getObjectByName('field');
+    if (field) field.material.opacity = 0.16;
   }
+  const fieldM = S.group.getObjectByName('field');
+  if (fieldM && fieldM.material.opacity > 0.05) fieldM.material.opacity = Math.max(0.05, fieldM.material.opacity - dt * 0.3);
 
-  // FIRST-PERSON cockpit: you sit in the canopy, nose ahead, wings out the sides
-  const camPos = S.ship.position.clone()
-    .addScaledVector(up, 0.78).addScaledVector(fwd, 0.35).add(ORIGIN);
+  // cockpit camera
+  const camPos = S.ship.position.clone().addScaledVector(up, 0.78).addScaledVector(fwd, 0.35).add(ORIGIN);
   G.camera.position.copy(camPos);
   G.camera.quaternion.copy(S.ship.quaternion);
-  G.camera.quaternion.multiply(new THREE.Quaternion().setFromEuler(new THREE.Euler(0, 0, S.bank ?? 0)));
+  G.camera.quaternion.multiply(new THREE.Quaternion().setFromEuler(new THREE.Euler(0, 0, S.bank)));
 
-  // foes: ATTACK RUNS — fly straight along the nose, turn on a rate limit
-  // (wide banked arcs), overshoot, break away, come around again
-  const TURN = 1.15; // rad/s — how hard a drone can pull
-  for (const f of S.foes) {
-    const ud = f.userData;
-    if (ud.hp <= 0) continue;
-    const toP = S.ship.position.clone().sub(f.position);
-    const d = toP.length();
-    toP.normalize();
-    // pick the desired heading by state — they want GUN RANGE, never contact
-    ud.offset = ud.offset || new THREE.Vector3((Math.random() - 0.5) * 10, (Math.random() - 0.5) * 6, (Math.random() - 0.5) * 10);
-    ud.breakT -= dt;
-    if (ud.state === 'approach' && d < 30) {
-      // overshoot: break to a side and climb/dive away
-      const side = new THREE.Vector3().crossVectors(toP, new THREE.Vector3(0, 1, 0)).normalize();
-      ud.breakDir = side.multiplyScalar(Math.random() < 0.5 ? 1 : -1)
-        .addScaledVector(toP, 0.35).setY((Math.random() - 0.5) * 1.2).normalize();
-      ud.state = 'break';
-      ud.breakT = 2.0 + Math.random();
-    } else if (ud.state === 'break' && ud.breakT <= 0) {
-      ud.state = 'approach';
-    }
-    const desired = ud.state === 'break' ? ud.breakDir
-      : S.ship.position.clone().add(ud.offset).sub(f.position).normalize(); // strafe PAST, not through
-    // rate-limited turn toward the desired heading — this MAKES the arcs
-    const targetQ = new THREE.Quaternion().setFromUnitVectors(new THREE.Vector3(0, 0, -1), desired);
-    f.quaternion.rotateTowards(targetQ, TURN * dt);
-    const nose = new THREE.Vector3(0, 0, -1).applyQuaternion(f.quaternion);
-    f.position.addScaledVector(nose, ud.speed * dt);
-    // bank the airframe into the turn
-    const turnDir = new THREE.Vector3().crossVectors(nose, desired).y;
-    ud.vis.rotation.z = (ud.vis.rotation.z ?? 0) + ((-turnDir * 0.9) - (ud.vis.rotation.z ?? 0)) * Math.min(1, dt * 4);
-    // guns only speak when the nose agrees
-    ud.fireT -= dt;
-    if (ud.fireT <= 0 && ud.state === 'approach' && d < 90 && nose.angleTo(toP) < 0.3) {
-      ud.fireT = 0.9 + Math.random() * 1.1;
-      const b = new THREE.Mesh(new THREE.BoxGeometry(0.16, 0.16, 2.2),
-        new THREE.MeshBasicMaterial({ color: 0xff5533, toneMapped: false }));
-      b.position.copy(f.position);
-      b.userData = { dir: nose.clone(), vel: 115, life: 2.0, mine: false };
-      b.lookAt(f.position.clone().add(nose));
-      S.group.add(b);
-      S.bolts.push(b);
-    }
-    // collision: metal on metal — both hulls pay, both ships bounce
-    if (d < 4.4) {
-      ud.hp -= 2;
-      spawnBurst(f.position.clone().add(ORIGIN), 0xffcc66, 18, 6, 0.15, 0.6);
-      sfx.cannon();
-      if (ud.hp <= 0) killFoe(f);
-      hurtPlayer(14);
-      if (!S) return; // that hit may have ended the flight
-      const away = S.ship.position.clone().sub(f.position).normalize();
-      S.vel.addScaledVector(away, 26); // shove apart
-      f.position.addScaledVector(away, -3);
-    }
-  }
-
-  // THE HULK IS SOLID: fly into the derelict and the derelict wins
+  // the carrier is SOLID
   {
-    const hp2 = S.ship.position; // group-local
-    const HB = { x: 0, y: -90, z: -140, hx: 113, hy: 23, hz: 38 }; // hull + margin
+    const hp2 = S.ship.position;
+    const HB = { x: CAP.x - 20, y: CAP.y, z: CAP.z, hx: 190, hy: 40, hz: 45 };
     if (Math.abs(hp2.x - HB.x) < HB.hx && Math.abs(hp2.y - HB.y) < HB.hy && Math.abs(hp2.z - HB.z) < HB.hz) {
-      // push out along the shallowest axis and scrape the paint
       const dx = HB.hx - Math.abs(hp2.x - HB.x), dy = HB.hy - Math.abs(hp2.y - HB.y), dz = HB.hz - Math.abs(hp2.z - HB.z);
-      const sgn = (v) => (v >= 0 ? 1 : -1); // Math.sign(0) strands you dead-center
+      const sgn = (v) => (v >= 0 ? 1 : -1);
       if (dx < dy && dx < dz) { hp2.x += sgn(hp2.x - HB.x) * (dx + 0.5); S.vel.x *= -0.4; }
       else if (dy < dz) { hp2.y += sgn(hp2.y - HB.y) * (dy + 0.5); S.vel.y *= -0.4; }
       else { hp2.z += sgn(hp2.z - HB.z) * (dz + 0.5); S.vel.z *= -0.4; }
-      S.scrapeT = S.scrapeT ?? 0;
-      if (S.t > S.scrapeT) { S.scrapeT = S.t + 0.6; hurtPlayer(10); } // scrape, not a blender
+      if (S.t > S.scrapeT) { S.scrapeT = S.t + 0.6; hurtPlayer(10); }
       if (!S) return;
       spawnBurst(hp2.clone().add(ORIGIN), 0xffaa55, 14, 5, 0.14, 0.5);
     }
   }
 
-  // bolts
+  // wingmates drift toward their reported positions
+  for (const r of S.remote.values()) {
+    r.grp.position.lerp(r.tp, Math.min(1, dt * 8));
+    r.grp.quaternion.slerp(r.tq, Math.min(1, dt * 8));
+  }
+
+  // ---- foes (host simulates; guests render synced state) ----
+  if (S.isHost) {
+    for (const f of S.foes) {
+      const ud = f.userData;
+      if (ud.hp <= 0) continue;
+      const toP = S.ship.position.clone().sub(f.position);
+      const d = toP.length();
+      toP.normalize();
+      const nose = new THREE.Vector3(0, 0, -1).applyQuaternion(f.quaternion);
+      ud.stateT += dt;
+      if (ud.type === 'fighter') {
+        // STRAFING RUNS: line up far out, run STRAIGHT, egress straight, repeat
+        if (ud.state === 'lineup') {
+          const dir = S.ship.position.clone().sub(f.position).normalize();
+          const tq = new THREE.Quaternion().setFromUnitVectors(new THREE.Vector3(0, 0, -1), dir);
+          f.quaternion.rotateTowards(tq, 0.7 * dt);
+          f.position.addScaledVector(nose, ud.speed * 0.55 * dt);
+          if (nose.angleTo(dir) < 0.12) { ud.state = 'run'; ud.stateT = 0; }
+        } else if (ud.state === 'run') {
+          // dead straight, a whisper of tracking, guns hot
+          const tq = new THREE.Quaternion().setFromUnitVectors(new THREE.Vector3(0, 0, -1), toP);
+          f.quaternion.rotateTowards(tq, 0.15 * dt);
+          f.position.addScaledVector(nose, ud.speed * dt);
+          ud.fireT -= dt;
+          if (ud.fireT <= 0 && d < 120 && nose.angleTo(toP) < 0.3) {
+            ud.fireT = 0.5 + Math.random() * 0.4;
+            foeShot(f, nose);
+          }
+          if (toP.dot(nose) < -0.2 || ud.stateT > 7) { ud.state = 'egress'; ud.stateT = 0; }
+        } else { // egress: straight out, no turning — the flyby
+          f.position.addScaledVector(nose, ud.speed * dt);
+          if (ud.stateT > 2.6 + (ud.i % 3) * 0.5) { ud.state = 'lineup'; ud.stateT = 0; }
+        }
+      } else {
+        // BOMBER: bore straight in on the carrier, loose torpedoes, swing out
+        const toC = ud.aim.clone().sub(f.position);
+        const dc = toC.length();
+        toC.normalize();
+        if (ud.state === 'attack') {
+          const tq = new THREE.Quaternion().setFromUnitVectors(new THREE.Vector3(0, 0, -1), toC);
+          f.quaternion.rotateTowards(tq, 0.35 * dt);
+          f.position.addScaledVector(nose, ud.speed * dt);
+          ud.fireT -= dt;
+          if (ud.fireT <= 0 && dc < 130 && nose.angleTo(toC) < 0.35) {
+            ud.fireT = 2.6;
+            torpedo(f, toC);
+          }
+          if (dc < 46) { ud.state = 'egress'; ud.stateT = 0; }
+        } else {
+          f.position.addScaledVector(nose, ud.speed * 1.4 * dt);
+          const sideq = new THREE.Quaternion().setFromEuler(new THREE.Euler(0, 0.3 * dt, 0));
+          f.quaternion.multiply(sideq);
+          if (ud.stateT > 5) { ud.state = 'attack'; ud.stateT = 0; }
+        }
+      }
+      // collision with the player: metal on metal, never intentional
+      if (d < 4.4) {
+        ud.hp -= 2;
+        explode(f.position, false);
+        if (ud.hp <= 0) killFoe(f);
+        hurtPlayer(14);
+        if (!S) return;
+        const away = S.ship.position.clone().sub(f.position).normalize();
+        S.vel.addScaledVector(away, 26);
+        f.position.addScaledVector(away, -3);
+      }
+    }
+    // broadcast foe state to wingmates
+    if (G.net.role !== 'solo') {
+      S.foeT -= dt;
+      if (S.foeT <= 0) {
+        S.foeT = 0.18;
+        netSend({
+          t: 'sfoe', c: Math.round(S.carrierHp),
+          f: S.foes.map(f => [f.userData.i,
+            +f.position.x.toFixed(1), +f.position.y.toFixed(1), +f.position.z.toFixed(1),
+            +f.quaternion.x.toFixed(3), +f.quaternion.y.toFixed(3), +f.quaternion.z.toFixed(3), +f.quaternion.w.toFixed(3),
+            f.userData.hp]),
+        });
+      }
+    }
+  }
+
+  // position sync out
+  if (G.net.role !== 'solo') {
+    S.netT -= dt;
+    if (S.netT <= 0) {
+      S.netT = 0.09;
+      const p = S.ship.position, q = S.ship.quaternion;
+      netSend({ t: 'sp', p: [+p.x.toFixed(1), +p.y.toFixed(1), +p.z.toFixed(1)], q: [+q.x.toFixed(3), +q.y.toFixed(3), +q.z.toFixed(3), +q.w.toFixed(3)] });
+    }
+  }
+
+  // ---- bolts & torpedoes ----
   for (let i = S.bolts.length - 1; i >= 0; i--) {
     const b = S.bolts[i];
     b.userData.life -= dt;
     b.position.addScaledVector(b.userData.dir, b.userData.vel * dt);
     let dead = b.userData.life <= 0;
-    if (!dead && b.userData.mine) {
+    if (!dead && b.userData.torp) {
+      if (b.position.distanceTo(b.userData.aim) < 24) {
+        if (S.isHost) { hurtCarrier(8, b.position.clone()); if (!S) return; }
+        dead = true;
+      }
+    } else if (!dead && b.userData.mine) {
       for (const f of S.foes) {
         if (f.userData.hp <= 0) continue;
-        if (b.position.distanceTo(f.position) < 2.4) {
-          f.userData.hp--;
+        const rad = f.userData.type === 'bomber' ? 3.4 : 2.4;
+        if (b.position.distanceTo(f.position) < rad) {
+          if (S.isHost) {
+            f.userData.hp--;
+            if (f.userData.hp <= 0) killFoe(f);
+          } else {
+            netSend({ t: 'sdmg', i: f.userData.i, d: 1 });
+          }
           spawnBurst(f.position.clone().add(ORIGIN), 0xffaa55, 10, 4, 0.12, 0.5);
-          if (f.userData.hp <= 0) killFoe(f);
           dead = true;
           break;
         }
       }
-    } else if (!dead && !b.userData.mine) {
+    } else if (!dead && !b.userData.mine && !b.userData.cosmetic) {
       if (b.position.distanceTo(S.ship.position) < 2.2) { hurtPlayer(9); if (!S) return; dead = true; }
     }
     if (dead) { S.group.remove(b); S.bolts.splice(i, 1); }
   }
 
-  // HUD line
+  // explosion fx lifecycle
+  for (let i = S.fx.length - 1; i >= 0; i--) {
+    const e = S.fx[i];
+    e.t += dt;
+    const k = e.t / e.dur;
+    if (e.kind === 'flash') {
+      e.mesh.scale.setScalar(1 + k * 6);
+      e.mesh.material.opacity = 0.9 * (1 - k);
+    } else {
+      e.mesh.position.addScaledVector(e.mesh.userData.v, dt);
+      e.mesh.rotation.x += e.mesh.userData.rot.x * dt;
+      e.mesh.rotation.y += e.mesh.userData.rot.y * dt;
+    }
+    if (k >= 1) { S.group.remove(e.mesh); S.fx.splice(i, 1); }
+  }
+
+  // ---- phase & HUD ----
   const alive = S.foes.filter(f => f.userData.hp > 0).length;
+  const torps = S.bolts.some(b => b.userData.torp);
+  if (S.phase === 'fight' && alive === 0 && !torps) {
+    S.phase = 'dock';
+    addMsg('PATROL CLEAR — return to the DOCKING BAY (the glowing mouth on the carrier).', 'gold');
+    sfx.levelup();
+  }
+  const beacon = S.group.getObjectByName('dockBeacon');
+  if (beacon) {
+    beacon.visible = S.phase === 'dock';
+    if (beacon.visible) beacon.scale.setScalar(1 + 0.5 * Math.sin(S.t * 6));
+  }
+  if (S.phase === 'dock' && S.ship.position.distanceTo(DOCK) < 12) { endSpaceFlight('CLEARED'); return; }
   const wh = document.getElementById('waveHud');
-  if (wh) wh.textContent = `VOID PATROL — HULL ${Math.max(0, Math.round(S.hull))} · DRONES ${alive} · VEL ${Math.round(S.vel.length())} m/s`;
-  if (alive === 0) endSpaceFlight('CLEARED');
+  if (wh) {
+    const cap = S.comp.bombers ? ` · CARRIER ${Math.max(0, Math.round(S.carrierHp))}%` : '';
+    wh.textContent = S.phase === 'dock'
+      ? `RETURN TO DOCK — range ${Math.round(S.ship.position.distanceTo(DOCK))}m`
+      : `PATROL LV${S.level} — HULL ${Math.max(0, Math.round(S.hull))} · HOSTILES ${alive}${cap} · VEL ${Math.round(S.vel.length())} m/s`;
+  }
 }
 
-function killFoe(f) {
-  spawnBurst(f.position.clone().add(ORIGIN), 0xff6633, 26, 7, 0.18, 0.9);
-  sfx.cannon();
-  f.visible = false;
-  S.kills++;
+function foeShot(f, nose) {
+  const b = new THREE.Mesh(new THREE.BoxGeometry(0.16, 0.16, 2.2),
+    new THREE.MeshBasicMaterial({ color: 0xff5533, toneMapped: false }));
+  b.position.copy(f.position);
+  b.userData = { dir: nose.clone(), vel: 115, life: 2.0, mine: false };
+  b.lookAt(f.position.clone().add(nose));
+  S.group.add(b);
+  S.bolts.push(b);
 }
 
-function hurtPlayer(n) {
-  S.hull -= n;
-  G.shake = Math.max(G.shake || 0, 0.5);
-  sfx.hurt();
-  if (S.hull <= 0) endSpaceFlight('RECOVERED');
+function torpedo(f, dir) {
+  const b = new THREE.Mesh(new THREE.CylinderGeometry(0.35, 0.35, 2.6, 6),
+    new THREE.MeshBasicMaterial({ color: 0x88ff55, toneMapped: false }));
+  b.position.copy(f.position);
+  b.userData = { dir: dir.clone(), vel: 30, life: 9, torp: true, aim: f.userData.aim.clone() };
+  b.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), dir);
+  S.group.add(b);
+  S.bolts.push(b);
+  addMsg('Torpedo away — it is tracking the CARRIER!', 'bad');
 }

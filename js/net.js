@@ -28,7 +28,8 @@ export async function wireHandlers() {
   const builds = await import('./builds.js');
   const machines = await import('./machines.js');
   const commander = await import('./commander.js');
-  H = { player, enemies, loot, proj, fx, spells, walls, minions, horde, builds, machines, commander };
+  const space = await import('./space.js');
+  H = { player, enemies, loot, proj, fx, spells, walls, minions, horde, builds, machines, commander, space };
 }
 
 // CodeBlue lesson: if a guest ever references an entity it doesn't have (missed
@@ -222,6 +223,14 @@ function handleAsHost(conn, m) {
     case 'morder':
       H?.commander.applyMinionOrder(m, pid);
       break;
+    case 'spatrol':
+    case 'sp':
+    case 'sbolt':
+    case 'sdmg':
+    case 'sleave':
+      H?.space.onSpaceNet(m, pid);
+      if (m.t !== 'sdmg') relay(conn, { ...m, pid });
+      break;
     case 'pdead': {
       const p = G.net.players.get(pid);
       addMsg(`${p?.name || 'A companion'} has fallen!`, 'bad');
@@ -328,6 +337,15 @@ function handleAsGuest(m) {
       break;
     case 'fstate':
       callbacks.onFstate?.(m);
+      break;
+    case 'spatrol':
+    case 'sp':
+    case 'sbolt':
+    case 'sfoe':
+    case 'sboom':
+    case 'slost':
+    case 'sleave':
+      H?.space.onSpaceNet(m, m.pid);
       break;
     case 'mission':
       callbacks.onMission?.(m);
