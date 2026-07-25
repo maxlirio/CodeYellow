@@ -214,37 +214,25 @@ export function updateSpace(dt) {
   S.fireCd -= dt;
   if (G.keys['Escape']) { endSpaceFlight('RECOVERED'); return; }
 
-  // STANDARD SCI-FI flight, FULLY BUTTON-DRIVEN: arrows steer, W/S throttle,
-  // A/D roll, SPACE fires. The ship banks into turns; drift adds weight.
+  // FULLY BUTTON-DRIVEN, TRUE COCKPIT AXES: arrows pitch/yaw around the
+  // SHIP's own frame — loops, inverted flight, endless rolls all work.
+  // W/S throttle, A/D roll, SPACE fires.
   if (G.keys['KeyW']) S.speed = Math.min(70, (S.speed ?? 26) + 30 * dt);
   if (G.keys['KeyS']) S.speed = Math.max(12, (S.speed ?? 26) - 34 * dt);
   S.speed = S.speed ?? 26;
   const yawIn = (G.keys['ArrowLeft'] ? 1 : 0) - (G.keys['ArrowRight'] ? 1 : 0);
   const pitchIn = (G.keys['ArrowUp'] ? 1 : 0) - (G.keys['ArrowDown'] ? 1 : 0);
-  S.yaw += yawIn * 1.7 * dt;
-  S.pitch = Math.max(-1.35, Math.min(1.35, S.pitch + pitchIn * 1.25 * dt));
+  const rollIn = (G.keys['KeyA'] ? 1 : 0) - (G.keys['KeyD'] ? 1 : 0);
   if (G.keys['Space']) spaceFire(); // hold to hose, cadence-limited
-  // auto-bank: roll into the turn, proportional to yaw rate
-  const yawRate = (S.yaw - (S.prevYaw ?? S.yaw)) / Math.max(dt, 0.001);
-  S.prevYaw = S.yaw;
-  const bankTarget = Math.max(-0.85, Math.min(0.85, yawRate * 0.55));
-  S.roll = (S.roll ?? 0) + (bankTarget - (S.roll ?? 0)) * Math.min(1, dt * 5);
-  // BARREL ROLLS: A/D spin the airframe; release and it eases back level
-  S.rollManual = S.rollManual ?? 0;
-  if (G.keys['KeyA']) S.rollManual += 3.6 * dt;
-  else if (G.keys['KeyD']) S.rollManual -= 3.6 * dt;
-  else {
-    let r = S.rollManual % (Math.PI * 2);
-    if (r > Math.PI) r -= Math.PI * 2;
-    if (r < -Math.PI) r += Math.PI * 2;
-    S.rollManual = r * Math.max(0, 1 - dt * 4); // settle to wings-level
-  }
-  const q = new THREE.Quaternion().setFromEuler(new THREE.Euler(S.pitch, S.yaw, S.roll + S.rollManual, 'YXZ'));
-  S.ship.quaternion.slerp(q, Math.min(1, dt * 10));
+  const qd = new THREE.Quaternion().setFromEuler(
+    new THREE.Euler(pitchIn * 1.35 * dt, yawIn * 1.6 * dt, rollIn * 3.2 * dt, 'YXZ'));
+  S.ship.quaternion.multiply(qd); // LOCAL rotation: no gimbal, no ceiling
   const fwd = new THREE.Vector3(0, 0, -1).applyQuaternion(S.ship.quaternion);
   const up = new THREE.Vector3(0, 1, 0).applyQuaternion(S.ship.quaternion);
-  S.vel.lerp(fwd.clone().multiplyScalar(S.speed), Math.min(1, dt * 4)); // slight drift, no math homework
+  S.vel.lerp(fwd.clone().multiplyScalar(S.speed), Math.min(1, dt * 4)); // slight drift for weight
   S.ship.position.addScaledVector(S.vel, dt);
+  // cosmetic bank into yaw (applied to the camera below, not the flight frame)
+  S.bank = (S.bank ?? 0) + ((yawIn * 0.4) - (S.bank ?? 0)) * Math.min(1, dt * 5);
   // leash: drifting out of the patrol zone kills your outward velocity
   if (S.ship.position.length() > 380) {
     const n = S.ship.position.clone().normalize();
@@ -258,6 +246,7 @@ export function updateSpace(dt) {
     .addScaledVector(up, 0.78).addScaledVector(fwd, 0.35).add(ORIGIN);
   G.camera.position.copy(camPos);
   G.camera.quaternion.copy(S.ship.quaternion);
+  G.camera.quaternion.multiply(new THREE.Quaternion().setFromEuler(new THREE.Euler(0, 0, S.bank ?? 0)));
 
   // foes: ATTACK RUNS — fly straight along the nose, turn on a rate limit
   // (wide banked arcs), overshoot, break away, come around again
