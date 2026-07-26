@@ -344,6 +344,7 @@ export function generateShipDeck(seedStr, floor) {
   // ---- interiors ----
   const colliders = [];
   const shipDecor = [];
+  const deckNpcs = []; // walk-up interactables (boardable dropships)
   const platforms = []; // {cells:[{x,y}], ramps:[{x,y,dx,dy}], room}
   const occupied = new Set(); // cells claimed by cover, so lanes stay honest
   const free = (x, y) => inb(x, y) && at(x, y) === FLOOR && !elev[idxOf(x, y)] &&
@@ -443,6 +444,9 @@ export function generateShipDeck(seedStr, floor) {
         colliders.push({ x: cxw, z: cyw, hx: 2.5, hz: 5.0, y0: 0, h: 3.1, noMesh: true }); // hull
         colliders.push({ x: cxw, z: cyw - 6.4, hx: 1.5, hz: 1.5, y0: 0, h: 1.4, noMesh: true }); // aft ramp — mantleable
         shipDecor.push({ kind: 'ship', x: cxw, z: cyw, w: 5, d: 10, h: 3.1, yaw: 0, tone: rng.int(0, 2) });
+        // walk to the ramp and BOARD it — the dropship flies the void patrol
+        deckNpcs.push({ model: null, noModel: true, sign: false, name: 'Dropship', shop: 'board_ship',
+          label: 'BOARD DROPSHIP — FLY THE VOID PATROL', x: cxw, z: cyw - 8.2 });
         for (let dy = -2; dy <= 2; dy++) for (let dx = -1; dx <= 1; dx++) occupied.add(idxOf(cx2 + dx, cy2 + dy));
         if (rng.chance(0.7)) { // ground crew clutter beside the pad
           const gx = cx2 + (rng.chance(0.5) ? -2 : 2), gy = cy2 + rng.int(-2, 2);
@@ -513,6 +517,8 @@ export function generateShipDeck(seedStr, floor) {
       colliders.push({ x: cxw, z: cyw, hx: along ? 5.0 : 2.5, hz: along ? 2.5 : 5.0, y0: 0, h: 3.1, noMesh: true });
       colliders.push({ x: cxw - (along ? 6.4 : 0), z: cyw - (along ? 0 : 6.4), hx: 1.5, hz: 1.5, y0: 0, h: 1.4, noMesh: true }); // aft ramp — mantleable
       shipDecor.push({ kind: 'ship', x: cxw, z: cyw, w: 5, d: 10, h: 3.1, yaw: along ? Math.PI / 2 : 0, tone: rng.int(0, 2) });
+      deckNpcs.push({ model: null, noModel: true, sign: false, name: 'Dropship', shop: 'board_ship',
+        label: 'BOARD DROPSHIP — FLY THE VOID PATROL', x: cxw - (along ? 8.2 : 0), z: cyw - (along ? 0 : 8.2) });
       for (let dy = -Math.ceil(hz / CELL) - 1; dy <= Math.ceil(hz / CELL) + 1; dy++)
         for (let dx = -Math.ceil(hx / CELL) - 1; dx <= Math.ceil(hx / CELL) + 1; dx++)
           occupied.add(idxOf(l.cx + dx, l.cy + dy));
@@ -865,5 +871,6 @@ export function generateShipDeck(seedStr, floor) {
     grid, torches, traps, ropes, placements, enemySpawns, lootSpawns,
     explored: new Uint8Array(w * h), hadBoss: isBossFloor,
     theme, mutator, layoutId: 'deck:' + theme.id,
+    npcs: deckNpcs,
   };
 }

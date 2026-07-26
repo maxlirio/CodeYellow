@@ -18,7 +18,7 @@ import { generateTownData, generateArenaData, spawnTownNpcs, updateTownNpcs } fr
 import { generateBridgeData, getHoloTexture, renderHologram } from './bridge.js';
 import {
   setMissionHooks, updateMissions, openMissionMap, enterSortie, tryExtract,
-  onRemoteMission, onRemoteMissionEnd,
+  onRemoteMission, onRemoteMissionEnd, beginSortie,
 } from './missions.js';
 import { openTrainRoom, setSkillHooks } from './skills.js';
 import { updateSpace, spaceMouse, spaceFire, inSpace, startSpaceFlight, setSpaceHooks } from './space.js';
@@ -111,7 +111,22 @@ async function boot() {
     if (params.get('class')) getClass = () => (CLASSES[params.get('class')] ? params.get('class') : 'trooper'); // probe hook
     startRun(params.get('seed') || randomSeed(), params.get('mode') || 'campaign');
     // ?fly=1 — straight into the cockpit, no clears required
-    if (params.get('fly')) setTimeout(() => startSpaceFlight(), 600);
+    if (params.get('fly')) setTimeout(() => startSpaceFlight(null, false, !!params.get('dock')), 600);
+    // ?hangar=1 — spawn into a CLEARED hangar deck: walk to a dropship and board it
+    if (params.get('hangar')) {
+      G.hangarDrill = true; // boarding launches the docking drill, not a live patrol
+      setTimeout(() => {
+        beginSortie('spaceport');
+        enterSortie();
+        const iv = setInterval(() => {
+          const fs = G.floors.get(2);
+          if (G.floor !== 2 || !fs?.spawned) return;
+          clearInterval(iv);
+          for (const e of fs.enemies) if (e.state !== 'dead') killEnemy(e, 'none');
+          addMsg('Hangar secured for the drill. Walk to a dropship ramp and press E to BOARD.', 'gold');
+        }, 400);
+      }, 900);
+    }
     // ?boss=1 — playtest kit: a seasoned delver dropped at the dragon's door
     if (params.get('boss')) {
       const classId = getClass();
@@ -873,6 +888,7 @@ function applyModeSwitch(mode) {
 function onShopOpened(type) {
   if (type === 'missions') { openMissionMap(); return; }
   if (type === 'training') { openTrainRoom(); return; }
+  if (type === 'board_ship') { startSpaceFlight(null, false, !!G.hangarDrill); return; }
   if (type === 'board') { document.exitPointerLock?.(); window.openTavernBoard(); return; }
   if (type === 'mode') { openModeDialog(); return; }
   if (type === 'codex') { openCodex(); return; }

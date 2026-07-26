@@ -27,13 +27,20 @@ let S = null;
 let hooks = { onCarrierLost: null };
 export function setSpaceHooks(h) { hooks = { ...hooks, ...h }; }
 
-// patrol level -> enemy composition (variety climbs with your record)
+// fighter difficulty TIERS — like sector depth, but for the sky
+const TIERS = {
+  raider:      { hp: 3, spd: 30, spdV: 6, scale: 1.0, body: 0xe8734d, trim: 0xff3322, cad: 0.5, cadV: 0.4, burst: 1, boltC: 0xff5533 },
+  interceptor: { hp: 2, spd: 45, spdV: 5, scale: 0.85, body: 0xe86ad8, trim: 0xff44ff, cad: 0.35, cadV: 0.3, burst: 1, boltC: 0xff66ee },
+  gunship:     { hp: 8, spd: 21, spdV: 3, scale: 1.65, body: 0xb066e8, trim: 0x9933ff, cad: 1.4, cadV: 0.6, burst: 3, boltC: 0xbb66ff },
+};
+
+// patrol level -> enemy composition (tiers AND counts climb with your record)
 function compositionFor(lvl) {
-  if (lvl <= 1) return { name: 'SWEEP', fighters: 4, bombers: 0 };
-  if (lvl === 2) return { name: 'SWEEP II', fighters: 6, bombers: 0 };
-  if (lvl === 3) return { name: 'BOMBER INTERCEPT', fighters: 3, bombers: 2 };
-  if (lvl === 4) return { name: 'BOMBER INTERCEPT II', fighters: 4, bombers: 4 };
-  return { name: `SIEGE ${lvl - 4}`, fighters: 6, bombers: 5 };
+  if (lvl <= 1) return { name: 'SWEEP', list: [['raider', 4]], bombers: 0 };
+  if (lvl === 2) return { name: 'SWEEP II', list: [['raider', 3], ['interceptor', 2]], bombers: 0 };
+  if (lvl === 3) return { name: 'BOMBER INTERCEPT', list: [['raider', 3]], bombers: 2 };
+  if (lvl === 4) return { name: 'BOMBER INTERCEPT II', list: [['interceptor', 3], ['gunship', 1]], bombers: 3 };
+  return { name: `SIEGE ${lvl - 4}`, list: [['raider', 3], ['interceptor', 3], ['gunship', 2]], bombers: Math.min(4 + (lvl - 5), 7) };
 }
 
 function starSphere() {
@@ -144,15 +151,16 @@ function buildCarrier() {
 
 // a boxy dart fighter; hostile = hi-vis orange, friendly wingmates get blue trim.
 // Nose along -z for everyone.
-function buildFighter(hostile = false, friendly = false) {
+function buildFighter(hostile = false, friendly = false, tier = null) {
   const grp = new THREE.Group();
   const vis = new THREE.Group();
   vis.rotation.y = Math.PI;
+  if (tier) vis.scale.setScalar(tier.scale);
   grp.add(vis);
   grp.userData.vis = vis;
-  const body = new THREE.MeshStandardMaterial({ color: hostile ? 0xe8734d : 0x9aa6b4, metalness: 0.3, roughness: 0.55 });
+  const body = new THREE.MeshStandardMaterial({ color: hostile ? (tier?.body ?? 0xe8734d) : 0x9aa6b4, metalness: 0.3, roughness: 0.55 });
   const trim = new THREE.MeshStandardMaterial({
-    color: 0x111111, emissive: hostile ? 0xff3322 : (friendly ? 0x7fd8ff : 0x4fe8e0),
+    color: 0x111111, emissive: hostile ? (tier?.trim ?? 0xff3322) : (friendly ? 0x7fd8ff : 0x4fe8e0),
     emissiveIntensity: hostile ? 2.6 : 1.6, toneMapped: false,
   });
   const M = (geo, mat, x, y, z, rx = 0, rz = 0, ry = 0) => {
@@ -203,11 +211,11 @@ function buildBomber() {
 
 export function inSpace() { return !!S; }
 
-export function startSpaceFlight(level = null, fromNet = false) {
+export function startSpaceFlight(level = null, fromNet = false, drill = false) {
   if (S) return;
-  if (fromNet && (G.mode !== 'playing' || G.floor !== 0)) { addMsg('The patrol launched without you — you were off the bridge.'); return; }
+  if (fromNet && G.mode !== 'playing') { addMsg('The patrol launched without you.'); return; }
   const lvl = level ?? (G.run.patrolLvl || 0) + 1;
-  const comp = compositionFor(lvl);
+  const comp = drill ? { name: 'DOCKING DRILL', list: [], bombers: 0 } : compositionFor(lvl);
 
   const group = new THREE.Group();
   group.position.copy(ORIGIN);
@@ -253,11 +261,18 @@ export function startSpaceFlight(level = null, fromNet = false) {
     f.position.set(Math.cos(a) * r, (Math.random() - 0.5) * 80, Math.sin(a) * r - 40);
     f.quaternion.setFromEuler(new THREE.Euler(0, a + Math.PI / 2, 0));
   };
-  for (let i = 0; i < comp.fighters; i++) {
-    const f = buildFighter(true);
-    place(f, 150);
-    f.userData = { ...f.userData, i: idx++, type: 'fighter', hp: 3, state: 'lineup', stateT: 0, fireT: 1, speed: (30 + Math.random() * 6) * (lvl >= 5 ? 1.15 : 1) };
-    group.add(f); foes.push(f);
+  for (const [tierId, n] of comp.list) {
+    const tier = TIERS[tierId];
+    for (let i = 0; i < n; i++) {
+      const f = buildFighter(true, false, tier);
+      place(f, 150);
+      f.userData = {
+        ...f.userData, i: idx++, type: 'fighter', tier: tierId, hp: tier.hp,
+        state: 'lineup', stateT: 0, fireT: 1, burstLeft: 0,
+        speed: (tier.spd + Math.random() * tier.spdV) * (lvl >= 5 ? 1.12 : 1),
+      };
+      group.add(f); foes.push(f);
+    }
   }
   for (let i = 0; i < comp.bombers; i++) {
     const f = buildBomber();
@@ -271,7 +286,7 @@ export function startSpaceFlight(level = null, fromNet = false) {
     group, ship, foes, bolts: [], fx: [], remote: new Map(),
     speed: 26, vel: new THREE.Vector3(0, 0, -20), bank: 0,
     hull: 100, carrierHp: 100, kills: 0, t: 0, fireCd: 0, level: lvl, comp,
-    phase: 'fight', netT: 0, foeT: 0, scrapeT: 0,
+    phase: drill ? 'dock' : 'fight', drill, netT: 0, foeT: 0, scrapeT: 0,
     time0: G.time || 0, prevFog: G.scene.fog.density, prevBg: G.scene.background.getHex(), prevFar: G.camera.far,
     isHost: G.net.role !== 'guest',
   };
@@ -282,14 +297,19 @@ export function startSpaceFlight(level = null, fromNet = false) {
   G.mode = 'space';
   for (const c of G.camera.children) c.visible = false;
   document.getElementById('waveHud')?.classList.remove('hidden');
-  addMsg(`VOID PATROL LV${lvl} — ${comp.name}. ARROWS steer, W/S throttle, A/D roll, SPACE fires.`, 'gold');
-  if (comp.bombers) addMsg('BOMBERS INBOUND — they are here for the CARRIER. Lose her and the campaign is over.', 'bad');
+  if (drill) {
+    addMsg('DOCKING DRILL — empty sky. ARROWS steer, W/S throttle. Follow the light pillar to the bay and fly in.', 'gold');
+  } else {
+    addMsg(`VOID PATROL LV${lvl} — ${comp.name}. ARROWS steer, W/S throttle, A/D roll, SPACE fires.`, 'gold');
+    if (comp.bombers) addMsg('BOMBERS INBOUND — they are here for the CARRIER. Lose her and the campaign is over.', 'bad');
+  }
   sfx.stairs();
   if (!fromNet && G.net.role !== 'solo') netSend({ t: 'spatrol', lvl });
 }
 
 function endSpaceFlight(result) {
   if (!S) return;
+  if (S.drill && result === 'CLEARED') result = 'DOCKED';
   const credits = result === 'CLEARED' ? 100 + S.level * 40 + S.kills * 25 : 0;
   G.run.gold += credits;
   if (result === 'CLEARED') G.run.patrolLvl = Math.max(G.run.patrolLvl || 0, S.level);
@@ -306,7 +326,8 @@ function endSpaceFlight(result) {
   const lost = result === 'CARRIER LOST';
   S = null;
   G.mode = 'playing';
-  if (result === 'CLEARED') { addMsg(`Docked. Patrol LV${G.run.patrolLvl} clear — +${credits} credits.`, 'gold'); sfx.victory(); }
+  if (result === 'DOCKED') { addMsg('Docked clean. Drill complete.', 'gold'); sfx.levelup(); }
+  else if (result === 'CLEARED') { addMsg(`Docked. Patrol LV${G.run.patrolLvl} clear — +${credits} credits.`, 'gold'); sfx.victory(); }
   else if (!lost) addMsg('Fighter recovered by tether.', 'bad');
   refreshHud();
   if (lost) hooks.onCarrierLost?.();
@@ -527,9 +548,15 @@ export function updateSpace(dt) {
           f.quaternion.rotateTowards(tq, 0.15 * dt);
           f.position.addScaledVector(nose, ud.speed * dt);
           ud.fireT -= dt;
-          if (ud.fireT <= 0 && d < 120 && nose.angleTo(toP) < 0.3) {
-            ud.fireT = 0.5 + Math.random() * 0.4;
-            foeShot(f, nose);
+          const tier = TIERS[ud.tier] || TIERS.raider;
+          if (ud.burstLeft > 0 && ud.fireT <= 0) {
+            ud.burstLeft--;
+            ud.fireT = 0.12;
+            foeShot(f, nose, tier.boltC);
+          } else if (ud.fireT <= 0 && d < 120 && nose.angleTo(toP) < 0.3) {
+            ud.fireT = tier.cad + Math.random() * tier.cadV;
+            ud.burstLeft = tier.burst - 1;
+            foeShot(f, nose, tier.boltC);
           }
           if (toP.dot(nose) < -0.2 || ud.stateT > 7) { ud.state = 'egress'; ud.stateT = 0; }
         } else { // egress: straight out, no turning — the flyby
@@ -610,7 +637,7 @@ export function updateSpace(dt) {
     } else if (!dead && b.userData.mine) {
       for (const f of S.foes) {
         if (f.userData.hp <= 0) continue;
-        const rad = f.userData.type === 'bomber' ? 3.4 : 2.4;
+        const rad = f.userData.type === 'bomber' ? 3.4 : 2.4 * (TIERS[f.userData.tier]?.scale ?? 1);
         if (b.position.distanceTo(f.position) < rad) {
           if (S.isHost) {
             f.userData.hp--;
@@ -670,9 +697,9 @@ export function updateSpace(dt) {
   }
 }
 
-function foeShot(f, nose) {
+function foeShot(f, nose, color = 0xff5533) {
   const b = new THREE.Mesh(new THREE.BoxGeometry(0.16, 0.16, 2.2),
-    new THREE.MeshBasicMaterial({ color: 0xff5533, toneMapped: false }));
+    new THREE.MeshBasicMaterial({ color, toneMapped: false }));
   b.position.copy(f.position);
   b.userData = { dir: nose.clone(), vel: 115, life: 2.0, mine: false };
   b.lookAt(f.position.clone().add(nose));
