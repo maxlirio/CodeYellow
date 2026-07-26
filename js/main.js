@@ -21,7 +21,7 @@ import {
   onRemoteMission, onRemoteMissionEnd, beginSortie,
 } from './missions.js';
 import { openTrainRoom, setSkillHooks } from './skills.js';
-import { updateSpace, spaceMouse, spaceFire, inSpace, startSpaceFlight, setSpaceHooks } from './space.js';
+import { updateSpace, spaceMouse, spaceFire, inSpace, startSpaceFlight, setSpaceHooks, spaceSetWeapon } from './space.js';
 import { initViewmodel, updateViewmodel } from './viewmodel.js';
 import { updateWalls, clearWalls } from './walls.js';
 import { initFloorTraps, updateTraps } from './traps.js';
@@ -1121,7 +1121,10 @@ function setupInput() {
   });
   addEventListener('keydown', (e) => {
     G.keys[e.code] = true;
-    if (G.mode === 'space' && (e.code.startsWith('Arrow') || e.code === 'Space')) { e.preventDefault(); return; }
+    if (G.mode === 'space') {
+      if (e.code.startsWith('Digit')) { spaceSetWeapon(+e.code.slice(5) - 1); return; }
+      if (e.code.startsWith('Arrow') || e.code === 'Space') { e.preventDefault(); return; }
+    }
     if (e.code === 'Tab') { e.preventDefault(); toggleInventory(); return; }
     if (invOpen) { if (e.code === 'Escape') toggleInventory(false); return; }
     if (e.code === 'Space') { e.preventDefault(); tryDodge(); }
@@ -1268,7 +1271,7 @@ function loop(t) {
     minimapT += dt;
     if (minimapT > 0.12) {
       minimapT = 0;
-      updateMinimap();
+      if (G.mode !== 'space') updateMinimap(); // in flight the dome radar owns that canvas
       updateDodgeCooldown();
       updateSpellBar(cooldowns);
       refreshHudManaOnly();
