@@ -114,7 +114,8 @@ async function boot() {
     if (params.get('fly')) setTimeout(() => startSpaceFlight(null, false, !!params.get('dock')), 600);
     // ?hangar=1 — spawn into a CLEARED hangar deck: walk to a dropship and board it
     if (params.get('hangar')) {
-      G.hangarDrill = true; // boarding launches the docking drill, not a live patrol
+      // boarding launches a LIVE patrol (add ?drill=1 for the empty-sky version)
+      G.hangarDrill = !!params.get('drill');
       setTimeout(() => {
         beginSortie('spaceport');
         enterSortie();
@@ -123,7 +124,7 @@ async function boot() {
           if (G.floor !== 2 || !fs?.spawned) return;
           clearInterval(iv);
           for (const e of fs.enemies) if (e.state !== 'dead') killEnemy(e, 'none');
-          addMsg('Hangar secured for the drill. Walk to a dropship ramp and press E to BOARD.', 'gold');
+          addMsg('Hangar secured. Walk to a dropship ramp and press E to BOARD and launch.', 'gold');
         }, 400);
       }, 900);
     }
