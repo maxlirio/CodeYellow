@@ -193,18 +193,25 @@ export function buildFighter(hostile = false, friendly = false, tier = null) {
     m.rotation.set(rx, ry, rz);
     vis.add(m); return m;
   };
-  M(new THREE.BoxGeometry(1.35, 0.55, 4.4), body, 0, 0, 0);
-  const nose = M(new THREE.ConeGeometry(0.72, 2.0, 4), body, 0, 0, 3.1, Math.PI / 2);
-  nose.scale.y = 0.42;
-  M(new THREE.BoxGeometry(0.66, 0.42, 1.1), trim, 0, 0.32, 1.5).name = 'canopy';
+  // slim spine, needle nose, bubble canopy, big SWEPT deltas, canted twin
+  // tails, buried nacelles — a dart, not a shipping crate
+  M(new THREE.BoxGeometry(0.82, 0.44, 3.6), body, 0, 0, 0.6);       // spine
+  M(new THREE.BoxGeometry(0.6, 0.3, 1.4), body, 0, -0.1, -1.5);    // tail boat
+  const nose = M(new THREE.ConeGeometry(0.4, 2.6, 6), body, 0, -0.03, 3.6, Math.PI / 2);
+  nose.scale.x = 1.15; nose.scale.z = 0.55;                        // flattened needle
+  M(new THREE.BoxGeometry(0.46, 0.26, 1.05), trim, 0, 0.3, 1.35).name = 'canopy';
+  M(new THREE.BoxGeometry(0.5, 0.18, 0.5), body, 0, 0.26, 2.05, 0, 0, 0);   // windscreen fairing
   for (const sx of [-1, 1]) {
-    M(new THREE.BoxGeometry(2.7, 0.1, 1.7), body, sx * 1.85, 0, -0.7, 0, 0, sx * -0.55);
-    M(new THREE.BoxGeometry(0.34, 0.26, 1.1), trim, sx * 2.95, 0, -1.5, 0, 0, sx * -0.55);
-    M(new THREE.CylinderGeometry(0.34, 0.42, 1.9, 8), body, sx * 0.85, 0, -2.2, Math.PI / 2);
-    M(new THREE.BoxGeometry(0.5, 0.5, 0.14), trim, sx * 0.85, 0, -3.2);
+    M(new THREE.BoxGeometry(0.5, 0.07, 2.1), body, sx * 0.55, -0.06, 2.1, 0, 0, sx * -0.14); // chine strakes
+    // delta wing: broad thin inner panel + raked tip, both swept hard back
+    M(new THREE.BoxGeometry(2.3, 0.055, 2.2), body, sx * 1.3, -0.06, -0.15, 0, 0, sx * 0.62);
+    M(new THREE.BoxGeometry(1.1, 0.05, 1.25), body, sx * 2.5, -0.06, -1.1, 0, 0, sx * 0.62);
+    M(new THREE.BoxGeometry(0.14, 0.32, 0.95), trim, sx * 2.95, 0, -1.55, 0, 0, sx * 0.62); // wingtip blade
+    M(new THREE.CylinderGeometry(0.24, 0.32, 2.0, 8), body, sx * 0.46, 0.02, -1.95, Math.PI / 2); // nacelle
+    M(new THREE.BoxGeometry(0.42, 0.42, 0.12), trim, sx * 0.46, 0.02, -3.0);              // exhaust glow
+    M(new THREE.BoxGeometry(0.07, 0.72, 1.15), hostile ? trim : body, sx * 0.34, 0.5, -1.7, 0, sx * -0.42); // canted tails
   }
-  M(new THREE.BoxGeometry(0.12, 0.85, 1.5), hostile ? trim : body, 0, 0.65, -1.9);
-  if (hostile) M(new THREE.BoxGeometry(0.4, 0.4, 1.3), trim, 0, -0.45, 0.9);
+  if (hostile) for (const sx of [-1, 1]) M(new THREE.BoxGeometry(0.07, 0.07, 1.7), trim, sx * 0.24, -0.22, 2.7); // chin cannons
   return grp;
 }
 
@@ -293,6 +300,30 @@ function checkSeat() {
       return;
     }
   }
+}
+
+// ---- THE COCKPIT KIT: the furniture you see from the pilot seat. ONE
+// builder used by the flight fighter AND the parked dropship, so the view
+// when you strap in on the deck is EXACTLY the view when you fly.
+// Frame: eye at origin, forward -z.
+export function cockpitKit() {
+  const g = new THREE.Group();
+  const dark = new THREE.MeshStandardMaterial({ color: 0x2b3038, metalness: 0.4, roughness: 0.7 });
+  const hullM = new THREE.MeshStandardMaterial({ color: 0x525a64, metalness: 0.35, roughness: 0.7 });
+  const scrM = new THREE.MeshBasicMaterial({ color: 0x1f6e66, toneMapped: false });
+  const amberM = new THREE.MeshBasicMaterial({ color: 0x8a5a24, toneMapped: false });
+  const B = (mat, sx, sy, sz, x, y, z, ry = 0, rx = 0) => {
+    const m = new THREE.Mesh(new THREE.BoxGeometry(sx, sy, sz), mat);
+    m.position.set(x, y, z);
+    m.rotation.set(rx, ry, 0);
+    g.add(m); return m;
+  };
+  B(dark, 3.1, 0.85, 0.95, 0, -0.84, -1.3);                       // console body
+  for (const wx of [-0.85, 0, 0.85]) B(scrM, 0.62, 0.05, 0.34, wx, -0.39, -1.17, 0, 0.3);
+  for (const wx of [-0.5, -0.15, 0.35]) B(amberM, 0.14, 0.05, 0.1, wx, -0.38, -1.5);
+  for (const sx of [-1, 1]) B(hullM, 0.42, 2.6, 2.6, sx * 1.62, 0.03, -2.55, sx * -0.5); // canopy cheeks
+  B(hullM, 3.0, 0.5, 2.2, 0, 1.53, -2.45, 0, -0.5);               // brow
+  return g;
 }
 
 function flashScreen() {
@@ -413,23 +444,9 @@ export function startSpaceFlight(level = null, fromNet = false, drill = false, b
 
   const ship = buildFighter(false);
   ship.userData.vis.visible = false; // pure window cockpit
-  const dashM = new THREE.MeshStandardMaterial({ color: 0x2b3038, metalness: 0.4, roughness: 0.7 });
-  const dash = new THREE.Mesh(new THREE.BoxGeometry(1.5, 0.34, 0.5), dashM);
-  dash.position.set(0, 0.22, -1.15);
-  ship.add(dash);
-  const dashGlow = new THREE.Mesh(new THREE.BoxGeometry(0.8, 0.025, 0.07),
-    new THREE.MeshBasicMaterial({ color: 0x2fa89e, toneMapped: false }));
-  dashGlow.position.set(0, 0.4, -1.12);
-  ship.add(dashGlow);
-  for (const sx of [-1, 1]) {
-    const strut = new THREE.Mesh(new THREE.BoxGeometry(0.09, 1.4, 0.09), dashM);
-    strut.position.set(sx * 0.95, 0.85, -1.0);
-    strut.rotation.z = sx * 0.42;
-    ship.add(strut);
-  }
-  const rail = new THREE.Mesh(new THREE.BoxGeometry(1.7, 0.09, 0.09), dashM);
-  rail.position.set(0, 1.52, -0.85);
-  ship.add(rail);
+  const kit = cockpitKit(); // the same console you strapped into on the deck
+  kit.position.set(0, 0.78, -0.35);
+  ship.add(kit);
   // you launch FROM the bay room, nose out (+z)
   ship.position.copy(BAYIN);
   ship.quaternion.setFromEuler(new THREE.Euler(0, Math.PI, 0)); // nose -z flipped => flying +z

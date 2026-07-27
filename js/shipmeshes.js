@@ -10,7 +10,7 @@ import * as THREE from 'three';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import { CELL, PLATFORM_H } from './config.js';
 import { makePiece } from './assets.js';
-import { buildCarrier, buildFighter } from './space.js';
+import { buildCarrier, buildFighter, cockpitKit } from './space.js';
 
 const WALL_H = 7;    // bulkhead height
 const CEIL_H = 7;    // deck ceiling
@@ -136,10 +136,30 @@ function buildBoardship(d, mats) {
     m.rotation.set(rx, ry, 0);
     grp.add(m); return m;
   };
-  // landing pad ring + skids
-  const ring = new THREE.Mesh(new THREE.CylinderGeometry(5.6, 5.6, 0.05, 24, 1, true), mats.accent);
+  // landing pad + skids. `big` = THE dock: one large pad with double ring,
+  // chevrons and corner beacon posts instead of a row of small pads.
+  const ring = new THREE.Mesh(new THREE.CylinderGeometry(d.big ? 8.6 : 5.6, d.big ? 8.6 : 5.6, 0.05, 28, 1, true), mats.accent);
   ring.position.y = 0.05;
   grp.add(ring);
+  if (d.big) {
+    const ring2 = new THREE.Mesh(new THREE.CylinderGeometry(7.2, 7.2, 0.04, 28, 1, true), mats.frame);
+    ring2.position.y = 0.04;
+    grp.add(ring2);
+    for (let a = 0; a < 8; a++) { // approach chevrons painted round the pad
+      const ch = new THREE.Mesh(new THREE.BoxGeometry(0.28, 0.02, 1.6), mats.accent);
+      ch.position.set(Math.sin(a * Math.PI / 4) * 7.9, 0.03, Math.cos(a * Math.PI / 4) * 7.9);
+      ch.rotation.y = a * Math.PI / 4;
+      grp.add(ch);
+    }
+    for (const [px, pz] of [[-7.6, -7.6], [7.6, -7.6], [-7.6, 7.6], [7.6, 7.6]]) {
+      const post = new THREE.Mesh(new THREE.BoxGeometry(0.3, 2.4, 0.3), mats.frame);
+      post.position.set(px, 1.2, pz);
+      grp.add(post);
+      const lamp = new THREE.Mesh(new THREE.BoxGeometry(0.4, 0.3, 0.4), mats.accent);
+      lamp.position.set(px, 2.5, pz);
+      grp.add(lamp);
+    }
+  }
   for (const sx of [-1.55, 1.55]) B('frame', 0.5, 0.42, 8.6, sx, 0.21, 0.4);
   // hull: floor slab (top = 0.55, the surface you stand on), walls, roof
   B('dark', 4.2, 0.55, 10.9, 0, 0.275, 0);
@@ -158,11 +178,9 @@ function buildBoardship(d, mats) {
     grp.add(eng);
     B('accent', 0.75, 0.75, 0.14, sx * 3.9, 2.5, -4.05);
   }
-  // nose: converging cheek panels + the WINDSHIELD (transparent — the hangar
-  // beyond it is simply the real hangar)
-  for (const sx of [-1, 1]) B('machine', 0.42, 2.6, 2.6, sx * 1.62, 1.85, 6.0, sx * -0.5);
+  // nose: floor pan + the WINDSHIELD (transparent — the hangar beyond it is
+  // simply the real hangar)
   B('machine', 3.6, 0.55, 2.4, 0, 0.275, 6.0);    // nose floor pan
-  B('machine', 3.0, 0.5, 2.2, 0, 3.35, 5.9, 0, 0.5); // brow
   const glassM = new THREE.MeshBasicMaterial({
     color: 0x9fdcff, transparent: true, opacity: 0.13, toneMapped: false,
     side: THREE.DoubleSide, depthWrite: false,
@@ -173,13 +191,12 @@ function buildBoardship(d, mats) {
   grp.add(shield);
   B(glassM, 0.04, 1.0, 1.5, -1.85, 2.35, 4.4);    // side cockpit glass
   B(glassM, 0.04, 1.0, 1.5, 1.85, 2.35, 4.4);
-  // cockpit: console with live widgets, pilot seat — screens glow softly,
-  // they don't floodlight the canopy
-  B('dark', 3.1, 0.85, 0.95, 0, 0.98, 4.75);
-  const scrM = new THREE.MeshBasicMaterial({ color: 0x1f6e66, toneMapped: false });
-  for (const wx of [-0.85, 0, 0.85]) B(scrM, 0.62, 0.05, 0.34, wx, 1.43, 4.62, 0, -0.3);
-  const amberM = new THREE.MeshBasicMaterial({ color: 0x8a5a24, toneMapped: false });
-  for (const wx of [-0.5, -0.15, 0.35]) B(amberM, 0.14, 0.05, 0.1, wx, 1.44, 4.95);
+  // THE COCKPIT: the exact same kit the flight ship mounts — strapping in on
+  // the deck looks identical to flying (console, screens, cheeks, brow)
+  const kit = cockpitKit();
+  kit.position.set(0, 1.82, 3.45);
+  kit.rotation.y = Math.PI;
+  grp.add(kit);
   B('dark', 0.95, 0.32, 0.9, 0, 0.86, 3.5);       // seat pan
   B('dark', 0.95, 1.2, 0.22, 0, 1.55, 3.02);      // seat back
   B('accent', 0.6, 0.1, 0.2, 0, 2.2, 3.02);       // headrest strip
@@ -211,6 +228,16 @@ function buildBoardship(d, mats) {
   const plate = new THREE.Mesh(new THREE.BoxGeometry(3.1, 0.16, 3.4), mats.machine);
   plate.position.z = -1.65;
   ramp.add(plate);
+  // outward face (what you see when it's sealed): hazard chevrons + seam light
+  const hazM = new THREE.MeshBasicMaterial({ color: 0xb8862e, toneMapped: false });
+  for (const hz2 of [-0.6, -2.7]) {
+    const strip = new THREE.Mesh(new THREE.BoxGeometry(2.6, 0.03, 0.34), hazM);
+    strip.position.set(0, -0.095, hz2);
+    ramp.add(strip);
+  }
+  const seam = new THREE.Mesh(new THREE.BoxGeometry(0.1, 0.03, 3.2), mats.accent);
+  seam.position.set(0, -0.095, -1.65);
+  ramp.add(seam);
   for (const tz of [-0.7, -1.6, -2.5]) {
     const tread = new THREE.Mesh(new THREE.BoxGeometry(2.7, 0.05, 0.16), mats.accent);
     tread.position.set(0, 0.1, tz);

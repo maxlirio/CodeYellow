@@ -364,7 +364,7 @@ export function generateShipDeck(seedStr, floor) {
   // vanishes when the ramp lowers. Local frame: nose +z, ramp aft (-z);
   // yaw rotates the whole thing (0 or ±π/2 — colliders stay axis-aligned).
   let bsN = 0;
-  const addBoardship = (cxw, cyw, yaw) => {
+  const addBoardship = (cxw, cyw, yaw, big = false) => {
     const id = 'bs' + (bsN++);
     const c0 = Math.cos(yaw), s0 = Math.sin(yaw);
     const P = (lx, lz, hx, hz, y0, h, extra) => {
@@ -380,7 +380,7 @@ export function generateShipDeck(seedStr, floor) {
     P(0, 6.3, 1.8, 0.85, 0, 3.55);                 // nose cap
     P(0, -4.95, 1.6, 0.3, 0, 3.5, { doorId: id }); // aft door — OFF while the ramp is down
     P(0, -6.5, 1.35, 0.85, 0, 0.28);               // lowered-ramp step up
-    shipDecor.push({ kind: 'boardship', x: cxw, z: cyw, yaw, id });
+    shipDecor.push({ kind: 'boardship', x: cxw, z: cyw, yaw, id, big });
     deckNpcs.push({ model: null, noModel: true, sign: false, name: 'Dropship', shop: 'board_ship',
       label: 'BOARD DROPSHIP — FLY THE VOID PATROL', x: cxw - 8.4 * s0, z: cyw - 8.4 * c0 });
   };
@@ -456,29 +456,31 @@ export function generateShipDeck(seedStr, floor) {
         crate(inset.x + rng.int(0, inset.w - 1), inset.y + rng.int(0, inset.h - 1), false);
       }
     } else if (l.role === 'bay') {
-      // THE HANGAR: dropships parked in a row, noses toward the mouth, each on
-      // its own landing ring. Fuel drums and crate trains between them.
-      const n = Math.max(2, Math.floor((l.w - 6) / 7));
-      const rowCy = l.y + Math.floor(l.h * 0.55);
-      for (let i = 0; i < n; i++) {
-        const cx2 = l.x + 4 + i * 7, cy2 = rowCy + rng.int(-1, 1);
+      // THE HANGAR: ONE large dock — a single dropship on a big marked pad in
+      // line with the mouth, not a parking row. Fuel drums off to the sides.
+      const rowCy = l.y + Math.floor(l.h * 0.5);
+      let placed = false;
+      for (const cx2 of [l.x + Math.floor(l.w / 2), l.x + Math.floor(l.w / 2) - 2, l.x + Math.floor(l.w / 2) + 2]) {
+        const cy2 = rowCy;
         let open = true;
-        for (let dy = -2; dy <= 2; dy++) for (let dx = -1; dx <= 1; dx++)
+        for (let dy = -2; dy <= 2; dy++) for (let dx = -2; dx <= 2; dx++)
           if (at(cx2 + dx, cy2 + dy) !== FLOOR || elev[idxOf(cx2 + dx, cy2 + dy)]) open = false;
         if (!open) continue;
         const cxw = cx2 * CELL, cyw = cy2 * CELL;
-        // a REAL boardable dropship: ramp lowers, you walk in, take the seat
-        addBoardship(cxw, cyw, 0);
-        for (let dy = -2; dy <= 2; dy++) for (let dx = -1; dx <= 1; dx++) occupied.add(idxOf(cx2 + dx, cy2 + dy));
-        if (rng.chance(0.7)) { // ground crew clutter beside the pad
-          const gx = cx2 + (rng.chance(0.5) ? -2 : 2), gy = cy2 + rng.int(-2, 2);
+        addBoardship(cxw, cyw, 0, true); // the ONE dropship — walk in, fly out
+        for (let dy = -2; dy <= 2; dy++) for (let dx = -2; dx <= 2; dx++) occupied.add(idxOf(cx2 + dx, cy2 + dy));
+        for (const gs of [-3, 3]) { // ground crew drums flanking the pad
+          const gx = cx2 + gs, gy = cy2 + rng.int(-1, 1);
           if (free(gx, gy)) {
             colliders.push({ x: gx * CELL, z: gy * CELL, r: 1.0, y0: 0, h: 1.4 });
             shipDecor.push({ kind: 'drum', x: gx * CELL, z: gy * CELL, w: 2, d: 2, h: 1.4, yaw: 0 });
             occupied.add(idxOf(gx, gy));
           }
         }
+        placed = true;
+        break;
       }
+      if (!placed) addBoardship((l.x + Math.floor(l.w / 2)) * CELL, rowCy * CELL, 0, true);
       for (let i = 0; i < rng.int(3, 5); i++) crate(inset.x + rng.int(0, inset.w - 1), inset.y + 1 + rng.int(0, 2), false);
     } else if (l.role === 'brig') {
       // SECURITY: cell blocks along the walls — barred alcoves with a bench

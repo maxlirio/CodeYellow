@@ -259,7 +259,7 @@ try {
     setSortieOverride({ floorN: 2, theme: 'hab', roles: ['cargo', 'machine', 'barracks'], special: 'hangar' });
     const hang = generateShipDeck('seedA:sortie3', 2);
     assert(hang.grid.mouth.length >= 12, `spaceport: hull mouth open (${hang.grid.mouth.length} faces)`);
-    assert((kindsOf(hang).boardship || 0) >= 2, `spaceport: boardable dropships parked (${kindsOf(hang).boardship || 0})`);
+    assert((kindsOf(hang).boardship || 0) === 1, `spaceport: ONE large dock (${kindsOf(hang).boardship || 0} boardships)`);
     assert(hang.grid.colliders.some((c) => c.doorId), 'spaceport: dropship aft door collider present');
     setSortieOverride(null);
     // BESPOKE SECTORS: each area is its own building with its own generator
