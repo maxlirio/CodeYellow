@@ -852,19 +852,17 @@ export function updateGravLifts(fs, dt = 0.016) {
   updateWar(fs, dt);
 }
 
-// ---- boardable dropships: hinge the ramp toward its target, and keep the
-// aft DOOR collider in sync (it only exists while the ramp is sealed) ----
+// ---- boardable fighters: slide the canopy toward its target (open = aft
+// and up along the spine, X-wing style) ----
 function updateBoardShips(fs, dt) {
   if (!fs.boardShips) return;
   for (const bs of fs.boardShips) {
-    const ud = bs.userData.boardShip, ramp = bs.userData.rampGroup;
-    if (!ramp) continue;
-    const tgt = ud.open ? bs.userData.rampOpen : bs.userData.rampClosed;
-    const dr = tgt - ramp.rotation.x;
-    if (Math.abs(dr) > 0.005) ramp.rotation.x += Math.sign(dr) * Math.min(Math.abs(dr), 1.5 * dt);
-    const sealed = Math.abs(ramp.rotation.x - bs.userData.rampClosed) < 0.5;
-    if (ud.doorCol === undefined && fs.grid.colliders) ud.doorCol = fs.grid.colliders.find((c) => c.doorId === ud.id) || null;
-    if (ud.doorCol) ud.doorCol.off = !sealed;
+    const ud = bs.userData.boardShip, can = bs.userData.canopyGroup;
+    if (!can) continue;
+    const tgt = ud.open ? bs.userData.canOpen : bs.userData.canClosed;
+    if (can.position.distanceToSquared(tgt) > 0.0004) {
+      can.position.lerp(tgt, Math.min(1, dt * 4.5));
+    }
   }
 }
 

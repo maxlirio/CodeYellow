@@ -2,7 +2,7 @@
 // from field experience (one per level); ranks are bought here and shape the
 // build: plating, servos, optics, drills, capacitors, nano-repair, an escort.
 import { G } from './state.js';
-import { SKILLS } from './config.js';
+import { SKILLS, SHIP_UPS } from './config.js';
 import { addMsg, refreshHud } from './ui.js';
 import { sfx } from './audio.js';
 import { skillRank, effectiveMaxHp, effectiveMaxMana } from './player.js';
@@ -79,4 +79,42 @@ function renderTrainRoom() {
     row.appendChild(btn);
     list.appendChild(row);
   }
+  // ---- SHIP BAY: fighter upgrades, paid in CREDITS ----
+  const hdr = document.createElement('div');
+  hdr.className = 'tr-skill';
+  hdr.style.cssText = 'justify-content:center;border-color:#4fe8e0';
+  hdr.innerHTML = `<div class="tr-info"><b>SHIP BAY</b><div class="tr-desc">fighter upgrades — paid in credits (${G.run.gold || 0} cr)</div></div>`;
+  list.appendChild(hdr);
+  for (const up of SHIP_UPS) {
+    const r = (G.run.shipUps || {})[up.id] || 0;
+    const cost = up.cost[Math.min(r, up.cost.length - 1)];
+    const row = document.createElement('div');
+    row.className = 'tr-skill' + (r >= up.max ? ' maxed' : '');
+    const pips = Array.from({ length: up.max }, (_, i) =>
+      `<span class="tr-pip${i < r ? ' on' : ''}"></span>`).join('');
+    row.innerHTML = `
+      <div class="tr-info"><b>${up.name}</b> <span class="tr-pips">${pips}</span>
+        <div class="tr-desc">${up.desc}</div></div>`;
+    const btn = document.createElement('button');
+    btn.className = 'tr-buy';
+    btn.textContent = r >= up.max ? 'MAXED' : `${cost} CR`;
+    btn.disabled = r >= up.max || (G.run.gold || 0) < cost;
+    btn.onclick = () => buyShipUp(up.id);
+    row.appendChild(btn);
+    list.appendChild(row);
+  }
+}
+
+function buyShipUp(id) {
+  const up = SHIP_UPS.find((u) => u.id === id);
+  const r = (G.run.shipUps || {})[id] || 0;
+  if (!up || r >= up.max) return;
+  const cost = up.cost[Math.min(r, up.cost.length - 1)];
+  if ((G.run.gold || 0) < cost) return;
+  G.run.gold -= cost;
+  (G.run.shipUps ||= {})[id] = r + 1;
+  sfx.levelup();
+  addMsg(`Ship refit: ${up.name} mark ${r + 1}`, 'gold');
+  refreshHud();
+  renderTrainRoom();
 }

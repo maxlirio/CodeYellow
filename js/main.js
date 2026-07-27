@@ -1227,11 +1227,14 @@ function loop(t) {
     updatePlayer(dt);
     updateDeath(dt);
     setCrosshairAiming(!!G.player?.aiming);
-    updateSpace(dt); // watches for you walking into an armed cockpit
   } else if (G.player && simActive) {
     G.player.anim.update(dt);
   }
   if (G.mode !== 'space') updateViewmodel(dt);
+
+  // deck life (grav lifts, canopies, the war outside the glass) never pauses —
+  // the deck is still on screen while you board and take off in 'space' mode
+  updateGravLifts(G.floors.get(G.floor), dt);
 
   if (simActive) {
     updateEnemies(dt);
@@ -1250,7 +1253,6 @@ function loop(t) {
     updateMachines(dt);
     updateHorde(dt);
     if (runMode === 'campaign') updateMissions(dt);
-    updateGravLifts(G.floors.get(G.floor), dt);
     updateBuildGhost();
     updateMachineGhost();
     if (G.runMode === 'duel' && G.mode === 'playing') {

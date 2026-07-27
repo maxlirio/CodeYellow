@@ -359,30 +359,24 @@ export function generateShipDeck(seedStr, floor) {
     return true;
   };
 
-  // A dropship you WALK INTO: shell colliders form a real interior (floor you
-  // stand on, hull walls, roof, flight console) with an aft DOOR collider that
-  // vanishes when the ramp lowers. Local frame: nose +z, ramp aft (-z);
-  // yaw rotates the whole thing (0 or ±π/2 — colliders stay axis-aligned).
+  // A parked FIGHTER you board: slim hull + wing colliders; the canopy
+  // slides open on E (no walk-in — you climb into the seat). Local frame:
+  // nose +z; yaw rotates the whole thing (0 or ±π/2, colliders stay AABB).
   let bsN = 0;
-  const addBoardship = (cxw, cyw, yaw, big = false) => {
+  const addBoardship = (cxw, cyw, yaw) => {
     const id = 'bs' + (bsN++);
     const c0 = Math.cos(yaw), s0 = Math.sin(yaw);
-    const P = (lx, lz, hx, hz, y0, h, extra) => {
+    const P = (lx, lz, hx, hz, y0, h) => {
       const wx = cxw + c0 * lx + s0 * lz, wz = cyw - s0 * lx + c0 * lz;
       const swap = Math.abs(Math.round(s0)) === 1;
-      colliders.push({ x: wx, z: wz, hx: swap ? hz : hx, hz: swap ? hx : hz, y0, h, noMesh: true, ...(extra || {}) });
+      colliders.push({ x: wx, z: wz, hx: swap ? hz : hx, hz: swap ? hx : hz, y0, h, noMesh: true });
     };
-    P(0, 0, 1.8, 5.4, 0, 0.55);                    // cabin floor — you stand ON it
-    P(-2.05, 0.3, 0.4, 5.6, 0, 3.55);              // port hull
-    P(2.05, 0.3, 0.4, 5.6, 0, 3.55);               // starboard hull
-    P(0, 0.3, 2.3, 5.5, 3.05, 4.05);               // roof over the hold (h = absolute top)
-    P(0, 4.85, 1.8, 0.6, 0, 1.45);                 // flight console — the seat stops here
-    P(0, 6.3, 1.8, 0.85, 0, 3.55);                 // nose cap
-    P(0, -4.95, 1.6, 0.3, 0, 3.5, { doorId: id }); // aft door — OFF while the ramp is down
-    P(0, -6.5, 1.35, 0.85, 0, 0.28);               // lowered-ramp step up
-    shipDecor.push({ kind: 'boardship', x: cxw, z: cyw, yaw, id, big });
-    deckNpcs.push({ model: null, noModel: true, sign: false, name: 'Dropship', shop: 'board_ship',
-      label: 'BOARD DROPSHIP — FLY THE VOID PATROL', x: cxw - 8.4 * s0, z: cyw - 8.4 * c0 });
+    P(0, 1.2, 1.05, 5.6, 0, 2.3);   // fuselage
+    P(0, 8.0, 0.6, 1.9, 0, 1.5);    // needle nose
+    for (const sx of [-1, 1]) P(sx * 3.4, -1.6, 2.5, 2.3, 0, 0.9); // wing slabs
+    shipDecor.push({ kind: 'boardship', x: cxw, z: cyw, yaw, id });
+    deckNpcs.push({ model: null, noModel: true, sign: false, name: 'Fighter', shop: 'board_ship',
+      label: 'BOARD FIGHTER — FLY THE VOID PATROL', x: cxw - 8.4 * s0, z: cyw - 8.4 * c0 });
   };
 
   // ---- BALCONIES: a second level along one wall of the big holds, reached
@@ -456,31 +450,20 @@ export function generateShipDeck(seedStr, floor) {
         crate(inset.x + rng.int(0, inset.w - 1), inset.y + rng.int(0, inset.h - 1), false);
       }
     } else if (l.role === 'bay') {
-      // THE HANGAR: ONE large dock — a single dropship on a big marked pad in
-      // line with the mouth, not a parking row. Fuel drums off to the sides.
+      // THE HANGAR: a row of parked fighters, noses at the ONE big mouth.
+      // Every one of them is boardable.
+      const n = Math.min(3, Math.max(2, Math.floor((l.w - 6) / 8)));
       const rowCy = l.y + Math.floor(l.h * 0.5);
-      let placed = false;
-      for (const cx2 of [l.x + Math.floor(l.w / 2), l.x + Math.floor(l.w / 2) - 2, l.x + Math.floor(l.w / 2) + 2]) {
-        const cy2 = rowCy;
+      const step = Math.floor((l.w - 6) / n);
+      for (let i = 0; i < n; i++) {
+        const cx2 = l.x + 3 + Math.floor(step / 2) + i * step, cy2 = rowCy;
         let open = true;
         for (let dy = -2; dy <= 2; dy++) for (let dx = -2; dx <= 2; dx++)
           if (at(cx2 + dx, cy2 + dy) !== FLOOR || elev[idxOf(cx2 + dx, cy2 + dy)]) open = false;
         if (!open) continue;
-        const cxw = cx2 * CELL, cyw = cy2 * CELL;
-        addBoardship(cxw, cyw, 0, true); // the ONE dropship — walk in, fly out
+        addBoardship(cx2 * CELL, cy2 * CELL, 0);
         for (let dy = -2; dy <= 2; dy++) for (let dx = -2; dx <= 2; dx++) occupied.add(idxOf(cx2 + dx, cy2 + dy));
-        for (const gs of [-3, 3]) { // ground crew drums flanking the pad
-          const gx = cx2 + gs, gy = cy2 + rng.int(-1, 1);
-          if (free(gx, gy)) {
-            colliders.push({ x: gx * CELL, z: gy * CELL, r: 1.0, y0: 0, h: 1.4 });
-            shipDecor.push({ kind: 'drum', x: gx * CELL, z: gy * CELL, w: 2, d: 2, h: 1.4, yaw: 0 });
-            occupied.add(idxOf(gx, gy));
-          }
-        }
-        placed = true;
-        break;
       }
-      if (!placed) addBoardship((l.x + Math.floor(l.w / 2)) * CELL, rowCy * CELL, 0, true);
       for (let i = 0; i < rng.int(3, 5); i++) crate(inset.x + rng.int(0, inset.w - 1), inset.y + 1 + rng.int(0, 2), false);
     } else if (l.role === 'brig') {
       // SECURITY: cell blocks along the walls — barred alcoves with a bench

@@ -18,6 +18,14 @@ export const CLASSES = {
 };
 
 // the training station's catalog: each rank costs one point earned by leveling
+// SHIP BAY — fighter upgrades, bought with CREDITS at the training station.
+// Consumed by space.js (hull pool, top speed, cannon cadence/damage).
+export const SHIP_UPS = [
+  { id: 'hull', name: 'HULL PLATING', desc: '+25 fighter hull per mark', max: 3, cost: [150, 300, 600] },
+  { id: 'engine', name: 'DRIVE TUNING', desc: '+8 top speed per mark', max: 3, cost: [150, 300, 600] },
+  { id: 'guns', name: 'CANNON ARRAY', desc: 'faster pulse cadence; +1 damage at mark 2', max: 3, cost: [200, 400, 800] },
+];
+
 export const SKILLS = [
   { id: 'plating', name: 'Ablative Plating', max: 2, desc: '+8% damage reduction per rank' },
   { id: 'frame', name: 'Reinforced Frame', max: 2, desc: '+22 hull per rank; rank 2 braces you against knockback' },

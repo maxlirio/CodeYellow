@@ -6,7 +6,7 @@
 // the foes, wingmates see each other's fighters and lasers.
 import * as THREE from 'three';
 import { G } from './state.js';
-import { addMsg, refreshHud } from './ui.js';
+import { addMsg, refreshHud, hidePrompt } from './ui.js';
 import { sfx } from './audio.js';
 import { spawnBurst } from './fx.js';
 import { saveReport } from './bridge.js';
@@ -243,86 +243,62 @@ function buildBomber() {
 export function inSpace() { return !!S; }
 export function _dbg() { return S ? { phase: S.phase, speed: +S.speed.toFixed(1), z: +S.ship.position.z.toFixed(1), kw: !!G.keys.KeyW } : (SB ? { boarding: SB.phase, t: +SB.t.toFixed(1) } : null); }
 
-// ---- BOARDING, for real this time. E lowers the ramp. You WALK up it into
-// the hold, past the benches, and stepping into the cockpit straps you into
-// the pilot seat — through the windshield is the actual hangar you're parked
-// in. The ramp seals, the reactor spools, and HOLD W flies the whole dropship
-// across the deck and out the mouth. ----
+// ---- BOARDING: press E at a parked fighter — the canopy slides open, you
+// climb in, it seals over you, the reactor spools, and HOLD W flies the ship
+// itself across the hangar and out the mouth. ----
 let SB = null;
 const _sv = new THREE.Vector3();
+const shipUp = (id) => (G.run?.shipUps?.[id] || 0);
 
 export function startBoarding(npc, drill = false) {
   if (S || SB) return;
   const fs = G.floors.get(G.floor);
   const bs = fs?.boardShips?.find((b) => {
     const u = b.userData.boardShip;
-    return (u.x - npc.x) ** 2 + (u.z - npc.z) ** 2 < 200;
+    return (u.x - npc.x) ** 2 + (u.z - npc.z) ** 2 < 260;
   });
   if (!bs) { // no physical ship on this deck — legacy instant launch
     startSpaceFlight(null, false, drill, { x: npc.x, z: npc.z, floor: G.floor });
     return;
   }
   const ud = bs.userData.boardShip;
-  ud.armed = { drill, boardAt: { x: npc.x, z: npc.z, floor: G.floor, yaw: ud.yaw } };
-  if (!ud.open) {
-    ud.open = true;
-    sfx.chest();
-    addMsg('Ramp coming down — climb aboard and take the cockpit seat.', 'gold');
-  }
-}
-
-// walking into the cockpit IS the trigger — no second keypress
-function checkSeat() {
-  const fs = G.floors.get(G.floor);
-  if (!fs?.boardShips || !G.player) return;
-  const p = G.player.obj.position;
-  for (const bs of fs.boardShips) {
-    const ud = bs.userData.boardShip;
-    if (!ud.armed || !ud.open) continue;
-    const c0 = Math.cos(ud.yaw), s0 = Math.sin(ud.yaw);
-    const dx = p.x - ud.x, dz = p.z - ud.z;
-    const lx = c0 * dx - s0 * dz, lz = s0 * dx + c0 * dz;
-    const inZone = Math.abs(lx) < 1.35 && lz > 2.2 && lz < 4.5 && p.y > 0.25 && p.y < 1.5;
-    if (ud.seatCd) { if (!inZone) ud.seatCd = false; continue; } // just unstrapped — step out first
-    if (inZone) {
-      bs.updateMatrixWorld(true);
-      SB = {
-        phase: 'seat', t: 0, bs, ud, speed: 0,
-        from: G.camera.position.clone(), fromQ: G.camera.quaternion.clone(),
-        seat: bs.localToWorld(new THREE.Vector3(0, 1.82, 3.45)),
-        seatQ: new THREE.Quaternion().setFromEuler(new THREE.Euler(0, ud.yaw + Math.PI, 0)),
-        drill: ud.armed.drill, boardAt: ud.armed.boardAt,
-      };
-      G.mode = 'space';
-      for (const c of G.camera.children) c.visible = false;
-      sfx.key();
-      addMsg('Strapping in…');
-      return;
-    }
-  }
+  ud.open = true; // canopy slides back (dungeon animates it)
+  bs.updateMatrixWorld(true);
+  const eye = bs.userData.seatEye || new THREE.Vector3(0, 2.0, 2.6);
+  SB = {
+    phase: 'canopy', t: 0, bs, ud, speed: 0, drill,
+    boardAt: { x: npc.x, z: npc.z, floor: G.floor, yaw: ud.yaw },
+    from: G.camera.position.clone(), fromQ: G.camera.quaternion.clone(),
+    seat: bs.localToWorld(eye.clone()),
+    seatQ: new THREE.Quaternion().setFromEuler(new THREE.Euler(0, ud.yaw + Math.PI, 0)),
+  };
+  G.mode = 'space';
+  for (const c of G.camera.children) c.visible = false;
+  hidePrompt();
+  sfx.chest();
+  addMsg('Canopy open — climbing in…');
 }
 
 // ---- THE COCKPIT KIT: the furniture you see from the pilot seat. ONE
-// builder used by the flight fighter AND the parked dropship, so the view
-// when you strap in on the deck is EXACTLY the view when you fly.
-// Frame: eye at origin, forward -z.
+// builder used by the flight fighter AND the parked deck fighter, so the
+// view when you climb in is EXACTLY the view when you fly — and it sits LOW
+// so it never crowds the windshield. Frame: eye at origin, forward -z.
 export function cockpitKit() {
   const g = new THREE.Group();
   const dark = new THREE.MeshStandardMaterial({ color: 0x2b3038, metalness: 0.4, roughness: 0.7 });
-  const hullM = new THREE.MeshStandardMaterial({ color: 0x525a64, metalness: 0.35, roughness: 0.7 });
   const scrM = new THREE.MeshBasicMaterial({ color: 0x1f6e66, toneMapped: false });
   const amberM = new THREE.MeshBasicMaterial({ color: 0x8a5a24, toneMapped: false });
-  const B = (mat, sx, sy, sz, x, y, z, ry = 0, rx = 0) => {
+  const B = (mat, sx, sy, sz, x, y, z, rx = 0, rz = 0) => {
     const m = new THREE.Mesh(new THREE.BoxGeometry(sx, sy, sz), mat);
     m.position.set(x, y, z);
-    m.rotation.set(rx, ry, 0);
+    m.rotation.set(rx, 0, rz);
     g.add(m); return m;
   };
-  B(dark, 3.1, 0.85, 0.95, 0, -0.84, -1.3);                       // console body
-  for (const wx of [-0.85, 0, 0.85]) B(scrM, 0.62, 0.05, 0.34, wx, -0.39, -1.17, 0, 0.3);
-  for (const wx of [-0.5, -0.15, 0.35]) B(amberM, 0.14, 0.05, 0.1, wx, -0.38, -1.5);
-  for (const sx of [-1, 1]) B(hullM, 0.42, 2.6, 2.6, sx * 1.62, 0.03, -2.55, sx * -0.5); // canopy cheeks
-  B(hullM, 3.0, 0.5, 2.2, 0, 1.53, -2.45, 0, -0.5);               // brow
+  B(dark, 1.9, 0.3, 0.55, 0, -0.64, -1.15);                        // slim dash
+  for (const wx of [-0.55, 0, 0.55]) B(scrM, 0.4, 0.04, 0.2, wx, -0.47, -1.1, 0.35);
+  for (const wx of [-0.3, 0, 0.3]) B(amberM, 0.1, 0.04, 0.07, wx, -0.48, -1.32);
+  for (const sx of [-1, 1]) B(dark, 0.08, 1.3, 0.08, sx * 0.95, 0.07, -1.0, 0, sx * 0.42); // A-pillars
+  B(dark, 1.7, 0.07, 0.07, 0, 0.74, -0.85);                        // top rail
   return g;
 }
 
@@ -340,50 +316,55 @@ function flashScreen() {
 }
 
 function launchHandoff(sealedHold = false) {
-  const { drill, boardAt, speed, ud, bs } = SB;
-  // put the dropship back on its pad, ramp sealed, for your return
+  const { drill, boardAt, speed, ud, bs, pre } = SB;
+  // put the fighter back on its pad, canopy sealed, for your return
   bs.position.set(ud.x, 0, ud.z);
   ud.open = false;
-  ud.armed = null;
-  if (bs.userData.rampGroup) bs.userData.rampGroup.rotation.x = bs.userData.rampClosed;
-  if (ud.doorCol) ud.doorCol.off = false;
+  if (bs.userData.canopyGroup) bs.userData.canopyGroup.position.copy(bs.userData.canClosed);
   SB = null;
   flashScreen();
   // a mouth launch already flew you out of a hangar — carry your speed and
   // skip the carrier bay-room launch; a sealed hold catapults you from it
-  startSpaceFlight(null, false, drill, boardAt, sealedHold ? null : { carrySpeed: Math.max(26, speed) });
+  startSpaceFlight(null, false, drill, boardAt, { pre, ...(sealedHold ? {} : { carrySpeed: Math.max(26, speed) }) });
 }
 
 function updateBoarding(dt) {
   SB.t += dt;
   const t = SB.t, ud = SB.ud, bs = SB.bs;
   const ease = (k) => k * k * (3 - 2 * k);
-  if (G.keys['Escape'] && SB.phase !== 'takeoff') { // unstrap — no soft-lock
+  if (G.keys['Escape'] && SB.phase !== 'takeoff') { // climb back out — no soft-lock
     G.keys['Escape'] = false;
     G.camera.quaternion.copy(SB.fromQ);
     for (const c of G.camera.children) c.visible = true;
     document.getElementById('waveHud')?.classList.add('hidden');
-    ud.open = true;     // ramp back down — you are not sealed in
-    ud.seatCd = true;   // don't re-strap until you step out of the cockpit
+    ud.open = false; // canopy seals behind you
+    if (SB.pre) SB.pre.scene.group.traverse((n) => { if (n.isMesh) n.geometry.dispose(); });
     G.mode = 'playing';
     SB = null;
-    addMsg('Unstrapped.');
+    addMsg('Climbed back out.');
     return;
   }
-  if (SB.phase === 'seat') {
-    const k = ease(Math.min(1, t / 1.1));
+  if (SB.phase === 'canopy') {
+    if (t >= 0.7) { SB.phase = 'mount'; SB.t = 0; }
+  } else if (SB.phase === 'mount') {
+    const k = ease(Math.min(1, t / 1.2));
     G.camera.position.lerpVectors(SB.from, SB.seat, k);
     G.camera.quaternion.slerpQuaternions(SB.fromQ, SB.seatQ, k);
-    if (t >= 1.1) {
+    if (t >= 1.2) {
       SB.phase = 'power'; SB.t = 0;
-      ud.open = false; // the ramp whines shut behind you
+      ud.open = false; // the canopy slides shut over you
       sfx.chest();
       sfx.rumble();
       G.shake = Math.max(G.shake || 0, 0.3);
-      addMsg('Ramp sealed. Reactor spooling… systems green.', 'gold');
+      addMsg('Canopy sealed. Reactor spooling… systems green.', 'gold');
+      // build the ENTIRE space scene NOW, while the reactor spools — the
+      // launch handoff is then instant (this is what killed the black gap)
+      const lvl = (G.run.patrolLvl || 0) + 1;
+      const comp = SB.drill ? { name: 'DOCKING DRILL', list: [], bombers: 0 } : compositionFor(lvl);
+      SB.pre = { lvl, comp, drill: SB.drill, scene: buildSpaceScene(lvl, comp) };
     }
   } else if (SB.phase === 'power') {
-    if (t >= 1.6) {
+    if (t >= 1.4) {
       SB.phase = 'ready'; SB.t = 0;
       document.getElementById('waveHud')?.classList.remove('hidden');
     }
@@ -399,10 +380,10 @@ function updateBoarding(dt) {
   } else if (SB.phase === 'takeoff') {
     if (G.keys['KeyW']) SB.speed = Math.min(40, SB.speed + 16 * dt);
     else SB.speed = Math.max(4, SB.speed - 10 * dt);
-    bs.position.y = Math.min(1.7, bs.position.y + 1.1 * dt); // off the pad
+    bs.position.y = Math.min(1.6, bs.position.y + 1.1 * dt); // off the pad
     const wh = document.getElementById('waveHud');
     if (SB.mouthZ != null) {
-      // fly the REAL hangar: it streams past the windshield on the way out
+      // fly the REAL hangar: it streams past the canopy on the way out
       const s0 = Math.sin(ud.yaw), c0 = Math.cos(ud.yaw);
       bs.position.x += s0 * SB.speed * dt;
       bs.position.z += c0 * SB.speed * dt;
@@ -415,19 +396,17 @@ function updateBoarding(dt) {
       G.shake = Math.max(G.shake || 0, 0.25);
       if (t > 1.5) { launchHandoff(true); return; }
     }
-    // camera riveted to the pilot seat
+    // camera riveted to the seat
     bs.updateMatrixWorld(true);
-    G.camera.position.copy(bs.localToWorld(_sv.set(0, 1.82, 3.45)));
+    const eye = bs.userData.seatEye || _sv.set(0, 2.0, 2.6);
+    G.camera.position.copy(bs.localToWorld(_sv.copy(eye)));
     G.camera.quaternion.copy(SB.seatQ);
   }
 }
 
-export function startSpaceFlight(level = null, fromNet = false, drill = false, boardAt = null, opts = null) {
-  if (S) return;
-  if (fromNet && G.mode !== 'playing') { addMsg('The patrol launched without you.'); return; }
-  const lvl = level ?? (G.run.patrolLvl || 0) + 1;
-  const comp = drill ? { name: 'DOCKING DRILL', list: [], bombers: 0 } : compositionFor(lvl);
-
+// everything in the sky, built once — either during the reactor spool
+// (instant handoff) or on demand (?fly=1 direct links)
+function buildSpaceScene(lvl, comp) {
   const group = new THREE.Group();
   group.position.copy(ORIGIN);
   group.add(starSphere());
@@ -444,7 +423,7 @@ export function startSpaceFlight(level = null, fromNet = false, drill = false, b
 
   const ship = buildFighter(false);
   ship.userData.vis.visible = false; // pure window cockpit
-  const kit = cockpitKit(); // the same console you strapped into on the deck
+  const kit = cockpitKit(); // the same console you climbed into on the deck
   kit.position.set(0, 0.78, -0.35);
   ship.add(kit);
   // you launch FROM the bay room, nose out (+z)
@@ -479,12 +458,25 @@ export function startSpaceFlight(level = null, fromNet = false, drill = false, b
     f.userData = { ...f.userData, i: idx++, type: 'bomber', hp: 8, state: 'attack', stateT: 0, fireT: 2, speed: 13, aim: CAP.clone().add(new THREE.Vector3((Math.random() - 0.5) * 80, (Math.random() - 0.5) * 16, (Math.random() - 0.5) * 30)) };
     group.add(f); foes.push(f);
   }
+  return { group, ship, foes };
+}
+
+export function startSpaceFlight(level = null, fromNet = false, drill = false, boardAt = null, opts = null) {
+  if (S) return;
+  if (fromNet && G.mode !== 'playing') { addMsg('The patrol launched without you.'); return; }
+  const pre = opts?.pre;
+  const lvl = pre?.lvl ?? level ?? (G.run.patrolLvl || 0) + 1;
+  const comp = pre?.comp ?? (drill ? { name: 'DOCKING DRILL', list: [], bombers: 0 } : compositionFor(lvl));
+  // prebuilt during the reactor spool (instant, no black gap) or built now
+  const { group, ship, foes } = pre?.scene ?? buildSpaceScene(lvl, comp);
   G.scene.add(group);
 
   S = {
     group, ship, foes, bolts: [], fx: [], remote: new Map(),
     speed: 0, vel: new THREE.Vector3(0, 0, 0), bank: 0, weapon: 0,
-    hull: 100, carrierHp: 100, kills: 0, t: 0, fireCd: 0, level: lvl, comp,
+    hull: 100 + 25 * shipUp('hull'), maxHull: 100 + 25 * shipUp('hull'),
+    maxSpeed: 70 + 8 * shipUp('engine'),
+    carrierHp: 100, kills: 0, t: 0, fireCd: 0, level: lvl, comp,
     phase: 'launch', afterLaunch: drill ? 'dock' : 'fight', drill, boardAt, netT: 0, foeT: 0, scrapeT: 0,
     time0: G.time || 0, prevFog: G.scene.fog.density, prevBg: G.scene.background.getHex(), prevFar: G.camera.far,
     isHost: G.net.role !== 'guest',
@@ -627,12 +619,12 @@ export function spaceFire() {
   if (!S || S.fireCd > 0) return;
   const dir = new THREE.Vector3(0, 0, -1).applyQuaternion(S.ship.quaternion);
   const w = S.weapon;
-  S.fireCd = WEAPONS[w].cd;
+  S.fireCd = WEAPONS[w].cd * (1 - 0.12 * shipUp('guns'));
   if (w === 0) {
     // PULSE: twin fast lasers off the wingtips
     for (const side of [-1, 1]) {
       const off = new THREE.Vector3(side * 2.95, 0, -1.5).applyQuaternion(S.ship.quaternion);
-      mkBolt(S.ship.position.clone().add(off), dir, {});
+      mkBolt(S.ship.position.clone().add(off), dir, { dmg: 1 + Math.floor(shipUp('guns') / 2) });
     }
   } else if (w === 1) {
     // SCATTER: a cone of six short-lived bolts — brutal up close
@@ -715,7 +707,6 @@ export function onSpaceNet(m, pid) {
 
 export function updateSpace(dt) {
   window.__sph = SB ? 'sb:' + SB.phase : (S ? S.phase : null); // probe hook
-  if (!S && !SB && G.mode === 'playing') checkSeat();
   if (SB) { updateBoarding(dt); return; }
   if (!S) return;
   S.t += dt;
@@ -764,7 +755,7 @@ export function updateSpace(dt) {
   }
 
   // FULLY BUTTON-DRIVEN, TRUE COCKPIT AXES — loops, rolls, inverted, all of it
-  if (G.keys['KeyW']) S.speed = Math.min(70, S.speed + 30 * dt);
+  if (G.keys['KeyW']) S.speed = Math.min(S.maxSpeed, S.speed + 30 * dt);
   if (G.keys['KeyS']) S.speed = Math.max(12, S.speed - 34 * dt);
   const yawIn = (G.keys['ArrowLeft'] ? 1 : 0) - (G.keys['ArrowRight'] ? 1 : 0);
   const pitchIn = (G.keys['ArrowUp'] ? 1 : 0) - (G.keys['ArrowDown'] ? 1 : 0);
@@ -1012,13 +1003,15 @@ export function updateSpace(dt) {
   }
   // the health bar is your SHIP now
   const hpfill = document.getElementById('hpfill'), hptext = document.getElementById('hptext');
-  if (hpfill) hpfill.style.width = `${Math.max(0, S.hull)}%`;
-  if (hptext) hptext.textContent = `HULL ${Math.max(0, Math.round(S.hull))} / 100`;
+  if (hpfill) hpfill.style.width = `${Math.max(0, (S.hull / S.maxHull) * 100)}%`;
+  if (hptext) hptext.textContent = `HULL ${Math.max(0, Math.round(S.hull))} / ${S.maxHull}`;
   drawDomeRadar(alive);
 }
 
-// ---- the DOME RADAR: 3D positions inside the force sphere (Elite-style
-// stalks: dot = where it is, stalk = how far above/below the carrier plane) ----
+// ---- the CUBE RADAR: the dome was hard to read, so — a box. Isometric
+// wireframe cube of the battle volume, you at the center; every contact is a
+// little CUBE with a stalk down to the mid-plane (stalk length = how far
+// above/below you it is; grid square = where it is around you) ----
 function drawDomeRadar(alive) {
   const cv = document.getElementById('minimap');
   if (!cv) return;
@@ -1027,28 +1020,50 @@ function drawDomeRadar(alive) {
   ctx.clearRect(0, 0, W, H);
   ctx.fillStyle = 'rgba(4, 12, 16, 0.85)';
   ctx.fillRect(0, 0, W, H);
-  const cx = W / 2, cy = H / 2 + 8, R = W * 0.42;
-  const sc = R / FIELD_R, squash = 0.34, lift = 0.5;
-  // the dome: outer circle + equator ellipse
-  ctx.strokeStyle = 'rgba(79, 232, 224, 0.5)';
-  ctx.lineWidth = 1.5;
-  ctx.beginPath(); ctx.arc(cx, cy, R, 0, Math.PI * 2); ctx.stroke();
-  ctx.strokeStyle = 'rgba(79, 232, 224, 0.25)';
-  ctx.beginPath(); ctx.ellipse(cx, cy, R, R * squash, 0, 0, Math.PI * 2); ctx.stroke();
-  const blip = (p, color, r2 = 3) => {
-    const bx = cx + p.x * sc, by = cy + p.z * sc * squash;
-    const ty = by - p.y * sc * lift;
-    ctx.strokeStyle = color; ctx.lineWidth = 1;
-    ctx.beginPath(); ctx.moveTo(bx, by); ctx.lineTo(bx, ty); ctx.stroke();
-    ctx.fillStyle = color;
-    ctx.beginPath(); ctx.arc(bx, ty, r2, 0, Math.PI * 2); ctx.fill();
+  const R = FIELD_R;
+  const cx = W / 2, cy = H / 2 + 6;
+  const sc = (W / 2 - 10) / (2 * R * 0.72);
+  const P = (x, y, z) => { // clamp into the cube, then isometric-project
+    x = Math.max(-R, Math.min(R, x)); y = Math.max(-R, Math.min(R, y)); z = Math.max(-R, Math.min(R, z));
+    return [cx + (x - z) * 0.72 * sc, cy + (x + z) * 0.38 * sc - y * 0.5 * sc];
   };
-  // the carrier: a slab on the plane
+  const edge = (a, b, alpha) => {
+    ctx.strokeStyle = `rgba(79, 232, 224, ${alpha})`;
+    ctx.beginPath(); ctx.moveTo(a[0], a[1]); ctx.lineTo(b[0], b[1]); ctx.stroke();
+  };
+  ctx.lineWidth = 1;
+  const C = {};
+  for (const sy of [-1, 1]) for (const sx of [-1, 1]) for (const sz of [-1, 1]) C[`${sx},${sy},${sz}`] = P(sx * R, sy * R, sz * R);
+  // bottom face bright, top face + verticals faint
+  edge(C['-1,-1,-1'], C['1,-1,-1'], 0.5); edge(C['1,-1,-1'], C['1,-1,1'], 0.5);
+  edge(C['1,-1,1'], C['-1,-1,1'], 0.5); edge(C['-1,-1,1'], C['-1,-1,-1'], 0.5);
+  edge(C['-1,1,-1'], C['1,1,-1'], 0.18); edge(C['1,1,-1'], C['1,1,1'], 0.18);
+  edge(C['1,1,1'], C['-1,1,1'], 0.18); edge(C['-1,1,1'], C['-1,1,-1'], 0.18);
+  for (const sx of [-1, 1]) for (const sz of [-1, 1]) edge(C[`${sx},-1,${sz}`], C[`${sx},1,${sz}`], 0.14);
+  // the mid-plane (your plane): a faint diamond with a cross
+  edge(P(-R, 0, -R), P(R, 0, -R), 0.28); edge(P(R, 0, -R), P(R, 0, R), 0.28);
+  edge(P(R, 0, R), P(-R, 0, R), 0.28); edge(P(-R, 0, R), P(-R, 0, -R), 0.28);
+  edge(P(-R, 0, 0), P(R, 0, 0), 0.12); edge(P(0, 0, -R), P(0, 0, R), 0.12);
+  // a contact: stalk to the mid-plane, then a solid CUBE glyph
+  const blip = (p, color, s2 = 3) => {
+    const rel = { x: p.x - S.ship.position.x, y: p.y - S.ship.position.y, z: p.z - S.ship.position.z };
+    const at = P(rel.x, rel.y, rel.z), base = P(rel.x, 0, rel.z);
+    ctx.strokeStyle = color; ctx.globalAlpha = 0.55;
+    ctx.beginPath(); ctx.moveTo(base[0], base[1]); ctx.lineTo(at[0], at[1]); ctx.stroke();
+    ctx.globalAlpha = 1;
+    ctx.fillStyle = color;
+    ctx.fillRect(at[0] - s2, at[1] - s2, s2 * 2, s2 * 2);              // front face
+    ctx.beginPath();                                                   // top face (lighter)
+    ctx.moveTo(at[0] - s2, at[1] - s2); ctx.lineTo(at[0] - s2 + s2, at[1] - s2 - s2 * 0.7);
+    ctx.lineTo(at[0] + s2 + s2, at[1] - s2 - s2 * 0.7); ctx.lineTo(at[0] + s2, at[1] - s2);
+    ctx.closePath();
+    ctx.globalAlpha = 0.55; ctx.fill(); ctx.globalAlpha = 1;
+  };
+  // the carrier: a slab, relative to you like everything else
+  const cb = P(CAP.x - S.ship.position.x, CAP.y - S.ship.position.y, CAP.z - S.ship.position.z);
   ctx.fillStyle = 'rgba(170, 185, 200, 0.9)';
-  const cbx = cx + CAP.x * sc, cby = cy + CAP.z * sc * squash - CAP.y * sc * lift * 0; // she IS the plane
-  ctx.fillRect(cbx - 16, cy + CAP.z * sc * squash - 2, 32, 4);
+  ctx.fillRect(cb[0] - 12, cb[1] - 2, 24, 4);
   if (S.phase === 'dock') blip(DOCK, '#7fffee', 3.5);
-  // foes by tier, torpedoes, wingmates, you
   for (const f of S.foes) {
     if (f.userData.hp <= 0) continue;
     const c = f.userData.type === 'bomber' ? '#88ff55' : ({ raider: '#ff8855', interceptor: '#ff66ee', gunship: '#bb66ff' })[f.userData.tier] || '#ff8855';
@@ -1056,7 +1071,11 @@ function drawDomeRadar(alive) {
   }
   for (const b of S.bolts) if (b.userData.torp) blip(b.position, '#caff70', 2);
   for (const r of S.remote.values()) blip(r.grp.position, '#7fd8ff', 3);
-  blip(S.ship.position, '#5cff8a', 3.6);
+  // YOU: always dead center of the cube
+  ctx.fillStyle = '#5cff8a';
+  ctx.fillRect(cx - 3, cy - 3, 6, 6);
+  ctx.strokeStyle = 'rgba(92, 255, 138, 0.5)';
+  ctx.strokeRect(cx - 5, cy - 5, 10, 10);
 }
 
 function foeShot(f, nose, color = 0xff5533) {
