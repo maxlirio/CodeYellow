@@ -23,7 +23,7 @@ import {
 } from './missions.js';
 import { openTrainRoom, setSkillHooks } from './skills.js';
 import { updateSpace, spaceMouse, spaceFire, inSpace, startSpaceFlight, setSpaceHooks, spaceSetWeapon, startBoarding, spaceCycleLock } from './space.js';
-import { startLandfall, updateLandfall, inLandfall, landfallCycleLock, landfallDrop } from './landfall.js';
+import { startArrival, updateArrival, updateLandfall, inLandfall, landfallCycleLock, landfallDrop } from './landfall.js';
 import { initViewmodel, updateViewmodel } from './viewmodel.js';
 import { updateWalls, clearWalls } from './walls.js';
 import { initFloorTraps, updateTraps } from './traps.js';
@@ -114,7 +114,15 @@ async function boot() {
     startRun(params.get('seed') || randomSeed(), params.get('mode') || 'campaign');
     // ?fly=1 — straight into the cockpit, no clears required
     if (params.get('fly')) setTimeout(() => startSpaceFlight(null, false, !!params.get('dock')), 600);
-    if (params.get('bomb')) setTimeout(() => startLandfall(), 600);
+    if (params.get('bomb')) {
+      G.fastArrival = true;
+      setTimeout(() => {
+        beginSortie('landfall');
+        const poll = setInterval(() => {
+          if (G.sortie?.portalReady) { clearInterval(poll); enterSortie(); }
+        }, 300);
+      }, 800);
+    }
     // ?hangar=1 — spawn into a CLEARED hangar deck: walk to a dropship and board it
     if (params.get('hangar')) {
       // boarding launches a LIVE patrol (add ?drill=1 for the empty-sky version)
@@ -350,7 +358,7 @@ function setupMenu() {
     onMission: (m) => onRemoteMission(m),
     onMissionEnd: () => onRemoteMissionEnd(),
   });
-  setMissionHooks({ goto: descendTo, disposeFloor, lock: lockPointer, landfall: startLandfall });
+  setMissionHooks({ goto: descendTo, disposeFloor, lock: lockPointer, landfall: () => startArrival(!!G.fastArrival) });
   setSkillHooks({ lock: lockPointer });
   setSpaceHooks({ onCarrierLost: () => {
     addMsg('THE CARRIER IS GONE. There is no ship to come home to.', 'bad');
@@ -561,6 +569,12 @@ function applyThemeAtmosphere(fs) {
   G.lights.hemi.intensity = 0.85 * (dark < 1 ? 0.55 : 1) * sunny;
   G.lights.amb.intensity = 0.7 * (dark < 1 ? 0.55 : 1) * sunny;
   G.lights.sun.intensity = th.sun ? 1.2 : 0; // daylight only above ground
+  // a landfall deck looks 300m down at a planet — push the horizon out
+  const wantFar = fs.grid?.landfall ? 3600 : 340;
+  if (G.camera.far !== wantFar && G.mode !== 'space') {
+    G.camera.far = wantFar;
+    G.camera.updateProjectionMatrix();
+  }
   G.torchColor = th.torch;
 }
 
@@ -1232,6 +1246,7 @@ function loop(t) {
     updatePlayer(dt);
     updateDeath(dt);
     setCrosshairAiming(!!G.player?.aiming);
+    updateArrival(dt); // the carrier jumping/descending outside the bridge glass
   } else if (G.player && simActive) {
     G.player.anim.update(dt);
   }

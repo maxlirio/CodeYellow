@@ -62,6 +62,21 @@ export function beginSortie(secId, seed = null, n = null, fromNet = false, diff 
   const sec = sectionById(secId);
   if (!sec) return;
   sortieCount = n ?? sortieCount + 1;
+  if (sec.id === 'landfall') {
+    // the FINALE: the ship itself moves. Jump cinematic first; the portal
+    // opens only when the descent levels off (landfallPortalReady below).
+    G.sortie = {
+      id: sec.id, name: sec.name, floorN: sec.floorN, diff: 0,
+      seed: seed || `${G.seed}:landfall`, n: sortieCount, active: true, entered: false,
+    };
+    setSortieOverride({ floorN: sec.floorN, theme: 'landfall', roles: ['cargo', 'machine', 'barracks'], special: 'landfall' });
+    if (G.floor !== sec.floorN) hooks.disposeFloor?.(sec.floorN);
+    alerted = true;
+    sfx.stairs();
+    hooks.landfall?.();
+    if (!fromNet) netSend({ t: 'mission', sec: sec.id, seed: G.sortie.seed, n: sortieCount, diff: 0 });
+    return;
+  }
   G.sortie = {
     id: sec.id, name: sec.name, floorN: sec.floorN, diff,
     seed: seed || `${G.seed}:sortie${sortieCount}`, n: sortieCount,
@@ -76,6 +91,14 @@ export function beginSortie(secId, seed = null, n = null, fromNet = false, diff 
   addMsg(`Sortie confirmed: ${sec.name}. The breach portal is open.`, 'gold');
   sfx.stairs();
   if (!fromNet) netSend({ t: 'mission', sec: sec.id, seed: G.sortie.seed, n: sortieCount, diff });
+}
+
+// the arrival cinematic ends -> the breach portal lights up
+export function landfallPortalReady() {
+  if (!G.sortie || G.sortie.id !== 'landfall') return;
+  G.sortie.portalReady = true;
+  portalSet(true);
+  sfx.levelup();
 }
 
 export function onRemoteMission(m) {
@@ -266,8 +289,9 @@ function renderMap() {
         <p>Fly the bomber. LOCK a shield pylon (T), line the run up on the bombsight, release when it flashes RED (SPACE). Six bombs — rearm at the carrier's ring. Kill the grid, then land on the beacon.</p>
         <button id="mmConfirm">LAUNCH BOMBER</button>`;
       document.getElementById('mmConfirm').onclick = () => {
+        if (G.net?.role === 'guest') { addMsg('Only the squad lead can task a sortie.', 'bad'); return; }
+        beginSortie(sec.id);
         closeMissionMap();
-        hooks.landfall?.();
       };
       return;
     }

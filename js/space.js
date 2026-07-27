@@ -248,6 +248,10 @@ export function _dbg() { return S ? { phase: S.phase, speed: +S.speed.toFixed(1)
 // itself across the hangar and out the mouth. ----
 let SB = null;
 const _sv = new THREE.Vector3();
+// a LANDFALL deck hands the takeoff to landfall.js (registered there — no
+// import cycle) — same scene, same coordinates, no seam
+let landfallHook = null;
+export function setLandfallHook(fn) { landfallHook = fn; }
 const shipUp = (id) => (G.run?.shipUps?.[id] || 0);
 
 export function startBoarding(npc, drill = false) {
@@ -317,6 +321,21 @@ function flashScreen() {
 
 function launchHandoff(sealedHold = false) {
   const { drill, boardAt, speed, ud, bs, pre } = SB;
+  // LANDFALL deck: no scene swap at all — the flight continues in the same
+  // world the deck lives in, from the exact spot you crossed the mouth
+  if (G.floors.get(G.floor)?.grid?.landfall && landfallHook) {
+    const from = {
+      pos: bs.position.clone().add(new THREE.Vector3(0, 1.85, 0)),
+      quat: new THREE.Quaternion().setFromEuler(new THREE.Euler(0, ud.yaw + Math.PI, 0)),
+      speed, boardAt,
+    };
+    bs.position.set(ud.x, 0, ud.z);
+    ud.open = false;
+    if (bs.userData.canopyGroup) bs.userData.canopyGroup.position.copy(bs.userData.canClosed);
+    SB = null;
+    landfallHook(from);
+    return;
+  }
   // put the fighter back on its pad, canopy sealed, for your return
   bs.position.set(ud.x, 0, ud.z);
   ud.open = false;
@@ -358,10 +377,13 @@ function updateBoarding(dt) {
       G.shake = Math.max(G.shake || 0, 0.3);
       addMsg('Canopy sealed. Reactor spooling… systems green.', 'gold');
       // build the ENTIRE space scene NOW, while the reactor spools — the
-      // launch handoff is then instant (this is what killed the black gap)
-      const lvl = (G.run.patrolLvl || 0) + 1;
-      const comp = SB.drill ? { name: 'DOCKING DRILL', list: [], bombers: 0 } : compositionFor(lvl);
-      SB.pre = { lvl, comp, drill: SB.drill, scene: buildSpaceScene(lvl, comp) };
+      // launch handoff is then instant (this is what killed the black gap).
+      // A LANDFALL deck skips this: its world is ALREADY out the mouth.
+      if (!G.floors.get(G.floor)?.grid?.landfall) {
+        const lvl = (G.run.patrolLvl || 0) + 1;
+        const comp = SB.drill ? { name: 'DOCKING DRILL', list: [], bombers: 0 } : compositionFor(lvl);
+        SB.pre = { lvl, comp, drill: SB.drill, scene: buildSpaceScene(lvl, comp) };
+      }
     }
   } else if (SB.phase === 'power') {
     if (t >= 1.4) {

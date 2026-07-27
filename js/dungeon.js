@@ -364,6 +364,9 @@ export function generateDragonLair(seedStr, floor) {
 }
 
 export function generateFloorData(seedStr, floor) {
+  // deck 9 is OPERATION LANDFALL now (the hangar over the planet), not the
+  // old dragon lair — the sortie override carries the landfall special
+  if (floor === 9 && G.sortie?.id === 'landfall') return generateShipDeck(seedStr, floor);
   if (floor > 0 && floor % 9 === 0) return generateDragonLair(seedStr, floor);
   // sci-fi branch: every ordinary floor is a deck of the hulk
   if (floor > 0) return generateShipDeck(seedStr, floor);

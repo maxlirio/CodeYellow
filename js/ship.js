@@ -58,6 +58,13 @@ export const SHIP_THEMES = [
     hemi: 0xeae2ff, amb: 0xa79cd4, torch: 0xb090ff, accent: 0x8a5cff, boost: 1.45,
     tiles: ['floor_tile_large'], props: [], banners: [], bias: [],
   },
+  {
+    // LANDFALL: the hangar deck parked over a bright green planet — daylight
+    // haze floods in through the mouth. Dagobah colors, not ship-gloom.
+    id: 'landfall', name: 'Landfall Station', fog: 0xb9c29b, density: 0.00055,
+    hemi: 0xfff6dd, amb: 0xcfd2b0, torch: 0xffd9a0, accent: 0x4fe8e0, boost: 1.6,
+    tiles: ['floor_tile_large'], props: [], banners: [], bias: [],
+  },
 ];
 
 // sortie override: missions.js pins a section's identity so the ENGINE ROOM
@@ -98,7 +105,8 @@ export function generateShipDeck(seedStr, floor) {
 
   // THE SPACE PORT sortie skips the BSP: one vast hangar hall aft, a service
   // strip forward, and the whole south wall open to space (the mouth)
-  const hangarMode = !!(sortieOverride && floor === sortieOverride.floorN && sortieOverride.special === 'hangar');
+  const landfallMode = !!(sortieOverride && floor === sortieOverride.floorN && sortieOverride.special === 'landfall');
+  const hangarMode = landfallMode || !!(sortieOverride && floor === sortieOverride.floorN && sortieOverride.special === 'hangar');
 
   // each section ARCHITECTURE differs structurally, not just in paint:
   // cargo carves canyon halls, hab warrens small rooms, engineering opens
@@ -363,7 +371,7 @@ export function generateShipDeck(seedStr, floor) {
   // slides open on E (no walk-in — you climb into the seat). Local frame:
   // nose +z; yaw rotates the whole thing (0 or ±π/2, colliders stay AABB).
   let bsN = 0;
-  const addBoardship = (cxw, cyw, yaw) => {
+  const addBoardship = (cxw, cyw, yaw, bomber = false) => {
     const id = 'bs' + (bsN++);
     const c0 = Math.cos(yaw), s0 = Math.sin(yaw);
     const P = (lx, lz, hx, hz, y0, h) => {
@@ -374,9 +382,9 @@ export function generateShipDeck(seedStr, floor) {
     P(0, 1.2, 1.05, 5.6, 0, 2.3);   // fuselage
     P(0, 8.0, 0.6, 1.9, 0, 1.5);    // needle nose
     for (const sx of [-1, 1]) P(sx * 3.4, -1.6, 2.5, 2.3, 0, 0.9); // wing slabs
-    shipDecor.push({ kind: 'boardship', x: cxw, z: cyw, yaw, id });
-    deckNpcs.push({ model: null, noModel: true, sign: false, name: 'Fighter', shop: 'board_ship',
-      label: 'BOARD FIGHTER — FLY THE VOID PATROL', x: cxw - 8.4 * s0, z: cyw - 8.4 * c0 });
+    shipDecor.push({ kind: 'boardship', x: cxw, z: cyw, yaw, id, bomber });
+    deckNpcs.push({ model: null, noModel: true, sign: false, name: bomber ? 'Bomber' : 'Fighter', shop: 'board_ship',
+      label: bomber ? 'BOARD BOMBER — FLY THE RUN' : 'BOARD FIGHTER — FLY THE VOID PATROL', x: cxw - 8.4 * s0, z: cyw - 8.4 * c0 });
   };
 
   // ---- BALCONIES: a second level along one wall of the big holds, reached
@@ -452,7 +460,7 @@ export function generateShipDeck(seedStr, floor) {
     } else if (l.role === 'bay') {
       // THE HANGAR: a row of parked fighters, noses at the ONE big mouth.
       // Every one of them is boardable.
-      const n = Math.min(3, Math.max(2, Math.floor((l.w - 6) / 8)));
+      const n = landfallMode ? 1 : Math.min(3, Math.max(2, Math.floor((l.w - 6) / 8)));
       const rowCy = l.y + Math.floor(l.h * 0.5);
       const step = Math.floor((l.w - 6) / n);
       for (let i = 0; i < n; i++) {
@@ -461,7 +469,7 @@ export function generateShipDeck(seedStr, floor) {
         for (let dy = -2; dy <= 2; dy++) for (let dx = -2; dx <= 2; dx++)
           if (at(cx2 + dx, cy2 + dy) !== FLOOR || elev[idxOf(cx2 + dx, cy2 + dy)]) open = false;
         if (!open) continue;
-        addBoardship(cx2 * CELL, cy2 * CELL, 0);
+        addBoardship(cx2 * CELL, cy2 * CELL, 0, landfallMode);
         for (let dy = -2; dy <= 2; dy++) for (let dx = -2; dx <= 2; dx++) occupied.add(idxOf(cx2 + dx, cy2 + dy));
       }
       for (let i = 0; i < rng.int(3, 5); i++) crate(inset.x + rng.int(0, inset.w - 1), inset.y + 1 + rng.int(0, 2), false);
@@ -760,6 +768,7 @@ export function generateShipDeck(seedStr, floor) {
 
   // ================= enemies =================
   const enemySpawns = [];
+  const noFoes = landfallMode; // the landfall deck is OUR deck — no boarders
   const pool = mutator?.poolOverride ? mutator.poolOverride.slice() : enemyPool(floor).concat(theme.bias);
   const eChance = eliteChance(floor);
   const countMult = mutator?.countMult ?? 1;
@@ -793,6 +802,7 @@ export function generateShipDeck(seedStr, floor) {
     enemySpawns.push({ type: bossType, x: liftHold.cx * CELL, z: liftHold.cy * CELL, y: 0 });
   }
   const packSpawns = [];
+  if (noFoes) enemySpawns.length = 0;
   for (const s of enemySpawns) {
     if (TRIO.has(s.type)) {
       for (let i = 0; i < 2; i++) {
@@ -861,7 +871,7 @@ export function generateShipDeck(seedStr, floor) {
 
   const grid = {
     w, h, cells, elev, ramps, rooms: holds, colliders,
-    mouth, gravlifts, tall,
+    mouth, gravlifts, tall, landfall: landfallMode,
     spawn: { x: spawnCell.x * CELL, z: spawnCell.y * CELL },
     spawnYaw,
     stairs: { x: portal.x * CELL, z: portal.y * CELL, cx: portal.x, cy: portal.y },

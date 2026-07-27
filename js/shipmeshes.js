@@ -10,7 +10,8 @@ import * as THREE from 'three';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import { CELL, PLATFORM_H } from './config.js';
 import { makePiece } from './assets.js';
-import { buildCarrier, buildFighter, cockpitKit } from './space.js';
+import { buildCarrier, buildFighter, buildBomber, cockpitKit } from './space.js';
+import { buildWorldBelow } from './landfall.js';
 
 const WALL_H = 7;    // bulkhead height
 const CEIL_H = 7;    // deck ceiling
@@ -140,12 +141,12 @@ function buildBoardship(d, mats) {
   const ring = new THREE.Mesh(new THREE.CylinderGeometry(6.4, 6.4, 0.05, 26, 1, true), mats.accent);
   ring.position.y = 0.05;
   grp.add(ring);
-  // the airframe itself — the flight dart at 2x, nose +z, tiny canopy hidden
-  // (the walk-up canopy below replaces it)
-  const inner = buildFighter(false);
+  // the airframe itself — the flight dart at 2x (or the fat BOMBER on a
+  // landfall deck), nose +z, tiny canopy hidden (the sliding one replaces it)
+  const inner = d.bomber ? buildBomber() : buildFighter(false);
   inner.rotation.y = Math.PI;
-  inner.scale.setScalar(2.0);
-  inner.position.y = 1.2;
+  inner.scale.setScalar(d.bomber ? 1.5 : 2.0);
+  inner.position.y = d.bomber ? 1.3 : 1.2;
   inner.traverse((n) => { if (n.name === 'canopy') n.visible = false; });
   grp.add(inner);
   // skids
@@ -187,6 +188,13 @@ function buildBoardship(d, mats) {
   grp.userData.canopyGroup = can;
   grp.userData.canClosed = new THREE.Vector3(0, 1.95, 2.55);
   grp.userData.canOpen = new THREE.Vector3(0, 2.45, -0.4);
+  if (d.bomber) { // the bomber sits taller and further forward
+    kit.position.set(0, 2.75, 2.3);
+    grp.userData.seatEye = new THREE.Vector3(0, 2.75, 2.3);
+    can.position.set(0, 2.3, 2.5);
+    grp.userData.canClosed = new THREE.Vector3(0, 2.3, 2.5);
+    grp.userData.canOpen = new THREE.Vector3(0, 2.85, -0.9);
+  }
   // pad floods so the ship reads across the hangar
   const lamp = new THREE.PointLight(0x9fdcff, 5, 12, 1.8);
   lamp.position.set(0, 4, 2);
@@ -624,19 +632,25 @@ export function buildShipStatic(fs) {
     );
     field.position.set((mx0 + mx1) / 2, (MH2 - 1.4) / 2 + 0.5, mz);
     group.add(field);
-    const stars = new THREE.Mesh(
-      new THREE.PlaneGeometry(mx1 - mx0 + 260, 120),
-      new THREE.MeshBasicMaterial({ map: makeStarTex(), toneMapped: false, fog: false })
-    );
-    stars.position.set((mx0 + mx1) / 2, 10, mz + 92);
-    stars.rotation.y = Math.PI; // face back into the hangar
-    group.add(stars);
-    // THE BATTLE OUTSIDE: a live dogfight raging beyond the mouth — it was
-    // already underway when you got here, and it doesn't stop for you
-    addWar(group, {
-      x0: mx0 - 30, x1: mx1 + 30, y0: -4, y1: 26, z0: mz + 10, z1: mz + 80,
-    }, 5, 2, 0.85);
+    if (!g.landfall) {
+      const stars = new THREE.Mesh(
+        new THREE.PlaneGeometry(mx1 - mx0 + 260, 120),
+        new THREE.MeshBasicMaterial({ map: makeStarTex(), toneMapped: false, fog: false })
+      );
+      stars.position.set((mx0 + mx1) / 2, 10, mz + 92);
+      stars.rotation.y = Math.PI; // face back into the hangar
+      group.add(stars);
+      // THE BATTLE OUTSIDE: a live dogfight raging beyond the mouth — it was
+      // already underway when you got here, and it doesn't stop for you
+      addWar(group, {
+        x0: mx0 - 30, x1: mx1 + 30, y0: -4, y1: 26, z0: mz + 10, z1: mz + 80,
+      }, 5, 2, 0.85);
+    }
   }
+
+  // LANDFALL: the planet renders BELOW the deck in this same group — the
+  // city 300m down, haze horizons, daylight. One world.
+  if (g.landfall) buildWorldBelow(group);
 
   // THE BRIDGE: starfield wrapped all the way around, a central holo table,
   // and stations built into the wall as SCREENS — a control room, not an office

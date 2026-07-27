@@ -1,97 +1,180 @@
-// OPERATION LANDFALL, ACT I — THE BOMBING RUN.
-// The carrier has arrived over a civilization the aliens took. You fly a
-// BOMBER down into the flak, LOCK a shield pylon (T), line the run up on the
-// BOMBSIGHT monitor until it flashes red, and release (SPACE). Six bombs
-// aboard — dry, and you climb all the way back to the carrier's resupply
-// ring to rearm. Kill every pylon and AA battery, then land on the beacon.
-// Skill checklist: heading, speed and altitude all bend the impact point;
-// AA leads you, terrain kills you, and the release window is real.
+// OPERATION LANDFALL — ONE WORLD. The carrier's hangar deck hangs 300 meters
+// over an occupied planet: the city renders BELOW the deck in the same scene,
+// visible through the hangar mouth. You board the bomber on the deck, fly out
+// the mouth, dive, bomb, and when you're dry you fly BACK IN through the
+// mouth and set down on the pad — real docking, no rings, no mode swaps.
+// The world is Dagobah-bright: yellow-greens, greys, browns, haze horizons.
+//
+// The arrival: confirm the op at the holo table and the ship JUMPS — the
+// bridge windows streak into hyperspace, drop out in front of the planet,
+// descend, and the ship's voice clears you down to the bay.
 import * as THREE from 'three';
 import { G } from './state.js';
 import { addMsg, refreshHud } from './ui.js';
 import { sfx } from './audio.js';
 import { saveReport } from './bridge.js';
+import { landfallPortalReady } from './missions.js';
 import {
-  buildBomber, buildCarrier, cockpitKit, drawLockAt, hideLockWidgets,
+  buildBomber, cockpitKit, drawLockAt, hideLockWidgets, setLandfallHook,
 } from './space.js';
+import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 
-const ORIGIN = new THREE.Vector3(0, 3000, 0);   // the sky over the city
-const CARRIER_Y = 420;
+const CITY_Y = -300;       // the city, below the deck (deck floor = y 0)
 const GRAV = 28;
-const RELEASE_R = 10;      // impact-to-target distance that counts as "on"
+const RELEASE_R = 10;
 const MAX_BOMBS = 6;
 
-let L = null;
+let LW = null;   // the world below (built with the deck): targets, lz, refs
+let L = null;    // flight state (only while flying the bomber)
+let A = null;    // arrival cinematic state (on the bridge)
+
 export function inLandfall() { return !!L; }
+export function _L() { return L; }
+export function _LW() { return LW; }
 export function _dbgL() {
   return L ? {
     phase: L.phase, bombs: L.bombs, hull: Math.round(L.hull),
-    left: L.targets.filter((t) => t.hp > 0).length,
+    left: LW ? LW.targets.filter((t) => t.hp > 0).length : -1,
     p: L.ship.position.toArray().map((v) => +v.toFixed(1)),
   } : null;
 }
 
 const shipUp = (id) => (G.run?.shipUps?.[id] || 0);
-export function _L() { return L; } // probe access
-export function landfallDrop() { if (L && L.phase === 'run') dropBomb(); }
 
-// ---------------- the occupied city ----------------
-function buildCity(group) {
-  const dark = new THREE.MeshStandardMaterial({ color: 0x232833, metalness: 0.3, roughness: 0.85 });
-  const dark2 = new THREE.MeshStandardMaterial({ color: 0x1a1f28, metalness: 0.3, roughness: 0.9 });
-  const winM = new THREE.MeshBasicMaterial({ color: 0xffc37a, toneMapped: false });
-  const hiveM = new THREE.MeshBasicMaterial({ color: 0x39e8c8, toneMapped: false });
-  const geosA = [], geosB = [], geosW = [], geosH = [];
+function say(text) {
+  try {
+    const u = new SpeechSynthesisUtterance(text);
+    u.rate = 0.92;
+    u.pitch = 1.2;
+    const vs = speechSynthesis.getVoices();
+    u.voice = vs.find((v) => /female|samantha|victoria|zira|karen|moira|serena/i.test(v.name))
+      || vs.find((v) => v.lang && v.lang.startsWith('en')) || null;
+    speechSynthesis.speak(u);
+  } catch { /* no speech engine — the text message carries it */ }
+}
+
+// ==================================================================
+// THE WORLD BELOW — built INTO the hangar deck's mesh group, so the
+// city is simply there, 300m down, seen through the mouth.
+// ==================================================================
+export function buildWorldBelow(group) {
+  const world = new THREE.Group();
+  world.position.y = CITY_Y;
+  world.name = 'worldBelow';
+
+  // Dagobah palette: bright hazy daylight over swamp-greens and browns
+  const matGround = new THREE.MeshStandardMaterial({ color: 0x5d6b42, metalness: 0.05, roughness: 1 });
+  const matSwamp = new THREE.MeshStandardMaterial({ color: 0x4a5a38, metalness: 0.05, roughness: 1 });
+  const bldMats = [
+    new THREE.MeshStandardMaterial({ color: 0x8a8578, metalness: 0.2, roughness: 0.8 }),  // grey
+    new THREE.MeshStandardMaterial({ color: 0x7a6a4d, metalness: 0.2, roughness: 0.85 }), // brown
+    new THREE.MeshStandardMaterial({ color: 0x94875c, metalness: 0.2, roughness: 0.8 }),  // yellow-brown
+    new THREE.MeshStandardMaterial({ color: 0x6e7a5a, metalness: 0.2, roughness: 0.85 }), // green-grey
+  ];
+  const winM = new THREE.MeshBasicMaterial({ color: 0xfff2c8, toneMapped: false });
+  const hiveM = new THREE.MeshBasicMaterial({ color: 0x35e0c0, toneMapped: false });
+
+  // the ground runs to the HAZE, not to an edge: a huge disc, fog eats the rim
+  const ground = new THREE.Mesh(new THREE.CylinderGeometry(2800, 2800, 2, 48), matGround);
+  ground.position.y = -1;
+  world.add(ground);
+  let seed = 4242;
+  const rnd = () => { seed = (seed * 16807) % 2147483647; return seed / 2147483647; };
+  for (let i = 0; i < 40; i++) { // swamp flats + far marsh patches
+    const a = rnd() * Math.PI * 2, r = 250 + rnd() * 2200;
+    const p = new THREE.Mesh(new THREE.CylinderGeometry(40 + rnd() * 160, 40 + rnd() * 160, 1.4, 10), matSwamp);
+    p.position.set(Math.cos(a) * r, 0.4, Math.sin(a) * r);
+    world.add(p);
+  }
+
+  // the city: bright futuristic blocks in the planet's own colors
+  const buckets = bldMats.map(() => []);
+  const winG = [], hiveG = [];
   const push = (arr, sx, sy, sz, x, y, z) => {
     const g2 = new THREE.BoxGeometry(sx, sy, sz);
     g2.translate(x, y, z);
     arr.push(g2);
   };
-  let seed = 1337;
-  const rnd = () => { seed = (seed * 16807) % 2147483647; return seed / 2147483647; };
   const TILE = 44, N = 26, HALF = (N * TILE) / 2;
   for (let ty = 0; ty < N; ty++) for (let tx = 0; tx < N; tx++) {
     const cx = tx * TILE - HALF + TILE / 2, cz = ty * TILE - HALF + TILE / 2;
-    if (rnd() < 0.32) continue; // open block / plaza
+    if (rnd() < 0.3) continue;
     const n = 1 + Math.floor(rnd() * 3);
     for (let b = 0; b < n; b++) {
-      const w = 8 + rnd() * 16, d = 8 + rnd() * 16, h = 8 + rnd() * rnd() * 52;
+      const w = 8 + rnd() * 16, d = 8 + rnd() * 16, h = 8 + rnd() * rnd() * 54;
       const ox = (rnd() - 0.5) * (TILE - w - 6), oz = (rnd() - 0.5) * (TILE - d - 6);
-      push(rnd() < 0.5 ? geosA : geosB, w, h, d, cx + ox, h / 2, cz + oz);
-      // lit window bands (sparse — half the city is dark under occupation)
-      if (rnd() < 0.4) push(geosW, w * 0.7, 0.6, 0.3, cx + ox, h * (0.3 + rnd() * 0.5), cz + oz + d / 2 + 0.05);
-      // hive growth: teal pustule glow at street level
-      if (rnd() < 0.14) push(geosH, 4 + rnd() * 6, 1.2, 4 + rnd() * 6, cx + ox, 0.6, cz + oz + d / 2 + 3);
+      push(buckets[Math.floor(rnd() * bldMats.length)], w, h, d, cx + ox, h / 2, cz + oz);
+      if (rnd() < 0.5) push(winG, w * 0.7, 0.7, 0.3, cx + ox, h * (0.3 + rnd() * 0.5), cz + oz + d / 2 + 0.05);
+      if (rnd() < 0.13) push(hiveG, 4 + rnd() * 6, 1.4, 4 + rnd() * 6, cx + ox, 0.7, cz + oz + d / 2 + 3);
     }
   }
-  const { mergeGeometries } = THREE.BufferGeometryUtils || {};
   const mk = (geos, mat) => {
     if (!geos.length) return;
-    let merged;
-    if (mergeGeometries) merged = mergeGeometries(geos, false);
-    else {
-      // fall back to addon import (resolved by the caller module scope)
-      merged = mergeCompat(geos, false);
-    }
+    const merged = mergeGeometries(geos, false);
     if (!merged) return;
     const m = new THREE.Mesh(merged, mat);
     m.matrixAutoUpdate = false;
-    group.add(m);
+    world.add(m);
   };
-  mk(geosA, dark); mk(geosB, dark2); mk(geosW, winM); mk(geosH, hiveM);
-  // the ground: one vast dark plate
-  const ground = new THREE.Mesh(new THREE.BoxGeometry(N * TILE + 400, 1, N * TILE + 400),
-    new THREE.MeshStandardMaterial({ color: 0x10141b, metalness: 0.2, roughness: 0.95 }));
-  ground.position.y = -0.5;
-  group.add(ground);
-  return { TILE, N, HALF };
-}
-import { mergeGeometries as mergeCompat } from 'three/addons/utils/BufferGeometryUtils.js';
+  buckets.forEach((geos, i) => mk(geos, bldMats[i]));
+  mk(winG, winM);
+  mk(hiveG, hiveM);
 
-// ---------------- targets ----------------
+  // TARGETS: 5 shield pylons + 3 AA batteries (positions in WORLD coords)
+  const targets = [];
+  const spots = [
+    [-330, -280], [310, -180], [-160, 240], [260, 320], [40, -400],
+    [-380, 90], [140, 90], [390, -330],
+  ];
+  for (let i = 0; i < spots.length; i++) {
+    const pylon = i < 5;
+    const m = pylon ? buildPylon() : buildAA();
+    m.position.set(spots[i][0], 0, spots[i][1]);
+    world.add(m);
+    targets.push({
+      grp: m, pos: new THREE.Vector3(spots[i][0], CITY_Y, spots[i][1]),
+      hp: pylon ? 2 : 1, type: pylon ? 'PYLON' : 'AA', fireT: 2 + Math.random() * 2,
+    });
+  }
+
+  // LZ beacon (lights when the grid is dead)
+  const lz = new THREE.Mesh(new THREE.CylinderGeometry(9, 9, 420, 12, 1, true),
+    new THREE.MeshBasicMaterial({ color: 0x66ff9a, transparent: true, opacity: 0, toneMapped: false, side: THREE.DoubleSide, depthWrite: false }));
+  lz.position.set(30, 210, 30);
+  lz.name = 'lzBeacon';
+  world.add(lz);
+
+  // daylight: warm sun + bright haze ambience (the deck shares it)
+  const sun = new THREE.DirectionalLight(0xfff2d0, 1.9);
+  sun.position.set(-500, 700, 300);
+  world.add(sun, new THREE.AmbientLight(0xc8ccae, 1.0));
+
+  // sky: pale yellow-green haze dome around EVERYTHING (deck included)
+  const skyC = document.createElement('canvas');
+  skyC.width = 64; skyC.height = 256;
+  const sctx = skyC.getContext('2d');
+  const grad = sctx.createLinearGradient(0, 0, 0, 256);
+  grad.addColorStop(0, '#9fb4c9');
+  grad.addColorStop(0.45, '#c2cba6');
+  grad.addColorStop(0.75, '#cfd0a0');
+  grad.addColorStop(1, '#c8c193');
+  sctx.fillStyle = grad;
+  sctx.fillRect(0, 0, 64, 256);
+  const skyT = new THREE.CanvasTexture(skyC);
+  skyT.colorSpace = THREE.SRGBColorSpace;
+  const sky = new THREE.Mesh(new THREE.SphereGeometry(3200, 24, 16),
+    new THREE.MeshBasicMaterial({ map: skyT, side: THREE.BackSide, toneMapped: false, fog: false }));
+  sky.position.y = 260; // centered near the deck so the horizon sits right
+  world.add(sky);
+
+  group.add(world);
+  LW = { world, targets, lzWorld: new THREE.Vector3(30, CITY_Y, 30) };
+  return world;
+}
+
 function buildPylon() {
   const g = new THREE.Group();
-  const body = new THREE.MeshStandardMaterial({ color: 0x3a4152, metalness: 0.4, roughness: 0.6 });
+  const body = new THREE.MeshStandardMaterial({ color: 0x8a8578, metalness: 0.3, roughness: 0.6 });
   const glow = new THREE.MeshBasicMaterial({ color: 0x8a5cff, toneMapped: false });
   const spire = new THREE.Mesh(new THREE.CylinderGeometry(2.2, 4.5, 64, 8), body);
   spire.position.y = 32;
@@ -108,7 +191,7 @@ function buildPylon() {
 }
 function buildAA() {
   const g = new THREE.Group();
-  const body = new THREE.MeshStandardMaterial({ color: 0x424a3c, metalness: 0.4, roughness: 0.7 });
+  const body = new THREE.MeshStandardMaterial({ color: 0x7a6a4d, metalness: 0.3, roughness: 0.7 });
   const glow = new THREE.MeshBasicMaterial({ color: 0xff5533, toneMapped: false });
   const base = new THREE.Mesh(new THREE.BoxGeometry(10, 4, 10), body);
   base.position.y = 2;
@@ -127,129 +210,207 @@ function buildAA() {
   return g;
 }
 
-// ---------------- launch ----------------
-export function startLandfall(drill = false) {
-  if (L) return;
-  const group = new THREE.Group();
-  group.position.copy(ORIGIN);
+// the landfall deck was torn down — a fresh sortie regenerates the world
+export function clearWorldBelow() { LW = null; }
 
-  // dusk sky: gradient dome + thin stars up high
-  const skyC = document.createElement('canvas');
-  skyC.width = 64; skyC.height = 256;
-  const sctx = skyC.getContext('2d');
-  const grad = sctx.createLinearGradient(0, 0, 0, 256);
-  grad.addColorStop(0, '#04060f');
-  grad.addColorStop(0.5, '#0d1226');
-  grad.addColorStop(0.8, '#28203a');
-  grad.addColorStop(1, '#4a2c33');
-  sctx.fillStyle = grad;
-  sctx.fillRect(0, 0, 64, 256);
-  const skyT = new THREE.CanvasTexture(skyC);
-  skyT.colorSpace = THREE.SRGBColorSpace;
-  const sky = new THREE.Mesh(new THREE.SphereGeometry(1500, 24, 16),
-    new THREE.MeshBasicMaterial({ map: skyT, side: THREE.BackSide, toneMapped: false, fog: false }));
-  group.add(sky);
-  const sun = new THREE.DirectionalLight(0xffc9a8, 1.1);
-  sun.position.set(-400, 260, 300);
-  group.add(sun, new THREE.AmbientLight(0x46507a, 1.3));
-
-  buildCity(group);
-
-  // THE CARRIER, holding station high above — with the RESUPPLY RING under it
-  const cap = buildCarrier();
-  cap.position.set(0, CARRIER_Y, 0);
-  cap.scale.setScalar(0.9);
-  group.add(cap);
-  const ringM = new THREE.MeshBasicMaterial({ color: 0x4fe8e0, transparent: true, opacity: 0.55, toneMapped: false, side: THREE.DoubleSide });
-  const ring = new THREE.Mesh(new THREE.TorusGeometry(24, 1.4, 8, 40), ringM);
-  ring.rotation.x = Math.PI / 2;
-  ring.position.set(0, CARRIER_Y - 60, 0);
-  ring.name = 'rearmRing';
-  group.add(ring);
-
-  // targets: 5 shield pylons (2 bombs) + 3 AA batteries (1 bomb)
-  const targets = [];
-  const spots = [
-    [-330, -280], [310, -180], [-160, 240], [260, 320], [40, -400], // pylons
-    [-380, 90], [140, 90], [390, -330],                              // AA
-  ];
-  for (let i = 0; i < spots.length; i++) {
-    const pylon = i < 5;
-    const m = pylon ? buildPylon() : buildAA();
-    m.position.set(spots[i][0], 0, spots[i][1]);
-    group.add(m);
-    targets.push({ grp: m, pos: m.position.clone(), hp: pylon ? 2 : 1, type: pylon ? 'PYLON' : 'AA', fireT: 2 + Math.random() * 2 });
+// ==================================================================
+// THE ARRIVAL — hyperspace out the bridge windows, then the planet,
+// then the descent, then the ship's voice clears you down.
+// ==================================================================
+export function startArrival(fast = false) {
+  const fs0 = G.floors.get(0);
+  if (!fs0?.meshGroup || A) { landfallPortalReady(); return; }
+  const g = fs0.meshGroup;
+  const cx0 = (fs0.grid.w / 2 - 0.5) * 4, cz0 = (fs0.grid.h / 2 - 0.5) * 4;
+  // hyperspace tunnel: streak texture, spun hard
+  let tun = g.getObjectByName('hyperTunnel');
+  if (!tun) {
+    const c = document.createElement('canvas');
+    c.width = 512; c.height = 128;
+    const ctx = c.getContext('2d');
+    ctx.fillStyle = '#04060f';
+    ctx.fillRect(0, 0, 512, 128);
+    for (let i = 0; i < 90; i++) {
+      const y = Math.random() * 128, len = 30 + Math.random() * 120;
+      const gr = ctx.createLinearGradient(0, 0, len, 0);
+      gr.addColorStop(0, 'rgba(140,200,255,0)');
+      gr.addColorStop(0.5, 'rgba(190,230,255,0.9)');
+      gr.addColorStop(1, 'rgba(140,200,255,0)');
+      ctx.fillStyle = gr;
+      ctx.save();
+      ctx.translate(Math.random() * 512, y);
+      ctx.fillRect(0, 0, len, 1.6);
+      ctx.restore();
+    }
+    const t = new THREE.CanvasTexture(c);
+    t.wrapS = THREE.RepeatWrapping;
+    t.colorSpace = THREE.SRGBColorSpace;
+    tun = new THREE.Mesh(new THREE.CylinderGeometry(36, 36, 46, 24, 1, true),
+      new THREE.MeshBasicMaterial({ map: t, toneMapped: false, fog: false, side: THREE.BackSide, transparent: true, opacity: 0 }));
+    tun.name = 'hyperTunnel';
+    tun.position.set(cx0, 4, cz0);
+    tun.rotation.z = Math.PI / 2;
+    g.add(tun);
   }
+  // the planet: Dagobah marble waiting outside the glass
+  let pl = g.getObjectByName('arrivalPlanet');
+  if (!pl) {
+    const pc = document.createElement('canvas');
+    pc.width = 256; pc.height = 128;
+    const pctx = pc.getContext('2d');
+    pctx.fillStyle = '#7c8a56';
+    pctx.fillRect(0, 0, 256, 128);
+    for (let i = 0; i < 60; i++) {
+      pctx.fillStyle = ['#6a7a4a', '#8f8a5e', '#5d6b42', '#98a06a', '#7a6a4d'][i % 5];
+      pctx.beginPath();
+      pctx.ellipse(Math.random() * 256, Math.random() * 128, 12 + Math.random() * 44, 5 + Math.random() * 14, 0, 0, Math.PI * 2);
+      pctx.fill();
+    }
+    const pt = new THREE.CanvasTexture(pc);
+    pt.colorSpace = THREE.SRGBColorSpace;
+    pl = new THREE.Mesh(new THREE.SphereGeometry(15, 24, 18),
+      new THREE.MeshBasicMaterial({ map: pt, toneMapped: false, fog: false }));
+    pl.name = 'arrivalPlanet';
+    pl.position.set(cx0, 6, cz0 - 33);
+    pl.visible = false;
+    g.add(pl);
+  }
+  A = { phase: 'jump', t: 0, tun, pl, fast: !!fast };
+  sfx.rumble();
+  G.shake = Math.max(G.shake || 0, 0.4);
+  addMsg('All hands: TRANSLATION. The carrier is jumping to the destination.', 'gold');
+}
 
-  // the LZ beacon (lights up when every target is down)
-  const lz = new THREE.Mesh(new THREE.CylinderGeometry(9, 9, 500, 12, 1, true),
-    new THREE.MeshBasicMaterial({ color: 0x66ff9a, transparent: true, opacity: 0.0, toneMapped: false, side: THREE.DoubleSide, depthWrite: false }));
-  lz.position.set(30, 250, 30);
-  lz.name = 'lzBeacon';
-  group.add(lz);
+export function updateArrival(dt) {
+  if (!A) return;
+  A.t += dt;
+  const F = A.fast ? 0.12 : 1; // test links compress the ride
+  if (A.phase === 'jump') {
+    A.tun.visible = true;
+    A.tun.material.opacity = Math.min(1, A.tun.material.opacity + dt * 2);
+    A.tun.rotation.x += dt * 9;
+    if (Math.random() < dt * 3) G.shake = Math.max(G.shake || 0, 0.15);
+    if (A.t > 3.4 * F) {
+      A.phase = 'drop'; A.t = 0;
+      A.pl.visible = true;
+      sfx.stairs();
+      G.shake = Math.max(G.shake || 0, 0.35);
+      addMsg('Translation complete — that green world is the target.', 'gold');
+    }
+  } else if (A.phase === 'drop') {
+    A.tun.material.opacity = Math.max(0, A.tun.material.opacity - dt * 3);
+    if (A.tun.material.opacity <= 0) A.tun.visible = false;
+    if (A.t > 2.4 * F) {
+      A.phase = 'descend'; A.t = 0;
+      sfx.rumble();
+      addMsg('Beginning descent…');
+    }
+  } else if (A.phase === 'descend') {
+    A.pl.scale.setScalar(1 + A.t * (A.fast ? 2.2 : 0.28)); // the planet grows as we drop
+    if (Math.random() < dt * 2) G.shake = Math.max(G.shake || 0, 0.12);
+    if (A.t > 2.6 * F) {
+      A.phase = 'done';
+      say('Altitude is stable. Docking bay portal is open.');
+      addMsg('"Altitude is stable. Docking bay portal is open." — take the breach portal down.', 'gold');
+      landfallPortalReady();
+      A = null;
+    }
+  }
+}
 
-  // THE BOMBER: same cockpit kit, heavier everything
+// ==================================================================
+// THE FLIGHT — begins when the bomber crosses the hangar mouth (the
+// boarding/takeoff machine in space.js hands over mid-air, same scene,
+// same coordinates). Ends by flying BACK IN and setting down.
+// ==================================================================
+function deckInfo() {
+  const fs = G.floors.get(G.floor);
+  const g = fs?.grid;
+  if (!g?.mouth?.length) return null;
+  const xs = g.mouth.map((m) => m.cx * 4);
+  return {
+    fs, g,
+    mouthX0: Math.min(...xs) - 2, mouthX1: Math.max(...xs) + 2,
+    mouthZ: (g.mouth[0].cy + 0.5) * 4,
+    deckW: g.w * 4, deckH: g.h * 4,
+  };
+}
+
+function startFlight(from) {
+  const fs = G.floors.get(G.floor);
   const ship = buildBomber();
   ship.userData.vis.visible = false;
   const kit = cockpitKit();
-  kit.position.set(0, 0.9, -0.4);
+  kit.position.set(0, 0.9, -0.6);
   ship.add(kit);
-  ship.position.set(60, CARRIER_Y - 70, 40);
-  ship.quaternion.setFromEuler(new THREE.Euler(-0.35, Math.PI * 0.8, 0, 'YXZ'));
-  group.add(ship);
-
-  G.scene.add(group);
+  ship.position.copy(from.pos);
+  ship.quaternion.copy(from.quat);
+  fs.meshGroup.add(ship);
   L = {
-    group, ship, targets, drill,
+    ship, fs, boardAt: from.boardAt,
     bombs: MAX_BOMBS, hull: 140 + 30 * shipUp('hull'), maxHull: 140 + 30 * shipUp('hull'),
     maxSpeed: 56 + 6 * shipUp('engine'),
-    speed: 26, vel: new THREE.Vector3(), bank: 0, lock: null,
-    bombsAway: [], flak: [], fx: [], phase: 'run', t: 0, landT: 0, dropCd: 0, rearmT: 0, sightFlash: 0,
-    time0: G.time || 0, prevFog: G.scene.fog.density, prevBg: G.scene.background.getHex(), prevFar: G.camera.far,
+    speed: Math.max(20, from.speed), vel: new THREE.Vector3(), bank: 0, lock: null,
+    bombsAway: [], flak: [], fx: [], phase: 'run', t: 0, landT: 0, dropCd: 0, sightFlash: 0,
+    time0: G.time || 0,
   };
-  G.camera.far = 3000;
-  G.camera.updateProjectionMatrix();
-  G.scene.fog.density = 0.00018;
-  G.scene.background.setHex(0x0a0d1a);
-  G.mode = 'space';
-  for (const c of G.camera.children) c.visible = false;
+  const fwd = new THREE.Vector3(0, 0, -1).applyQuaternion(L.ship.quaternion);
+  L.vel.copy(fwd).multiplyScalar(L.speed);
   document.getElementById('waveHud')?.classList.remove('hidden');
-  addMsg('OPERATION LANDFALL — the shield grid holds the LZ. ARROWS steer, W/S throttle, T locks, SPACE drops.', 'gold');
-  addMsg('Watch the BOMBSIGHT (bottom-right): release when it flashes RED. Six bombs — rearm at the carrier ring.', 'gold');
-  sfx.stairs();
+  addMsg('Bomber away. T locks a target; the BOMBSIGHT flashes RED in the release window (SPACE drops).', 'gold');
+  addMsg('Six bombs. Dry racks? Fly back IN through the hangar mouth and set down to rearm.', 'gold');
   refreshHud();
 }
 
-function endLandfall(result) {
+// the boarding machine (space.js) calls this the instant the bomber clears
+// the mouth of a LANDFALL deck — same scene, same position, no seam
+setLandfallHook((from) => startFlight(from));
+
+function endFlight(result) {
   if (!L) return;
-  const kills = L.targets.filter((t) => t.hp <= 0).length;
-  const credits = result === 'LZ SECURED' ? 350 + kills * 25 : 0;
-  G.run.gold += credits;
-  if (result === 'LZ SECURED') G.run.landfall = Math.max(G.run.landfall || 0, 1);
-  saveReport({ section: 'OPERATION LANDFALL I', result, kills, credits, time: Math.round((G.time || 0) - L.time0) });
-  G.scene.remove(L.group);
-  G.scene.fog.density = L.prevFog;
-  G.scene.background.setHex(L.prevBg);
-  G.camera.far = L.prevFar;
-  G.camera.updateProjectionMatrix();
+  const fs = L.fs;
+  fs.meshGroup.remove(L.ship);
+  for (const b of L.bombsAway) fs.meshGroup.remove(b);
+  for (const f of L.flak) if (f.mesh) fs.meshGroup.remove(f.mesh);
+  for (const e of L.fx) fs.meshGroup.remove(e.mesh);
+  const boardAt = L.boardAt;
+  const time0 = L.time0;
+  hideLockWidgets();
+  document.getElementById('waveHud')?.classList.add('hidden');
   G.keys['Escape'] = false;
   for (const c of G.camera.children) c.visible = true;
-  document.getElementById('waveHud')?.classList.add('hidden');
-  hideLockWidgets();
+  const kills = LW ? LW.targets.filter((t) => t.hp <= 0).length : 0;
   L = null;
   window.__sphL = null;
   G.mode = 'playing';
-  if (result === 'LZ SECURED') {
-    addMsg(`LZ SECURED — shield grid down, +${credits} credits. Ground assault is NEXT.`, 'gold');
+  if (boardAt && G.player) {
+    G.player.obj.position.set(boardAt.x, 0, boardAt.z + 2);
+    G.player.obj.position.y = 0;
+    if (boardAt.yaw !== undefined) G.player.camYaw = boardAt.yaw;
+  }
+  if (result === 'DOCKED') {
+    addMsg('Docked. Racks reloaded — six bombs. Board when ready.', 'gold');
+    sfx.levelup();
+  } else if (result === 'LZ SECURED') {
+    const credits = 350 + kills * 25;
+    G.run.gold += credits;
+    G.run.landfall = Math.max(G.run.landfall || 0, 1);
+    const g = G.floors.get(G.floor)?.grid;
+    if (g) g.stairsLocked = false; // extraction opens
+    saveReport({ section: 'OPERATION LANDFALL I', result, kills, credits, time: Math.round((G.time || 0) - time0) });
+    addMsg(`LZ SECURED — shield grid down, +${credits} credits. Ground assault is NEXT. Extraction is open.`, 'gold');
+    say('Shield grid destroyed. Well flown.');
     sfx.victory();
-  } else if (result === 'SHOT DOWN') addMsg('Bomber lost — recovery tether caught your pod.', 'bad');
-  else addMsg('Recovered to the carrier.', 'bad');
+  } else if (result === 'SHOT DOWN') {
+    saveReport({ section: 'OPERATION LANDFALL I', result, kills, credits: 0, time: Math.round((G.time || 0) - time0) });
+    addMsg('Bomber lost — recovery pod tractored back to the deck.', 'bad');
+  } else addMsg('Recovered to the deck.', 'bad');
   refreshHud();
 }
 
 export function landfallCycleLock() {
-  if (!L) return;
-  const alive = L.targets.filter((t) => t.hp > 0);
+  if (!L || !LW) return;
+  const alive = LW.targets.filter((t) => t.hp > 0);
   if (!alive.length) { L.lock = null; hideLockWidgets(); return; }
   const nose = new THREE.Vector3(0, 0, -1).applyQuaternion(L.ship.quaternion);
   alive.sort((a, b) =>
@@ -261,41 +422,9 @@ export function landfallCycleLock() {
   sfx.key();
 }
 
-function hurtBomber(n) {
-  L.hull -= n;
-  G.shake = Math.max(G.shake || 0, 0.3);
-  sfx.hurt?.();
-  if (L.hull <= 0) endLandfall('SHOT DOWN');
-}
-
-function boom(pos, big = false) {
-  const flash = new THREE.Mesh(new THREE.SphereGeometry(big ? 9 : 5, 10, 8),
-    new THREE.MeshBasicMaterial({ color: 0xffd9a0, transparent: true, opacity: 0.95, toneMapped: false }));
-  flash.position.copy(pos);
-  L.group.add(flash);
-  L.fx.push({ mesh: flash, t: 0, dur: big ? 0.7 : 0.45 });
-  const ringG = new THREE.Mesh(new THREE.CylinderGeometry(1, 1, 0.5, 20, 1, true),
-    new THREE.MeshBasicMaterial({ color: 0xff8a3a, transparent: true, opacity: 0.8, toneMapped: false, side: THREE.DoubleSide }));
-  ringG.position.set(pos.x, 1.2, pos.z);
-  L.group.add(ringG);
-  L.fx.push({ mesh: ringG, t: 0, dur: 0.9, ring: true, big });
-  sfx.rumble();
-}
-
-// where a bomb released RIGHT NOW would land
-function impactPoint(out) {
-  const h = Math.max(0, L.ship.position.y);
-  const t = Math.sqrt((2 * h) / GRAV);
-  const fwd = new THREE.Vector3(0, 0, -1).applyQuaternion(L.ship.quaternion);
-  out.set(
-    L.ship.position.x + fwd.x * L.speed * t,
-    0,
-    L.ship.position.z + fwd.z * L.speed * t);
-  return out;
-}
-
-function dropBomb() {
-  if (L.bombs <= 0) { addMsg('BOMBS OUT — climb to the carrier ring to rearm.', 'bad'); return; }
+export function landfallDrop() {
+  if (!L || L.phase !== 'run') return;
+  if (L.bombs <= 0) { addMsg('BOMBS OUT — fly back into the hangar and set down to rearm.', 'bad'); return; }
   if (L.dropCd > 0) return;
   L.dropCd = 0.4;
   L.bombs--;
@@ -305,14 +434,42 @@ function dropBomb() {
   const fwd = new THREE.Vector3(0, 0, -1).applyQuaternion(L.ship.quaternion);
   b.userData.v = fwd.clone().multiplyScalar(L.speed);
   b.userData.v.y = Math.min(0, b.userData.v.y);
-  L.group.add(b);
+  L.fs.meshGroup.add(b);
   L.bombsAway.push(b);
   sfx.bolt();
 }
 
+function hurtBomber(n) {
+  L.hull -= n;
+  G.shake = Math.max(G.shake || 0, 0.3);
+  if (L.hull <= 0) endFlight('SHOT DOWN');
+}
+
+function boom(pos, big = false) {
+  const flash = new THREE.Mesh(new THREE.SphereGeometry(big ? 9 : 5, 10, 8),
+    new THREE.MeshBasicMaterial({ color: 0xffd9a0, transparent: true, opacity: 0.95, toneMapped: false }));
+  flash.position.copy(pos);
+  L.fs.meshGroup.add(flash);
+  L.fx.push({ mesh: flash, t: 0, dur: big ? 0.7 : 0.45 });
+  const ringG = new THREE.Mesh(new THREE.CylinderGeometry(1, 1, 0.5, 20, 1, true),
+    new THREE.MeshBasicMaterial({ color: 0xff8a3a, transparent: true, opacity: 0.8, toneMapped: false, side: THREE.DoubleSide }));
+  ringG.position.set(pos.x, CITY_Y + 1.4, pos.z);
+  L.fs.meshGroup.add(ringG);
+  L.fx.push({ mesh: ringG, t: 0, dur: 0.9, ring: true, big });
+  sfx.rumble();
+}
+
 const _ip = new THREE.Vector3(), _wp = new THREE.Vector3();
 
-// ---------------- the bombsight monitor (the minimap canvas) ----------------
+function impactPoint(out) {
+  const h = Math.max(0, L.ship.position.y - CITY_Y);
+  const t = Math.sqrt((2 * h) / GRAV);
+  const fwd = new THREE.Vector3(0, 0, -1).applyQuaternion(L.ship.quaternion);
+  out.set(L.ship.position.x + fwd.x * L.speed * t, CITY_Y, L.ship.position.z + fwd.z * L.speed * t);
+  return out;
+}
+
+// ---------------- the bombsight monitor ----------------
 function drawBombsight(dt) {
   const cv = document.getElementById('minimap');
   if (!cv) return;
@@ -323,20 +480,12 @@ function drawBombsight(dt) {
   ctx.fillRect(0, 0, W, H);
   const cx = W / 2, cy = H / 2;
   const lock = L.lock && L.lock.hp > 0 ? L.lock : null;
-  // heading frame: up = your nose
   const fwd = new THREE.Vector3(0, 0, -1).applyQuaternion(L.ship.quaternion);
   const yaw = Math.atan2(fwd.x, -fwd.z);
-  const toSight = (wx, wz, ref) => {
-    const dx = wx - ref.x, dz = wz - ref.z;
-    const rx = dx * Math.cos(-yaw) - dz * Math.sin(-yaw);
-    const rz = dx * Math.sin(-yaw) + dz * Math.cos(-yaw);
-    return [cx + rx * 1.05, cy + rz * 1.05];
-  };
   impactPoint(_ip);
   const onWindow = lock ? Math.hypot(_ip.x - lock.pos.x, _ip.z - lock.pos.z) <= RELEASE_R : false;
   L.sightFlash = (L.sightFlash + dt * 9) % 2;
   const hot = onWindow && L.sightFlash < 1;
-  // frame
   ctx.strokeStyle = hot ? '#ff3b30' : 'rgba(79, 232, 224, 0.7)';
   ctx.lineWidth = hot ? 4 : 2;
   ctx.strokeRect(3, 3, W - 6, H - 6);
@@ -349,28 +498,26 @@ function drawBombsight(dt) {
     ctx.fillText(`BOMBS ${L.bombs}/${MAX_BOMBS}`, cx, cy + 14);
     return;
   }
-  // the sight is target-centered: the target sits at the cross, your
-  // predicted impact point drifts as you fly — bring them together
   ctx.strokeStyle = 'rgba(138, 92, 255, 0.9)';
   ctx.lineWidth = 1.5;
   ctx.beginPath(); ctx.moveTo(cx - 14, cy); ctx.lineTo(cx + 14, cy); ctx.stroke();
   ctx.beginPath(); ctx.moveTo(cx, cy - 14); ctx.lineTo(cx, cy + 14); ctx.stroke();
   ctx.strokeRect(cx - 8, cy - 8, 16, 16);
-  // release ring (the window)
   ctx.strokeStyle = 'rgba(79, 232, 224, 0.4)';
   ctx.beginPath(); ctx.arc(cx, cy, RELEASE_R * 1.05, 0, Math.PI * 2); ctx.stroke();
-  // impact point + run-in line
-  const [ix, iy] = toSight(_ip.x, _ip.z, lock.pos);
-  const px2 = Math.max(8, Math.min(W - 8, ix)), py2 = Math.max(8, Math.min(H - 8, iy));
+  const dx = _ip.x - lock.pos.x, dz = _ip.z - lock.pos.z;
+  const rx = dx * Math.cos(-yaw) - dz * Math.sin(-yaw);
+  const rz = dx * Math.sin(-yaw) + dz * Math.cos(-yaw);
+  const px2 = Math.max(8, Math.min(W - 8, cx + rx * 1.05));
+  const py2 = Math.max(8, Math.min(H - 8, cy + rz * 1.05));
   ctx.strokeStyle = hot ? '#ff3b30' : '#ffce2e';
   ctx.lineWidth = 1.2;
   ctx.beginPath(); ctx.moveTo(cx, cy); ctx.lineTo(px2, py2); ctx.stroke();
   ctx.fillStyle = hot ? '#ff3b30' : '#ffce2e';
   ctx.beginPath(); ctx.arc(px2, py2, hot ? 6 : 4.5, 0, Math.PI * 2); ctx.fill();
-  // readouts
   ctx.fillStyle = '#cfe8ff';
   ctx.textAlign = 'left';
-  ctx.fillText(`ALT ${Math.round(L.ship.position.y)}`, 8, 16);
+  ctx.fillText(`ALT ${Math.round(L.ship.position.y - CITY_Y)}`, 8, 16);
   ctx.fillText(`BOMBS ${L.bombs}`, 8, H - 8);
   ctx.textAlign = 'right';
   ctx.fillText(lock.type, W - 8, 16);
@@ -388,25 +535,26 @@ export function updateLandfall(dt) {
   window.__sphL = L.phase;
   L.t += dt;
   L.dropCd -= dt;
-  if (G.keys['Escape']) { endLandfall('RECOVERED'); return; }
+  if (G.keys['Escape'] && L.phase === 'run') { endFlight('RECOVERED'); return; }
 
-  if (L.phase === 'land') {
+  const D = deckInfo();
+
+  if (L.phase === 'dock' || L.phase === 'land') {
+    // hands off: glide to the set-down point
     L.landT += dt;
-    const k = Math.min(1, L.landT / 2.6);
-    const ease = k * k * (3 - 2 * k);
-    L.ship.position.lerp(L.landAt, Math.min(1, dt * (1.2 + ease)));
-    L.ship.quaternion.slerp(new THREE.Quaternion().setFromEuler(new THREE.Euler(0, L.landYaw, 0, 'YXZ')), Math.min(1, dt * 2));
+    L.ship.position.lerp(L.landAt, Math.min(1, dt * 1.6));
+    L.ship.quaternion.slerp(L.landQ, Math.min(1, dt * 2.2));
     const fwdL = new THREE.Vector3(0, 0, -1).applyQuaternion(L.ship.quaternion);
     const upL = new THREE.Vector3(0, 1, 0).applyQuaternion(L.ship.quaternion);
-    G.camera.position.copy(L.ship.position).addScaledVector(upL, 0.9).addScaledVector(fwdL, 0.6).add(ORIGIN);
+    G.camera.position.copy(L.ship.position).addScaledVector(upL, 0.9).addScaledVector(fwdL, 0.6);
     G.camera.quaternion.copy(L.ship.quaternion);
     const wh = document.getElementById('waveHud');
-    if (wh) wh.textContent = 'FLARE… FLARE… touchdown';
-    if (L.landT > 3.0) { endLandfall('LZ SECURED'); }
+    if (wh) wh.textContent = L.phase === 'dock' ? 'DECK CREW HAS YOU — setting down' : 'FLARE… FLARE… touchdown';
+    if (L.landT > 2.8) endFlight(L.phase === 'dock' ? 'DOCKED' : 'LZ SECURED');
     return;
   }
 
-  // flight (heavier than the fighter: slower turns, more inertia)
+  // flight
   if (G.keys['KeyW']) L.speed = Math.min(L.maxSpeed, L.speed + 22 * dt);
   if (G.keys['KeyS']) L.speed = Math.max(14, L.speed - 26 * dt);
   const yawIn = (G.keys['ArrowLeft'] ? 1 : 0) - (G.keys['ArrowRight'] ? 1 : 0);
@@ -421,65 +569,93 @@ export function updateLandfall(dt) {
   L.ship.position.addScaledVector(L.vel, dt);
   L.bank = L.bank + ((yawIn * 0.35) - L.bank) * Math.min(1, dt * 5);
 
-  // terrain and ceiling are real
-  if (L.ship.position.y < 6) {
-    L.ship.position.y = 6;
+  // the planet's surface is real
+  if (L.ship.position.y < CITY_Y + 6) {
+    L.ship.position.y = CITY_Y + 6;
     if (L.vel.y < 0) L.vel.y = 0;
     hurtBomber(20);
     if (!L) return;
     addMsg('TERRAIN — pull up!', 'bad');
   }
-  if (L.ship.position.y > CARRIER_Y + 40) L.ship.position.y = CARRIER_Y + 40;
-  const RANGE = 700;
-  if (Math.abs(L.ship.position.x) > RANGE) L.ship.position.x = Math.sign(L.ship.position.x) * RANGE;
-  if (Math.abs(L.ship.position.z) > RANGE) L.ship.position.z = Math.sign(L.ship.position.z) * RANGE;
+  if (L.ship.position.y > 80) L.ship.position.y = 80; // the carrier's operating ceiling
+  // soft range: the haze is the border — ease you back, no walls
+  const rr = Math.hypot(L.ship.position.x, L.ship.position.z);
+  if (rr > 1250) {
+    L.ship.position.x *= 1250 / rr;
+    L.ship.position.z *= 1250 / rr;
+    addMsg('Leaving the op zone — turning back into the haze.', 'bad');
+  }
 
-  // (bomb release is EVENT-driven from main's keydown — a tap can be
-  // faster than a frame, and a missed release is a missed run)
+  // THE CARRIER IS SOLID (except the mouth corridor — that's the door)
+  if (D) {
+    const p = L.ship.position;
+    const inMouthX = p.x > D.mouthX0 + 3 && p.x < D.mouthX1 - 3;
+    const corridor = inMouthX && p.y > 0.4 && p.y < 7 && p.z > -6 && p.z < D.mouthZ + 44;
+    const insideDeckBox = p.x > -4 && p.x < D.deckW + 4 && p.y > -3 && p.y < 15 && p.z > -4 && p.z < D.mouthZ + 1;
+    if (insideDeckBox && !corridor) {
+      // bounced off the hull
+      L.vel.multiplyScalar(-0.4);
+      L.ship.position.addScaledVector(L.vel, dt * 4);
+      hurtBomber(10);
+      if (!L) return;
+      addMsg('HULL STRIKE — the bay mouth is the only way in.', 'bad');
+    }
+    // DOCKING: fly in through the mouth, lined up — the deck crew takes you
+    // the rest of the way to the pad
+    if (corridor && p.z < D.mouthZ - 2 && L.vel.z < 0) {
+      L.phase = 'dock';
+      L.landT = 0;
+      L.landAt = new THREE.Vector3(L.boardAt.x, 1.4, L.boardAt.z + 6);
+      L.landQ = new THREE.Quaternion().setFromEuler(new THREE.Euler(0, (L.boardAt.yaw || 0) + Math.PI, 0));
+      addMsg('Through the mouth — deck crew waving you to the pad.', 'gold');
+      sfx.stairs();
+      return;
+    }
+  }
 
   // bombs fall, bombs land
   for (let i = L.bombsAway.length - 1; i >= 0; i--) {
     const b = L.bombsAway[i];
     b.userData.v.y -= GRAV * dt;
     b.position.addScaledVector(b.userData.v, dt);
-    b.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), b.userData.v.clone().normalize().negate());
-    if (b.position.y <= 1) {
-      boom(b.position.clone().setY(1), false);
-      for (const t of L.targets) {
+    if (b.position.y <= CITY_Y + 1) {
+      boom(b.position.clone().setY(CITY_Y + 1), false);
+      if (LW) for (const t of LW.targets) {
         if (t.hp <= 0) continue;
         if (Math.hypot(b.position.x - t.pos.x, b.position.z - t.pos.z) < 16) {
           t.hp--;
           if (t.hp <= 0) {
-            boom(t.pos.clone().setY(4), true);
+            boom(t.pos.clone().setY(CITY_Y + 4), true);
             t.grp.visible = false;
-            const left = L.targets.filter((x) => x.hp > 0).length;
+            const left = LW.targets.filter((x) => x.hp > 0).length;
             addMsg(`${t.type === 'PYLON' ? 'SHIELD PYLON' : 'AA BATTERY'} DESTROYED — ${left} targets left.`, 'gold');
             if (t === L.lock) L.lock = null;
             if (!left) {
               addMsg('SHIELD GRID DOWN. The LZ beacon is lit — land on the green column.', 'gold');
-              const lz = L.group.getObjectByName('lzBeacon');
+              say('Shield grid down. Landing zone beacon active.');
+              const lz = LW.world.getObjectByName('lzBeacon');
               if (lz) lz.material.opacity = 0.3;
               sfx.victory();
             }
           } else addMsg(`Direct hit — the ${t.type === 'PYLON' ? 'pylon' : 'battery'} is cracked.`, 'gold');
         }
       }
-      L.group.remove(b);
+      L.fs.meshGroup.remove(b);
       L.bombsAway.splice(i, 1);
     }
   }
 
-  // AA batteries: they LEAD you — weave or eat flak
-  for (const t of L.targets) {
+  // AA: they LEAD you
+  if (LW) for (const t of LW.targets) {
     if (t.hp <= 0 || t.type !== 'AA') continue;
     t.fireT -= dt;
     const d = L.ship.position.distanceTo(t.pos);
-    if (t.fireT <= 0 && d < 430 && L.ship.position.y < 300) {
+    if (t.fireT <= 0 && d < 430 && L.ship.position.y < CITY_Y + 300) {
       t.fireT = 1.5 + Math.random() * 1.6;
-      const tt = d / 130; // shell flight time
+      const tt = d / 130;
       const aim = L.ship.position.clone().addScaledVector(L.vel, tt)
         .add(new THREE.Vector3((Math.random() - 0.5) * 26, (Math.random() - 0.5) * 18, (Math.random() - 0.5) * 26));
-      L.flak.push({ from: t.pos.clone().setY(8), to: aim, t: 0, dur: tt * 0.55 + 0.4 });
+      L.flak.push({ from: t.pos.clone().add(new THREE.Vector3(0, 8, 0)), to: aim, t: 0, dur: tt * 0.55 + 0.4 });
     }
   }
   for (let i = L.flak.length - 1; i >= 0; i--) {
@@ -489,21 +665,19 @@ export function updateLandfall(dt) {
     if (!f.mesh) {
       f.mesh = new THREE.Mesh(new THREE.BoxGeometry(0.5, 0.5, 3.2),
         new THREE.MeshBasicMaterial({ color: 0xffb347, toneMapped: false }));
-      L.group.add(f.mesh);
+      L.fs.meshGroup.add(f.mesh);
     }
     f.mesh.position.lerpVectors(f.from, f.to, k);
-    f.mesh.lookAt(f.to.clone().add(ORIGIN).sub(ORIGIN));
     if (k >= 1) {
-      // BURST
       const puff = new THREE.Mesh(new THREE.SphereGeometry(3.4, 8, 6),
         new THREE.MeshBasicMaterial({ color: 0xff7733, transparent: true, opacity: 0.9, toneMapped: false }));
       puff.position.copy(f.to);
-      L.group.add(puff);
+      L.fs.meshGroup.add(puff);
       L.fx.push({ mesh: puff, t: 0, dur: 0.5 });
       const dd = f.to.distanceTo(L.ship.position);
       if (dd < 10) { hurtBomber(9 + Math.random() * 6); if (!L) return; }
       else if (dd < 26) G.shake = Math.max(G.shake || 0, 0.12);
-      L.group.remove(f.mesh);
+      L.fs.meshGroup.remove(f.mesh);
       L.flak.splice(i, 1);
     }
   }
@@ -521,61 +695,41 @@ export function updateLandfall(dt) {
       e.mesh.scale.setScalar(1 + k * 2.2);
       e.mesh.material.opacity = 0.95 * (1 - k);
     }
-    if (k >= 1) { L.group.remove(e.mesh); L.fx.splice(i, 1); }
+    if (k >= 1) { L.fs.meshGroup.remove(e.mesh); L.fx.splice(i, 1); }
   }
 
-  // REARM: fly up through the carrier ring
-  const ring = L.group.getObjectByName('rearmRing');
-  if (ring) {
-    ring.rotation.z += dt * 0.8;
-    const rd = L.ship.position.distanceTo(ring.position);
-    if (rd < 26 && L.bombs < MAX_BOMBS) {
-      L.rearmT += dt;
-      if (L.rearmT > 0.5) {
-        L.bombs = MAX_BOMBS;
-        L.hull = Math.min(L.maxHull, L.hull + 30);
-        L.rearmT = 0;
-        addMsg('REARMED — six bombs racked, hull patched. Dive.', 'gold');
-        sfx.levelup();
-      }
-    } else L.rearmT = 0;
-  }
-
-  // LANDING: everything dead + on the beacon, low and slow
-  const left = L.targets.filter((t) => t.hp > 0).length;
-  if (!left) {
-    const lz = L.group.getObjectByName('lzBeacon');
-    if (lz) {
-      const d2 = Math.hypot(L.ship.position.x - lz.position.x, L.ship.position.z - lz.position.z);
-      if (d2 < 26 && L.ship.position.y < 40 && L.speed < 36) {
-        L.phase = 'land';
-        L.landT = 0;
-        L.landAt = new THREE.Vector3(lz.position.x, 3, lz.position.z);
-        const fwdY = new THREE.Vector3(0, 0, -1).applyQuaternion(L.ship.quaternion);
-        L.landYaw = Math.atan2(-fwdY.x, -fwdY.z) + Math.PI;
-        addMsg('LZ acquired — flaring for touchdown.', 'gold');
-        return;
-      }
+  // LZ landing (only once the grid is dead)
+  if (LW && !LW.targets.some((t) => t.hp > 0)) {
+    const d2 = Math.hypot(L.ship.position.x - LW.lzWorld.x, L.ship.position.z - LW.lzWorld.z);
+    if (d2 < 26 && L.ship.position.y < CITY_Y + 40 && L.speed < 36) {
+      L.phase = 'land';
+      L.landT = 0;
+      L.landAt = new THREE.Vector3(LW.lzWorld.x, CITY_Y + 3, LW.lzWorld.z);
+      const fwdY = new THREE.Vector3(0, 0, -1).applyQuaternion(L.ship.quaternion);
+      L.landQ = new THREE.Quaternion().setFromEuler(new THREE.Euler(0, Math.atan2(-fwdY.x, -fwdY.z) + Math.PI, 0));
+      addMsg('LZ acquired — flaring for touchdown.', 'gold');
+      return;
     }
   }
 
-  // lock HUD in the world
+  // lock HUD
   if (L.lock && L.lock.hp > 0) {
-    _wp.copy(L.lock.pos).setY(L.lock.type === 'PYLON' ? 40 : 8).add(ORIGIN);
+    _wp.copy(L.lock.pos).setY(L.lock.type === 'PYLON' ? CITY_Y + 40 : CITY_Y + 8);
     drawLockAt(_wp, `${L.lock.type} ${Math.round(L.ship.position.distanceTo(L.lock.pos))}m`,
       L.lock.type === 'PYLON' ? '#bb99ff' : '#ff8855');
   } else hideLockWidgets();
 
-  // cockpit camera
-  G.camera.position.copy(L.ship.position).addScaledVector(up, 0.9).addScaledVector(fwd, 0.6).add(ORIGIN);
+  // cockpit camera (world coords — no group offset, it's ONE world)
+  G.camera.position.copy(L.ship.position).addScaledVector(up, 0.9).addScaledVector(fwd, 0.6);
   G.camera.quaternion.copy(L.ship.quaternion);
   G.camera.quaternion.multiply(new THREE.Quaternion().setFromEuler(new THREE.Euler(0, 0, L.bank)));
 
   // HUD
+  const left = LW ? LW.targets.filter((t) => t.hp > 0).length : 0;
   const wh = document.getElementById('waveHud');
   if (wh) {
     wh.textContent = L.bombs <= 0
-      ? 'BOMBS OUT — REARM AT THE CARRIER RING'
+      ? 'BOMBS OUT — FLY BACK IN THROUGH THE MOUTH'
       : left ? `TARGETS ${left} · BOMBS ${L.bombs}` : 'LAND ON THE GREEN BEACON — low and slow';
   }
   const hpfill = document.getElementById('hpfill'), hptext = document.getElementById('hptext');
