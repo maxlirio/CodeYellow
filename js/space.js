@@ -216,7 +216,7 @@ export function buildFighter(hostile = false, friendly = false, tier = null) {
 }
 
 // BOMBER: fat, slow, green-lit, full of torpedoes
-function buildBomber() {
+export function buildBomber() {
   const grp = new THREE.Group();
   const vis = new THREE.Group();
   vis.rotation.y = Math.PI;
@@ -473,7 +473,7 @@ export function startSpaceFlight(level = null, fromNet = false, drill = false, b
 
   S = {
     group, ship, foes, bolts: [], fx: [], remote: new Map(),
-    speed: 0, vel: new THREE.Vector3(0, 0, 0), bank: 0, weapon: 0,
+    speed: 0, vel: new THREE.Vector3(0, 0, 0), bank: 0, weapon: 0, lock: null,
     hull: 100 + 25 * shipUp('hull'), maxHull: 100 + 25 * shipUp('hull'),
     maxSpeed: 70 + 8 * shipUp('engine'),
     carrierHp: 100, kills: 0, t: 0, fireCd: 0, level: lvl, comp,
@@ -500,7 +500,7 @@ export function startSpaceFlight(level = null, fromNet = false, drill = false, b
   if (drill) {
     addMsg('DOCKING DRILL — empty sky. ARROWS steer, W/S throttle. Follow the light pillar to the bay and fly in.', 'gold');
   } else {
-    addMsg(`VOID PATROL LV${lvl} — ${comp.name}. ARROWS steer, W/S throttle, A/D roll, SPACE fires.`, 'gold');
+    addMsg(`VOID PATROL LV${lvl} — ${comp.name}. ARROWS steer, W/S throttle, A/D roll, SPACE fires, T locks a target.`, 'gold');
     if (comp.bombers) addMsg('BOMBERS INBOUND — they are here for the CARRIER. Lose her and the campaign is over.', 'bad');
   }
   sfx.stairs();
@@ -523,6 +523,7 @@ function endSpaceFlight(result) {
   G.keys['Escape'] = false;
   for (const c of G.camera.children) c.visible = true;
   document.getElementById('waveHud')?.classList.add('hidden');
+  hideLockWidgets();
   const lost = result === 'CARRIER LOST';
   const boardAt = S.boardAt;
   S = null;
@@ -595,6 +596,83 @@ function hurtCarrier(n, at) {
 
 export function spaceMouse() { /* flight is fully button-driven */ }
 
+// ---- TARGET LOCK: never lose the bandit again. T cycles targets; the lock
+// gets a bracket when on screen and an edge arrow when it isn't, seekers
+// prefer it, and the cube radar rings it. Landfall reuses the same widgets. ----
+export function lockWidgets() {
+  let br = document.getElementById('lockbr');
+  if (!br) {
+    br = document.createElement('div');
+    br.id = 'lockbr';
+    br.style.cssText = 'position:fixed;width:46px;height:46px;border:2px solid #7fffee;border-radius:4px;pointer-events:none;z-index:40;display:none;box-shadow:0 0 8px rgba(127,255,238,.5)';
+    const lab = document.createElement('div');
+    lab.id = 'lockbrLab';
+    lab.style.cssText = 'position:absolute;top:48px;left:50%;transform:translateX(-50%);color:#7fffee;font:600 11px Menlo,monospace;text-shadow:0 0 4px #000;white-space:nowrap';
+    br.appendChild(lab);
+    document.body.appendChild(br);
+  }
+  let ar = document.getElementById('lockarrow');
+  if (!ar) {
+    ar = document.createElement('div');
+    ar.id = 'lockarrow';
+    ar.style.cssText = 'position:fixed;color:#7fffee;font-size:30px;pointer-events:none;z-index:40;display:none;text-shadow:0 0 8px rgba(127,255,238,.8)';
+    ar.textContent = '➤';
+    document.body.appendChild(ar);
+  }
+  return { br, ar };
+}
+export function hideLockWidgets() {
+  const br = document.getElementById('lockbr'), ar = document.getElementById('lockarrow');
+  if (br) br.style.display = 'none';
+  if (ar) ar.style.display = 'none';
+}
+const _lp = new THREE.Vector3();
+// place bracket/arrow for a WORLD position; label e.g. "412m"
+export function drawLockAt(worldPos, label, color = '#7fffee') {
+  const { br, ar } = lockWidgets();
+  _lp.copy(worldPos).project(G.camera);
+  const behind = _lp.z > 1;
+  const onScreen = !behind && Math.abs(_lp.x) < 0.93 && Math.abs(_lp.y) < 0.9;
+  if (onScreen) {
+    br.style.display = 'block';
+    ar.style.display = 'none';
+    br.style.borderColor = color;
+    br.style.left = `${(_lp.x + 1) / 2 * innerWidth - 23}px`;
+    br.style.top = `${(1 - _lp.y) / 2 * innerHeight - 23}px`;
+    const lab = document.getElementById('lockbrLab');
+    if (lab) { lab.textContent = label; lab.style.color = color; }
+  } else {
+    // clamp to the screen edge, point the arrow at it
+    br.style.display = 'none';
+    ar.style.display = 'block';
+    ar.style.color = color;
+    let dx = behind ? -_lp.x : _lp.x, dy = behind ? -_lp.y : _lp.y;
+    const m = Math.max(Math.abs(dx), Math.abs(dy), 0.0001);
+    dx /= m; dy /= m;
+    const px = (dx * 0.88 + 1) / 2 * innerWidth, py = (1 - dy * 0.88) / 2 * innerHeight;
+    ar.style.left = `${px - 15}px`;
+    ar.style.top = `${py - 15}px`;
+    ar.style.transform = `rotate(${Math.atan2(-dy, dx)}rad)`;
+  }
+}
+
+export function spaceCycleLock() {
+  if (!S) return;
+  const alive = S.foes.filter((f) => f.userData.hp > 0);
+  if (!alive.length) { S.lock = null; hideLockWidgets(); addMsg('No contacts to lock.'); return; }
+  const nose = new THREE.Vector3(0, 0, -1).applyQuaternion(S.ship.quaternion);
+  alive.sort((a, b) => {
+    const aa = a.position.clone().sub(S.ship.position).normalize().angleTo(nose);
+    const bb = b.position.clone().sub(S.ship.position).normalize().angleTo(nose);
+    return aa - bb;
+  });
+  const i = alive.indexOf(S.lock);
+  S.lock = alive[(i + 1) % alive.length];
+  const ud = S.lock.userData;
+  addMsg(`LOCK: ${ud.type === 'bomber' ? 'BOMBER' : (ud.tier || 'fighter').toUpperCase()}`, 'gold');
+  sfx.key();
+}
+
 export function spaceSetWeapon(i) {
   if (!S || i < 0 || i >= WEAPONS.length || S.weapon === i) return;
   S.weapon = i;
@@ -635,9 +713,11 @@ export function spaceFire() {
       mkBolt(S.ship.position.clone().addScaledVector(dir, 2), jd, { color: 0xffce2e, vel: 190, life: 0.45 });
     }
   } else {
-    // SEEKERS: one homing missile — locks whatever's nearest your nose
-    let target = null, best = 0.5;
-    for (const f of S.foes) {
+    // SEEKERS: one homing missile — your LOCK first, else nearest to the nose
+    let target = (S.lock && S.lock.userData.hp > 0
+      && dir.angleTo(S.lock.position.clone().sub(S.ship.position).normalize()) < 0.9) ? S.lock : null;
+    let best = 0.5;
+    if (!target) for (const f of S.foes) {
       if (f.userData.hp <= 0) continue;
       const to = f.position.clone().sub(S.ship.position).normalize();
       const ang = dir.angleTo(to);
@@ -982,6 +1062,18 @@ export function updateSpace(dt) {
   }
   const pillar = S.group.getObjectByName('dockPillar');
   if (pillar) pillar.visible = S.phase === 'dock';
+  // target lock: track it, drop it when it dies, reacquire the next threat
+  if (S.lock && S.lock.userData.hp <= 0) {
+    S.lock = null;
+    const alive = S.foes.filter((f) => f.userData.hp > 0);
+    if (alive.length) spaceCycleLock();
+  }
+  if (S.lock && S.lock.userData.hp > 0) {
+    S.lock.getWorldPosition(_lp);
+    const d = S.lock.position.distanceTo(S.ship.position);
+    drawLockAt(_lp.clone(), `${Math.round(d)}m`);
+  } else hideLockWidgets();
+
   if (!S.leftBay && S.ship.position.distanceTo(DOCK) > 70) S.leftBay = true;
   if (S.phase === 'dock' && S.leftBay) {
     const approach = DOCK.clone().add(new THREE.Vector3(0, 0, 22));
@@ -1068,6 +1160,12 @@ function drawDomeRadar(alive) {
     if (f.userData.hp <= 0) continue;
     const c = f.userData.type === 'bomber' ? '#88ff55' : ({ raider: '#ff8855', interceptor: '#ff66ee', gunship: '#bb66ff' })[f.userData.tier] || '#ff8855';
     blip(f.position, c, f.userData.type === 'bomber' || f.userData.tier === 'gunship' ? 3.4 : 2.6);
+    if (f === S.lock) { // ring the locked contact
+      const rel = { x: f.position.x - S.ship.position.x, y: f.position.y - S.ship.position.y, z: f.position.z - S.ship.position.z };
+      const at = P(rel.x, rel.y, rel.z);
+      ctx.strokeStyle = '#ffffff';
+      ctx.strokeRect(at[0] - 6, at[1] - 6, 12, 12);
+    }
   }
   for (const b of S.bolts) if (b.userData.torp) blip(b.position, '#caff70', 2);
   for (const r of S.remote.values()) blip(r.grp.position, '#7fd8ff', 3);

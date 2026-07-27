@@ -22,7 +22,8 @@ import {
   onRemoteMission, onRemoteMissionEnd, beginSortie,
 } from './missions.js';
 import { openTrainRoom, setSkillHooks } from './skills.js';
-import { updateSpace, spaceMouse, spaceFire, inSpace, startSpaceFlight, setSpaceHooks, spaceSetWeapon, startBoarding } from './space.js';
+import { updateSpace, spaceMouse, spaceFire, inSpace, startSpaceFlight, setSpaceHooks, spaceSetWeapon, startBoarding, spaceCycleLock } from './space.js';
+import { startLandfall, updateLandfall, inLandfall, landfallCycleLock, landfallDrop } from './landfall.js';
 import { initViewmodel, updateViewmodel } from './viewmodel.js';
 import { updateWalls, clearWalls } from './walls.js';
 import { initFloorTraps, updateTraps } from './traps.js';
@@ -113,6 +114,7 @@ async function boot() {
     startRun(params.get('seed') || randomSeed(), params.get('mode') || 'campaign');
     // ?fly=1 — straight into the cockpit, no clears required
     if (params.get('fly')) setTimeout(() => startSpaceFlight(null, false, !!params.get('dock')), 600);
+    if (params.get('bomb')) setTimeout(() => startLandfall(), 600);
     // ?hangar=1 — spawn into a CLEARED hangar deck: walk to a dropship and board it
     if (params.get('hangar')) {
       // boarding launches a LIVE patrol (add ?drill=1 for the empty-sky version)
@@ -348,7 +350,7 @@ function setupMenu() {
     onMission: (m) => onRemoteMission(m),
     onMissionEnd: () => onRemoteMissionEnd(),
   });
-  setMissionHooks({ goto: descendTo, disposeFloor, lock: lockPointer });
+  setMissionHooks({ goto: descendTo, disposeFloor, lock: lockPointer, landfall: startLandfall });
   setSkillHooks({ lock: lockPointer });
   setSpaceHooks({ onCarrierLost: () => {
     addMsg('THE CARRIER IS GONE. There is no ship to come home to.', 'bad');
@@ -1126,6 +1128,8 @@ function setupInput() {
     G.keys[e.code] = true;
     if (G.mode === 'space') {
       if (e.code.startsWith('Digit')) { spaceSetWeapon(+e.code.slice(5) - 1); return; }
+      if (e.code === 'KeyT') { (inLandfall() ? landfallCycleLock : spaceCycleLock)(); return; }
+      if (e.code === 'Space' && inLandfall()) { e.preventDefault(); if (!e.repeat) landfallDrop(); return; }
       if (e.code.startsWith('Arrow') || e.code === 'Space') { e.preventDefault(); return; }
     }
     if (e.code === 'Tab') { e.preventDefault(); toggleInventory(); return; }
@@ -1222,7 +1226,8 @@ function loop(t) {
   const simActive = G.mode === 'playing' || (G.mode !== 'menu' && G.net.role !== 'solo' && G.net.started);
 
   if (G.mode === 'space') {
-    updateSpace(dt);
+    if (inLandfall()) updateLandfall(dt);
+    else updateSpace(dt);
   } else if (G.mode === 'playing') {
     updatePlayer(dt);
     updateDeath(dt);

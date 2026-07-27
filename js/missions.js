@@ -32,9 +32,9 @@ export const SECTIONS = [
   { id: 'weapons', name: 'WEAPONS FACILITY', floorN: 6, threat: 3, theme: 'command',
     roles: ['foundry', 'foundry', 'machine', 'gantry'],
     desc: 'Assembly lines still printing the defenders. Guarded accordingly.' },
-  { id: 'reactor', name: 'REACTOR CORE', floorN: 9, threat: 4, theme: 'engineering',
-    roles: [],
-    desc: 'Something old coils on the pile. Kill it and the hulk is yours.' },
+  { id: 'landfall', name: 'OPERATION LANDFALL', floorN: 9, threat: 4, theme: 'engineering',
+    roles: [], special: 'landfall',
+    desc: 'The carrier has arrived. A civilization below, taken. Bomb the shield grid open, then land.' },
 ];
 
 // sortie state: null, or { id, name, floorN, seed, n, active, entered }
@@ -217,15 +217,15 @@ function renderMap() {
   const cleared = G.run?.clearedSections || [];
   list.innerHTML = '';
   for (const sec of SECTIONS) {
-    const locked = sec.id === 'reactor' && !cleared.includes('weapons');
+    const locked = sec.id === 'landfall' && !cleared.includes('weapons');
     const b = document.createElement('button');
     b.className = 'mm-sec' + (selectedSec === sec.id ? ' sel' : '') + (locked ? ' locked' : '');
-    b.style.left = ({ cargo: '8%', spaceport: '24%', security: '38%', hab: '50%', engine: '64%', weapons: '77%', reactor: '90%' })[sec.id];
-    b.style.top = ({ cargo: '58%', spaceport: '30%', security: '62%', hab: '34%', engine: '60%', weapons: '32%', reactor: '46%' })[sec.id];
+    b.style.left = ({ cargo: '8%', spaceport: '24%', security: '38%', hab: '50%', engine: '64%', weapons: '77%', landfall: '90%' })[sec.id];
+    b.style.top = ({ cargo: '58%', spaceport: '30%', security: '62%', hab: '34%', engine: '60%', weapons: '32%', landfall: '46%' })[sec.id];
     b.textContent = sec.name;
     b.dataset.threat = 'THREAT ' + '▮'.repeat(sec.threat);
     b.onclick = () => {
-      if (locked) { detail.innerHTML = '<p class="mm-locked">REACTOR ACCESS SEALED — clear the WEAPONS FACILITY first.</p>'; return; }
+      if (locked) { detail.innerHTML = '<p class="mm-locked">DESTINATION LOCKED — clear the WEAPONS FACILITY first.</p>'; return; }
       selectedSec = sec.id;
       renderMap();
     };
@@ -258,6 +258,19 @@ function renderMap() {
   if (sec) {
     // scalable sectors offer OP SCALE: bigger area, more hostiles, hazard pay.
     // The ENGINE ROOM doesn't — there is exactly one engine room on this ship.
+    if (sec.id === 'landfall') {
+      detail.innerHTML = `
+        <h3>OPERATION LANDFALL — ACT I</h3>
+        <p class="mm-threat">FLIGHT OPS · BOMBING RUN</p>
+        <p>${sec.desc}</p>
+        <p>Fly the bomber. LOCK a shield pylon (T), line the run up on the bombsight, release when it flashes RED (SPACE). Six bombs — rearm at the carrier's ring. Kill the grid, then land on the beacon.</p>
+        <button id="mmConfirm">LAUNCH BOMBER</button>`;
+      document.getElementById('mmConfirm').onclick = () => {
+        closeMissionMap();
+        hooks.landfall?.();
+      };
+      return;
+    }
     const scalable = ['cargo', 'security', 'hab', 'weapons'].includes(sec.id);
     const OPS = [
       { name: 'SWEEP', hint: 'compact · standard pay' },

@@ -248,7 +248,7 @@ try {
     assert(SECTIONS.every(s => s.floorN >= 1 && themeIds.includes(s.theme) && s.threat >= 1),
       'sections: floors + themes valid');
     const deep = SECTIONS.find(s => s.id === 'reactor');
-    assert(deep && deep.floorN === 9, 'sections: the reactor is deck 9');
+    assert(SECTIONS.find(s => s.id === 'landfall')?.floorN === 9, 'sections: LANDFALL is the deck-9 finale');
     // a sortie-seeded deck generates and differs run to run
     const a = generateShipDeck('seedA:sortie1', 5), b = generateShipDeck('seedA:sortie2', 5);
     assert(a.grid.cells.length && b.grid.cells.length &&
