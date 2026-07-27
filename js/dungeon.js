@@ -11,6 +11,7 @@ import {
 } from './config.js';
 import { buildMergedStatic, pieceColliders } from './assets.js';
 import { buildShipStatic } from './shipmeshes.js';
+import { buildSectorMeshes } from './sectors.js';
 import { generateShipDeck } from './ship.js';
 import { ENEMIES } from './config.js';
 const ENEMIES_TRIO = new Set(Object.keys(ENEMIES).filter(k => ENEMIES[k].trio));
@@ -736,7 +737,7 @@ export function generateFloorData(seedStr, floor) {
 export function buildFloorMeshes(fs) {
   if (fs.built) return;
   // ship decks are procedural geometry, not tile placements
-  const group = fs.grid.ship ? buildShipStatic(fs) : buildMergedStatic(fs.placements);
+  const group = fs.sectorId ? buildSectorMeshes(fs) : fs.grid.ship ? buildShipStatic(fs) : buildMergedStatic(fs.placements);
   // the dragon's vault dresses itself in cave, not corridor
   if (fs.grid.lairDecor) {
     let lights = 0;
@@ -819,9 +820,11 @@ export function buildFloorMeshes(fs) {
   // bridge's TOUCH surfaces for click interaction
   fs.liftDiscs = [];
   fs.stationMeshes = [];
+  fs.driftShips = [];
   group.traverse((n) => {
     if (n.userData.gravlift) fs.liftDiscs.push(n);
     if (n.userData.station && n.isMesh) fs.stationMeshes.push(n);
+    if (n.userData.driftShip) fs.driftShips.push(n);
   });
   fs.built = true;
 }
@@ -839,8 +842,14 @@ export function liftDiscY(gl) {
   return lo;
 }
 export function updateGravLifts(fs) {
-  if (!fs?.liftDiscs) return;
-  for (const d of fs.liftDiscs) d.position.y = liftDiscY(d.userData.gravlift) - 0.14;
+  if (!fs) return;
+  if (fs.liftDiscs) for (const d of fs.liftDiscs) d.position.y = liftDiscY(d.userData.gravlift) - 0.14;
+  // the fighters outside the glass drift on slow patrol lines
+  if (fs.driftShips) for (const f of fs.driftShips) {
+    const d = f.userData.driftShip;
+    f.position.x = d.x0 + Math.sin((G.time || 0) * d.sp + d.ph) * d.amp;
+    f.rotation.z = Math.sin((G.time || 0) * d.sp * 2 + d.ph) * 0.15;
+  }
 }
 
 // throw away one floor entirely — the next ensureFloor() regenerates it fresh.

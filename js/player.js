@@ -132,7 +132,7 @@ export function resetPlayerForFloor() {
   const p = G.player;
   clearMotionState(p); // a rope/lash held across a floor change anchors to the OLD grid
   p.obj.position.set(G.grid.spawn.x, 0, G.grid.spawn.z);
-  p.obj.position.y = groundHeightAt(G.grid.spawn.x, G.grid.spawn.z, 0);
+  p.obj.position.y = G.grid.spawnY ?? groundHeightAt(G.grid.spawn.x, G.grid.spawn.z, 0);
   // never spawn embedded in geometry
   if (bodyBlocked(p.obj.position.x, p.obj.position.z, p.obj.position.y)) {
     const free = resolveStuck(p.obj.position.x, p.obj.position.z, p.obj.position.y);
@@ -987,7 +987,7 @@ function updateInteractPrompt() {
   const keeper = nearestShopkeeper(p.obj.position);
   if (keeper) {
     showPrompt(`<b>E</b> — ${keeper.label}`);
-    interactTarget = { kind: 'shop', shop: keeper.shop };
+    interactTarget = { kind: 'shop', shop: keeper.shop, npc: keeper };
     return;
   }
   const s = G.grid.stairs;
@@ -1026,7 +1026,7 @@ export function tryInteract(onStairs, onShop, onHome) {
   } else if (interactTarget.kind === 'door') {
     useDoor(interactTarget.door);
   } else if (interactTarget.kind === 'shop') {
-    onShop?.(interactTarget.shop);
+    onShop?.(interactTarget.shop, interactTarget.npc);
   } else if (interactTarget.kind === 'home') {
     onHome?.(interactTarget.home);
   } else if (interactTarget.kind === 'stairs') {

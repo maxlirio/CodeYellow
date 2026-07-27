@@ -15,7 +15,8 @@ import { netSend, myId } from './net.js';
 const ORIGIN = new THREE.Vector3(0, 800, 0);
 const FIELD_R = 380;
 const CAP = new THREE.Vector3(0, -70, -150);   // the carrier, group-local
-const DOCK = new THREE.Vector3(36, -46, -122); // bay mouth on the forward deck
+const DOCK = new THREE.Vector3(30, -64, -119);   // bay mouth, mid-hull flank (+z face)
+const BAYIN = new THREE.Vector3(30, -64, -131);  // inside the launch room
 // hull-segment colliders (group-local): fore+mid hull, prow, aft+engines, tower
 const CARRIER_BOXES = [
   { x: CAP.x + 20, y: CAP.y, z: CAP.z, hx: 101, hy: 20, hz: 29 },   // fore + mid hull (+ keel)
@@ -71,7 +72,7 @@ function starSphere() {
 }
 
 // ---- THE CARRIER: an actual warship, not two boxes ----
-function buildCarrier() {
+export function buildCarrier() {
   const ship = new THREE.Group();
   const hull = new THREE.MeshStandardMaterial({ color: 0x77828e, metalness: 0.45, roughness: 0.6 });
   const dark = new THREE.MeshStandardMaterial({ color: 0x4a525c, metalness: 0.4, roughness: 0.7 });
@@ -125,24 +126,40 @@ function buildCarrier() {
     B(teal, 200, 0.8, 0.8, -30, 15.4, sz * 27.5);
     B(teal, 200, 0.8, 0.8, -30, -15.4, sz * 27.5);
   }
-  // THE DOCKING BAY: a glowing mouth on the upper starboard flank
+  // THE DOCKING BAY: Star Wars style — a lit mouth in the flank with a real
+  // launch room behind it. You take off out of it and the tractor sets you
+  // back down inside it.
   const bay = new THREE.Group();
-  const frame = new THREE.Mesh(new THREE.BoxGeometry(24, 14, 1.6), teal);
-  frame.position.z = 0.9;
-  const hole = new THREE.Mesh(new THREE.BoxGeometry(21, 11, 2.4),
-    new THREE.MeshBasicMaterial({ color: 0x062026, toneMapped: false }));
-  hole.position.z = 1;
-  bay.add(frame, hole);
-  const bayLight = new THREE.PointLight(0x4fe8e0, 4000, 120, 1.8);
-  bayLight.position.z = 8;
+  const frame = new THREE.Mesh(new THREE.BoxGeometry(26, 15, 1.8), teal);
+  bay.add(frame);
+  // the opening (dark) + interior room: floor, walls, roof, back wall, pad lights
+  const roomD = 16;
+  const irM = new THREE.MeshStandardMaterial({ color: 0x39414c, metalness: 0.3, roughness: 0.8 });
+  const mk = (sx, sy, sz, x, y, z) => {
+    const m = new THREE.Mesh(new THREE.BoxGeometry(sx, sy, sz), irM);
+    m.position.set(x, y, z); bay.add(m); return m;
+  };
+  mk(23, 1, roomD, 0, -6.5, -roomD / 2);      // floor
+  mk(23, 1, roomD, 0, 6.5, -roomD / 2);       // roof
+  mk(1, 13, roomD, -11.5, 0, -roomD / 2);     // walls
+  mk(1, 13, roomD, 11.5, 0, -roomD / 2);
+  mk(23, 13, 1, 0, 0, -roomD);                // back wall
+  const padGlow = new THREE.Mesh(new THREE.BoxGeometry(8, 0.1, 8),
+    new THREE.MeshBasicMaterial({ color: 0x2fa89e, toneMapped: false }));
+  padGlow.position.set(0, -5.9, -roomD / 2);
+  bay.add(padGlow);
+  const bayLight = new THREE.PointLight(0x9fdcff, 140, 40, 1.7);
+  bayLight.position.set(0, 4, -roomD / 2);
   bay.add(bayLight);
+  const bayLight2 = new THREE.PointLight(0x4fe8e0, 700, 110, 1.8);
+  bayLight2.position.z = 10;
+  bay.add(bayLight2);
   const beacon = new THREE.Mesh(new THREE.SphereGeometry(1.6, 10, 8),
     new THREE.MeshBasicMaterial({ color: 0x7fffee, toneMapped: false }));
   beacon.name = 'dockBeacon';
-  beacon.position.z = 6;
+  beacon.position.z = 5;
   bay.add(beacon);
   bay.position.copy(DOCK).sub(CAP);
-  bay.rotation.x = -Math.PI / 2 + 0.35; // mouth tilted up off the deck, catching approach
   ship.add(bay);
   // guidance pillar: a light column you can see across the dome (dock phase only)
   const pillar = new THREE.Mesh(new THREE.CylinderGeometry(1.4, 1.4, 260, 8, 1, true),
@@ -157,7 +174,7 @@ function buildCarrier() {
 
 // a boxy dart fighter; hostile = hi-vis orange, friendly wingmates get blue trim.
 // Nose along -z for everyone.
-function buildFighter(hostile = false, friendly = false, tier = null) {
+export function buildFighter(hostile = false, friendly = false, tier = null) {
   const grp = new THREE.Group();
   const vis = new THREE.Group();
   vis.rotation.y = Math.PI;
@@ -216,8 +233,55 @@ function buildBomber() {
 }
 
 export function inSpace() { return !!S; }
+export function _dbg() { return S ? { phase: S.phase, speed: +S.speed.toFixed(1), z: +S.ship.position.z.toFixed(1), kw: !!G.keys.KeyW } : (SB ? { boarding: +SB.t.toFixed(1) } : null); }
 
-export function startSpaceFlight(level = null, fromNet = false, drill = false) {
+// pre-flight boarding cinematic state (runs while the DECK is still rendered)
+let SB = null;
+export function startBoarding(npc, drill = false) {
+  if (S || SB) return;
+  const p = G.player;
+  SB = {
+    t: 0, drill,
+    from: G.camera.position.clone(), fromQ: G.camera.quaternion.clone(),
+    door: new THREE.Vector3(npc.x, 1.5, npc.z),
+    seat: new THREE.Vector3(npc.x, 1.9, npc.z + 4.2), // inside the hull, facing the mouth
+    boardAt: { x: npc.x, z: npc.z, floor: G.floor },
+  };
+  G.mode = 'space';
+  for (const c of G.camera.children) c.visible = false;
+  addMsg('Boarding the dropship…');
+  sfx.key();
+}
+
+function updateBoarding(dt) {
+  SB.t += dt;
+  const t = SB.t;
+  const ease = (k) => k * k * (3 - 2 * k);
+  if (t < 1.1) {
+    const k = ease(t / 1.1);
+    G.camera.position.lerpVectors(SB.from, SB.door, k);
+  } else if (t < 1.6) {
+    if (!SB.doored) { SB.doored = true; sfx.chest(); addMsg('Ramp open.'); }
+  } else if (t < 2.9) {
+    const k = ease((t - 1.6) / 1.3);
+    G.camera.position.lerpVectors(SB.door, SB.seat, k);
+    const target = new THREE.Quaternion().setFromEuler(new THREE.Euler(0, Math.PI, 0, 'YXZ')); // face the mouth (south)
+    G.camera.quaternion.slerp(target, Math.min(1, dt * 4));
+  } else if (t < 4.1) {
+    if (!SB.powered) {
+      SB.powered = true;
+      sfx.rumble();
+      addMsg('Reactor spooling… systems green.', 'gold');
+      G.shake = Math.max(G.shake || 0, 0.25);
+    }
+  } else {
+    const opts = SB;
+    SB = null;
+    startSpaceFlight(null, false, opts.drill, opts.boardAt);
+  }
+}
+
+export function startSpaceFlight(level = null, fromNet = false, drill = false, boardAt = null) {
   if (S) return;
   if (fromNet && G.mode !== 'playing') { addMsg('The patrol launched without you.'); return; }
   const lvl = level ?? (G.run.patrolLvl || 0) + 1;
@@ -256,7 +320,9 @@ export function startSpaceFlight(level = null, fromNet = false, drill = false) {
   const rail = new THREE.Mesh(new THREE.BoxGeometry(1.7, 0.09, 0.09), dashM);
   rail.position.set(0, 1.52, -0.85);
   ship.add(rail);
-  ship.position.set(0, 0, 120);
+  // you launch FROM the bay room, nose out (+z)
+  ship.position.copy(BAYIN);
+  ship.quaternion.setFromEuler(new THREE.Euler(0, Math.PI, 0)); // nose -z flipped => flying +z
   group.add(ship);
 
   // the intruders
@@ -290,9 +356,9 @@ export function startSpaceFlight(level = null, fromNet = false, drill = false) {
 
   S = {
     group, ship, foes, bolts: [], fx: [], remote: new Map(),
-    speed: 26, vel: new THREE.Vector3(0, 0, -20), bank: 0, weapon: 0,
+    speed: 0, vel: new THREE.Vector3(0, 0, 0), bank: 0, weapon: 0,
     hull: 100, carrierHp: 100, kills: 0, t: 0, fireCd: 0, level: lvl, comp,
-    phase: drill ? 'dock' : 'fight', drill, netT: 0, foeT: 0, scrapeT: 0,
+    phase: 'launch', afterLaunch: drill ? 'dock' : 'fight', drill, boardAt, netT: 0, foeT: 0, scrapeT: 0,
     time0: G.time || 0, prevFog: G.scene.fog.density, prevBg: G.scene.background.getHex(), prevFar: G.camera.far,
     isHost: G.net.role !== 'guest',
   };
@@ -330,8 +396,15 @@ function endSpaceFlight(result) {
   for (const c of G.camera.children) c.visible = true;
   document.getElementById('waveHud')?.classList.add('hidden');
   const lost = result === 'CARRIER LOST';
+  const boardAt = S.boardAt;
   S = null;
   G.mode = 'playing';
+  if (boardAt && G.floor === boardAt.floor && G.player) {
+    // set down beside the dropship you took off in — same room, same pad
+    G.player.obj.position.set(boardAt.x, 0, boardAt.z + 2);
+    G.player.obj.position.y = 0;
+    addMsg('The tractor sets you down on the hangar pad.', 'gold');
+  }
   if (result === 'DOCKED') { addMsg('Docked clean. Drill complete.', 'gold'); sfx.levelup(); }
   else if (result === 'CLEARED') { addMsg(`Docked. Patrol LV${G.run.patrolLvl} clear — +${credits} credits.`, 'gold'); sfx.victory(); }
   else if (!lost) addMsg('Fighter recovered by tether.', 'bad');
@@ -504,10 +577,53 @@ export function onSpaceNet(m, pid) {
 }
 
 export function updateSpace(dt) {
+  window.__sph = SB ? 'board' : (S ? S.phase : null); // probe hook
+  if (SB) { updateBoarding(dt); return; }
   if (!S) return;
   S.t += dt;
   S.fireCd -= dt;
-  if (G.keys['Escape']) { endSpaceFlight('RECOVERED'); return; }
+  if (G.keys['Escape'] && S.phase !== 'tractor') { endSpaceFlight('RECOVERED'); return; }
+
+  // LAUNCH: sitting in the bay — HOLD W and punch out through the mouth
+  if (S.phase === 'launch') {
+    if (G.keys['KeyW']) S.speed = Math.min(46, S.speed + 22 * dt);
+    else S.speed = Math.max(0, S.speed - 30 * dt);
+    const fwdL = new THREE.Vector3(0, 0, -1).applyQuaternion(S.ship.quaternion);
+    S.vel.copy(fwdL).multiplyScalar(S.speed);
+    S.ship.position.addScaledVector(S.vel, dt);
+    const upL = new THREE.Vector3(0, 1, 0).applyQuaternion(S.ship.quaternion);
+    G.camera.position.copy(S.ship.position).addScaledVector(upL, 0.78).addScaledVector(fwdL, 0.35).add(ORIGIN);
+    G.camera.quaternion.copy(S.ship.quaternion);
+    const wh0 = document.getElementById('waveHud');
+    if (wh0) wh0.textContent = S.speed < 2 ? 'HOLD W TO LAUNCH' : 'LAUNCHING…';
+    if (S.ship.position.z > DOCK.z + 10) {
+      S.phase = S.afterLaunch;
+      S.speed = Math.max(S.speed, 26);
+      addMsg(S.drill ? 'Clear of the bay. Fly the pattern, then come home to the beacon.' : 'Clear of the bay — hostiles in the dome. Good hunting.', 'gold');
+    }
+    return;
+  }
+
+  // TRACTOR: the bay has you — hands off, it sets you down inside
+  if (S.phase === 'tractor') {
+    S.trT += dt;
+    const k = Math.min(1, S.trT / 3.4);
+    const ease = k * k * (3 - 2 * k);
+    const mid = DOCK.clone().add(new THREE.Vector3(0, 0, 14));
+    const p1 = new THREE.Vector3().lerpVectors(S.trFrom, mid, ease);
+    const p2 = new THREE.Vector3().lerpVectors(mid, BAYIN, ease);
+    S.ship.position.lerpVectors(p1, p2, ease);
+    const tq = new THREE.Quaternion().setFromEuler(new THREE.Euler(0, Math.PI, 0)); // nose inward
+    S.ship.quaternion.slerp(tq, Math.min(1, dt * 2.5));
+    const fwdT = new THREE.Vector3(0, 0, -1).applyQuaternion(S.ship.quaternion);
+    const upT = new THREE.Vector3(0, 1, 0).applyQuaternion(S.ship.quaternion);
+    G.camera.position.copy(S.ship.position).addScaledVector(upT, 0.78).addScaledVector(fwdT, 0.35).add(ORIGIN);
+    G.camera.quaternion.copy(S.ship.quaternion);
+    const whT = document.getElementById('waveHud');
+    if (whT) whT.textContent = 'TRACTOR LOCK — the bay has you';
+    if (k >= 1) endSpaceFlight('CLEARED');
+    return;
+  }
 
   // FULLY BUTTON-DRIVEN, TRUE COCKPIT AXES — loops, rolls, inverted, all of it
   if (G.keys['KeyW']) S.speed = Math.min(70, S.speed + 30 * dt);
@@ -546,7 +662,7 @@ export function updateSpace(dt) {
   // the carrier is SOLID — per-SEGMENT boxes that hug the hull, not one slab.
   // During the dock phase the bay tractor owns the last 40m: no collision there,
   // or the approach corridor would bounce you off the deck you're landing on.
-  const docking = S.phase === 'dock' && S.ship.position.distanceTo(DOCK) < 40;
+  const docking = (S.phase === 'dock' || S.phase === 'tractor') && S.ship.position.distanceTo(DOCK) < 55;
   if (!docking) {
     const hp2 = S.ship.position;
     for (const HB of CARRIER_BOXES) {
@@ -737,12 +853,23 @@ export function updateSpace(dt) {
   }
   const pillar = S.group.getObjectByName('dockPillar');
   if (pillar) pillar.visible = S.phase === 'dock';
-  if (S.phase === 'dock' && S.ship.position.distanceTo(DOCK) < 12) { endSpaceFlight('CLEARED'); return; }
+  if (!S.leftBay && S.ship.position.distanceTo(DOCK) > 70) S.leftBay = true;
+  if (S.phase === 'dock' && S.leftBay) {
+    const approach = DOCK.clone().add(new THREE.Vector3(0, 0, 22));
+    if (S.ship.position.distanceTo(approach) < 20) {
+      S.phase = 'tractor';
+      S.trT = 0;
+      S.trFrom = S.ship.position.clone();
+      addMsg('TRACTOR LOCK — the bay is bringing you in.', 'gold');
+      sfx.stairs();
+      return;
+    }
+  }
   const wh = document.getElementById('waveHud');
   if (wh) {
     const cap = S.comp.bombers ? ` · CARRIER ${Math.max(0, Math.round(S.carrierHp))}%` : '';
     wh.textContent = S.phase === 'dock'
-      ? `RETURN TO DOCK — range ${Math.round(S.ship.position.distanceTo(DOCK))}m`
+      ? `RETURN TO DOCK — range ${Math.round(S.ship.position.distanceTo(DOCK.clone().add(new THREE.Vector3(0, 0, 22))))}m`
       : `PATROL LV${S.level} — [${S.weapon + 1}] ${WEAPONS[S.weapon].name} · HOSTILES ${alive}${cap} · VEL ${Math.round(S.vel.length())} m/s`;
   }
   // the health bar is your SHIP now

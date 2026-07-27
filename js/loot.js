@@ -97,7 +97,7 @@ function addLootEntity(fs, s, id) {
     item: s.item || null, itemColor: s.item ? rarityOf(s.item).color : null,
   };
   let obj;
-  switch (s.kind) {
+  switch (s.kind || 'chest') {
     case 'chest': obj = buildSupplyPod(false); obj.rotation.y = s.yaw || 0; break;
     case 'goldchest': obj = buildSupplyPod(true); obj.rotation.y = s.yaw || 0; break;
     case 'coin': obj = buildCreditChip(); obj.scale.setScalar(1.4); loot.spin = true; break;

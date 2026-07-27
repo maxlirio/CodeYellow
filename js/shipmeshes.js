@@ -10,6 +10,7 @@ import * as THREE from 'three';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import { CELL, PLATFORM_H } from './config.js';
 import { makePiece } from './assets.js';
+import { buildCarrier, buildFighter } from './space.js';
 
 const WALL_H = 7;    // bulkhead height
 const CEIL_H = 7;    // deck ceiling
@@ -497,6 +498,15 @@ export function buildShipStatic(fs) {
     stars.position.set((mx0 + mx1) / 2, 3, mz + 11);
     stars.rotation.y = Math.PI; // face back into the hangar
     group.add(stars);
+    // the war outside: hostile fighters drift past the mouth
+    for (let i = 0; i < 3; i++) {
+      const f = buildFighter(true);
+      f.scale.setScalar(0.8);
+      f.position.set(mx0 + 20 + i * 26, 3 + i * 2, mz + 8.5);
+      f.rotation.y = Math.PI / 2 + i * 0.35;
+      f.userData.driftShip = { x0: f.position.x, amp: 8 + i * 4, sp: 0.12 + i * 0.05, ph: i * 2.1 };
+      group.add(f);
+    }
   }
 
   // THE BRIDGE: starfield wrapped all the way around, a central holo table,
@@ -510,6 +520,14 @@ export function buildShipStatic(fs) {
     );
     stars.position.set(cx0, 4, cz0);
     group.add(stars);
+    for (let i = 0; i < 2; i++) {
+      const f = buildFighter(true);
+      f.scale.setScalar(0.65);
+      f.position.set(cx0 - 12 + i * 24, 4 + i * 2, cz0 - 30);
+      f.rotation.y = Math.PI / 2;
+      f.userData.driftShip = { x0: f.position.x, amp: 10, sp: 0.1 + i * 0.04, ph: i * 3 };
+      group.add(f);
+    }
 
     // THE HOLO TABLE — round pedestal, glowing top, a hologram of the hulk
     // floating above it (missions.js spins it and lights it up on red alert)
@@ -525,28 +543,16 @@ export function buildShipStatic(fs) {
     top.position.set(cx0, 1.06, cz0);
     top.userData.station = 'missions';
     group.add(top);
-    // the hulk, in light: translucent hull + prow + engine block
-    const holoMat = new THREE.MeshBasicMaterial({ color: 0x3fe8d8, transparent: true, opacity: 0.5, toneMapped: false });
+    // the hologram is THE ACTUAL SHIP — the same carrier you see outside,
+    // shrunk onto the table and rendered as light
+    const holoMat = new THREE.MeshBasicMaterial({ color: 0x3fe8d8, transparent: true, opacity: 0.45, toneMapped: false });
     const holoShip = new THREE.Group();
     holoShip.name = 'holoShip';
-    const hull = new THREE.Mesh(new THREE.BoxGeometry(3.6, 0.55, 1.1), holoMat);
-    holoShip.add(hull);
-    const prow = new THREE.Mesh(new THREE.ConeGeometry(0.55, 1.2, 4), holoMat);
-    prow.rotation.z = -Math.PI / 2;
-    prow.position.x = 2.35;
-    holoShip.add(prow);
-    const spine = new THREE.Mesh(new THREE.BoxGeometry(1.6, 0.35, 0.5), holoMat);
-    spine.position.set(-0.4, 0.42, 0);
-    holoShip.add(spine);
-    const eng = new THREE.Mesh(new THREE.BoxGeometry(0.8, 0.8, 1.5), holoMat);
-    eng.position.x = -2.1;
-    holoShip.add(eng);
-    for (const oz of [-0.45, 0, 0.45]) {
-      const noz = new THREE.Mesh(new THREE.CylinderGeometry(0.16, 0.2, 0.5, 6), holoMat);
-      noz.rotation.z = Math.PI / 2;
-      noz.position.set(-2.6, 0, oz);
-      holoShip.add(noz);
-    }
+    const mini = buildCarrier();
+    mini.position.set(0, 0, 0); // strip its space placement
+    mini.traverse((n) => { if (n.isMesh) n.material = holoMat; if (n.isLight) n.intensity = 0; });
+    mini.scale.setScalar(0.016);
+    holoShip.add(mini);
     // the alert marker: a red node that pulses on the hull when a signature lands
     const alertNode = new THREE.Mesh(new THREE.SphereGeometry(0.2, 8, 8),
       new THREE.MeshBasicMaterial({ color: 0xff3322, toneMapped: false }));

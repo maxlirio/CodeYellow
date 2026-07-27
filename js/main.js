@@ -16,12 +16,13 @@ import { giveStartingGear, equipItem, salvageItem, rollTrinket, rollWeapon, roll
 import { SPELLS, SHOP_TABLES, ENEMIES, RARITIES } from './config.js';
 import { generateTownData, generateArenaData, spawnTownNpcs, updateTownNpcs } from './town.js';
 import { generateBridgeData, getHoloTexture, renderHologram } from './bridge.js';
+import { generateSector, hasSector } from './sectors.js';
 import {
   setMissionHooks, updateMissions, openMissionMap, enterSortie, tryExtract,
   onRemoteMission, onRemoteMissionEnd, beginSortie,
 } from './missions.js';
 import { openTrainRoom, setSkillHooks } from './skills.js';
-import { updateSpace, spaceMouse, spaceFire, inSpace, startSpaceFlight, setSpaceHooks, spaceSetWeapon } from './space.js';
+import { updateSpace, spaceMouse, spaceFire, inSpace, startSpaceFlight, setSpaceHooks, spaceSetWeapon, startBoarding } from './space.js';
 import { initViewmodel, updateViewmodel } from './viewmodel.js';
 import { updateWalls, clearWalls } from './walls.js';
 import { initFloorTraps, updateTraps } from './traps.js';
@@ -488,9 +489,10 @@ function ensureFloor(n) {
     }
     else if (runMode !== 'campaign') Object.assign(fs, generateArenaData());
     else if (G.sortie && n === G.sortie.floorN) {
-      // sortie floors are one-shot: fresh seed each insertion, named for the section,
-      // and ALWAYS locked — extraction opens only once the section is clear
-      Object.assign(fs, generateFloorData(G.sortie.seed, n));
+      // sortie floors are one-shot: fresh seed each insertion. BESPOKE sectors
+      // are whole different buildings; the rest use the deck generator.
+      if (hasSector(G.sortie.id)) Object.assign(fs, generateSector(G.sortie.id, G.sortie.seed));
+      else Object.assign(fs, generateFloorData(G.sortie.seed, n));
       if (fs.theme) fs.theme = { ...fs.theme, name: G.sortie.name };
       fs.grid.stairsLocked = true;
     }
@@ -889,7 +891,7 @@ function applyModeSwitch(mode) {
 function onShopOpened(type) {
   if (type === 'missions') { openMissionMap(); return; }
   if (type === 'training') { openTrainRoom(); return; }
-  if (type === 'board_ship') { startSpaceFlight(null, false, !!G.hangarDrill); return; }
+  if (type === 'board_ship') { startBoarding(arguments[1] || { x: G.player.obj.position.x, z: G.player.obj.position.z }, !!G.hangarDrill); return; }
   if (type === 'board') { document.exitPointerLock?.(); window.openTavernBoard(); return; }
   if (type === 'mode') { openModeDialog(); return; }
   if (type === 'codex') { openCodex(); return; }
