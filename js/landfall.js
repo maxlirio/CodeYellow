@@ -15,7 +15,7 @@ import { sfx } from './audio.js';
 import { saveReport } from './bridge.js';
 import { landfallPortalReady } from './missions.js';
 import {
-  buildBomber, cockpitKit, drawLockAt, hideLockWidgets, setLandfallHook,
+  buildBomber, buildCarrier, cockpitKit, drawLockAt, hideLockWidgets, setLandfallHook, flashScreen,
 } from './space.js';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 
@@ -57,7 +57,7 @@ function say(text) {
 // THE WORLD BELOW — built INTO the hangar deck's mesh group, so the
 // city is simply there, 300m down, seen through the mouth.
 // ==================================================================
-export function buildWorldBelow(group) {
+export function buildWorldBelow(group, grid) {
   const world = new THREE.Group();
   world.position.y = CITY_Y;
   world.name = 'worldBelow';
@@ -168,7 +168,36 @@ export function buildWorldBelow(group) {
   world.add(sky);
 
   group.add(world);
-  LW = { world, targets, lzWorld: new THREE.Vector3(30, CITY_Y, 30) };
+
+  // THE CARRIER ITSELF — the exact ship from space, scaled so colossal that
+  // every deck you've fought through plausibly fits inside, and this hangar
+  // is just one aperture on its flank. The deck sits INSIDE the hull.
+  const S = 6;
+  const xs = grid.mouth.map((m) => m.cx * 4);
+  const mouthX0 = Math.min(...xs) - 2, mouthX1 = Math.max(...xs) + 2;
+  const mouthZ = (grid.mouth[0].cy + 0.5) * 4;
+  const W = grid.w * 4;
+  const C = new THREE.Vector3(W / 2 + 120, 20, mouthZ + 8 - 27 * S);
+  const aperture = {
+    x0: (mouthX0 - 14 - C.x) / S, x1: (mouthX1 + 14 - C.x) / S,
+    y0: (-10 - C.y) / S, y1: (26 - C.y) / S,
+  };
+  const carrier = buildCarrier(aperture);
+  carrier.position.copy(C);
+  carrier.scale.setScalar(S);
+  group.add(carrier);
+  // hull collision volumes (ship-local AABBs, scaled/offset), corridor-exempt
+  const hullBoxes = [
+    { x: 20, y: 0, z: 0, hx: 101, hy: 20, hz: 29 },
+    { x: 150, y: 0, z: 0, hx: 32, hy: 9, hz: 15 },
+    { x: -128, y: 0, z: 0, hx: 55, hy: 20, hz: 31 },
+    { x: -18, y: 31, z: 0, hx: 37, hy: 15, hz: 18 },
+  ].map((b) => ({
+    x: b.x * S + C.x, y: b.y * S + C.y, z: b.z * S + C.z,
+    hx: b.hx * S, hy: b.hy * S, hz: b.hz * S,
+  }));
+
+  LW = { world, targets, lzWorld: new THREE.Vector3(30, CITY_Y, 30), hullBoxes, carrier };
   return world;
 }
 
@@ -222,37 +251,44 @@ export function startArrival(fast = false) {
   if (!fs0?.meshGroup || A) { landfallPortalReady(); return; }
   const g = fs0.meshGroup;
   const cx0 = (fs0.grid.w / 2 - 0.5) * 4, cz0 = (fs0.grid.h / 2 - 0.5) * 4;
-  // hyperspace tunnel: streak texture, spun hard
-  let tun = g.getObjectByName('hyperTunnel');
-  if (!tun) {
+  // HYPERSPACE: two counter-rotating streak cylinders + a scrolling texture —
+  // the windows become a tunnel of light
+  const mkTunnel = (r, op) => {
     const c = document.createElement('canvas');
     c.width = 512; c.height = 128;
     const ctx = c.getContext('2d');
-    ctx.fillStyle = '#04060f';
-    ctx.fillRect(0, 0, 512, 128);
-    for (let i = 0; i < 90; i++) {
-      const y = Math.random() * 128, len = 30 + Math.random() * 120;
+    ctx.fillStyle = 'rgba(2,4,10,0)';
+    ctx.clearRect(0, 0, 512, 128);
+    for (let i = 0; i < 170; i++) {
+      const y = Math.random() * 128, len = 50 + Math.random() * 190;
       const gr = ctx.createLinearGradient(0, 0, len, 0);
-      gr.addColorStop(0, 'rgba(140,200,255,0)');
-      gr.addColorStop(0.5, 'rgba(190,230,255,0.9)');
-      gr.addColorStop(1, 'rgba(140,200,255,0)');
-      ctx.fillStyle = gr;
+      const hue = Math.random() < 0.7 ? '190,230,255' : '150,180,255';
+      gr.addColorStop(0, `rgba(${hue},0)`);
+      gr.addColorStop(0.5, `rgba(${hue},0.95)`);
+      gr.addColorStop(1, `rgba(${hue},0)`);
       ctx.save();
-      ctx.translate(Math.random() * 512, y);
-      ctx.fillRect(0, 0, len, 1.6);
+      ctx.translate(Math.random() * 512, y); // gradient is 0..len — draw AT the origin
+      ctx.fillStyle = gr;
+      ctx.fillRect(0, 0, len, 1.8 + Math.random() * 1.8);
       ctx.restore();
     }
     const t = new THREE.CanvasTexture(c);
     t.wrapS = THREE.RepeatWrapping;
     t.colorSpace = THREE.SRGBColorSpace;
-    tun = new THREE.Mesh(new THREE.CylinderGeometry(36, 36, 46, 24, 1, true),
-      new THREE.MeshBasicMaterial({ map: t, toneMapped: false, fog: false, side: THREE.BackSide, transparent: true, opacity: 0 }));
-    tun.name = 'hyperTunnel';
-    tun.position.set(cx0, 4, cz0);
-    tun.rotation.z = Math.PI / 2;
-    g.add(tun);
-  }
-  // the planet: Dagobah marble waiting outside the glass
+    const m = new THREE.Mesh(new THREE.CylinderGeometry(r, r, 46, 24, 1, true),
+      new THREE.MeshBasicMaterial({ map: t, toneMapped: false, fog: false, side: THREE.BackSide, transparent: true, opacity: 0, depthWrite: false }));
+    m.position.set(cx0, 4, cz0);
+    m.rotation.z = Math.PI / 2;
+    m.userData.maxOp = op;
+    g.add(m);
+    return m;
+  };
+  let tun = g.getObjectByName('hyperTunnel');
+  let tun2 = g.getObjectByName('hyperTunnel2');
+  if (!tun) { tun = mkTunnel(36, 1); tun.name = 'hyperTunnel'; }
+  if (!tun2) { tun2 = mkTunnel(33, 0.65); tun2.name = 'hyperTunnel2'; }
+  // the planet: a small green marble far out — it GROWS on descent but is
+  // capped well outside the glass (it must never enter the room)
   let pl = g.getObjectByName('arrivalPlanet');
   if (!pl) {
     const pc = document.createElement('canvas');
@@ -266,50 +302,109 @@ export function startArrival(fast = false) {
       pctx.ellipse(Math.random() * 256, Math.random() * 128, 12 + Math.random() * 44, 5 + Math.random() * 14, 0, 0, Math.PI * 2);
       pctx.fill();
     }
+    // polar haze caps
+    pctx.fillStyle = 'rgba(230,238,220,0.5)';
+    pctx.fillRect(0, 0, 256, 10);
+    pctx.fillRect(0, 118, 256, 10);
     const pt = new THREE.CanvasTexture(pc);
     pt.colorSpace = THREE.SRGBColorSpace;
     pl = new THREE.Mesh(new THREE.SphereGeometry(15, 24, 18),
       new THREE.MeshBasicMaterial({ map: pt, toneMapped: false, fog: false }));
     pl.name = 'arrivalPlanet';
-    pl.position.set(cx0, 6, cz0 - 33);
-    pl.visible = false;
+    pl.position.set(cx0, 6, cz0 - 34);
     g.add(pl);
+    const glow = new THREE.Mesh(new THREE.SphereGeometry(15.8, 24, 18),
+      new THREE.MeshBasicMaterial({ color: 0xbfe0a8, transparent: true, opacity: 0.18, toneMapped: false, fog: false, side: THREE.BackSide }));
+    pl.add(glow);
   }
-  A = { phase: 'jump', t: 0, tun, pl, fast: !!fast };
+  pl.visible = false;
+  pl.scale.setScalar(0.32);
+  // atmosphere shell: fades in over the stars as we descend into the haze
+  let haze = g.getObjectByName('arrivalHaze');
+  if (!haze) {
+    haze = new THREE.Mesh(new THREE.CylinderGeometry(37, 37, 44, 24, 1, true),
+      new THREE.MeshBasicMaterial({ color: 0xc2cba6, toneMapped: false, fog: false, side: THREE.BackSide, transparent: true, opacity: 0, depthWrite: false }));
+    haze.name = 'arrivalHaze';
+    haze.position.set(cx0, 4, cz0);
+    g.add(haze);
+  }
+  const stars = g.getObjectByName('bridgeStars');
+  // no dogfight in hyperspace — the ambient war stays behind at the hulk
+  const war = (G.floors.get(0)?.warShips) || [];
+  for (const f of war) f.visible = false;
+  A = { phase: 'spool', t: 0, tun, tun2, pl, haze, stars, war, plZ0: cz0 - 34, fast: !!fast };
   sfx.rumble();
-  G.shake = Math.max(G.shake || 0, 0.4);
-  addMsg('All hands: TRANSLATION. The carrier is jumping to the destination.', 'gold');
+  G.shake = Math.max(G.shake || 0, 0.35);
+  addMsg('All hands: TRANSLATION in 3… 2… 1…', 'gold');
+  say('Translation. Hold on to something.');
 }
 
 export function updateArrival(dt) {
+  window.__arr = A ? A.phase : null; // probe hook
   if (!A) return;
   A.t += dt;
-  const F = A.fast ? 0.12 : 1; // test links compress the ride
-  if (A.phase === 'jump') {
-    A.tun.visible = true;
-    A.tun.material.opacity = Math.min(1, A.tun.material.opacity + dt * 2);
-    A.tun.rotation.x += dt * 9;
-    if (Math.random() < dt * 3) G.shake = Math.max(G.shake || 0, 0.15);
-    if (A.t > 3.4 * F) {
-      A.phase = 'drop'; A.t = 0;
-      A.pl.visible = true;
+  const F = A.fast ? 0.16 : 1; // probe links compress the ride
+  if (A.phase === 'spool') {
+    // the drives spool — the shake builds until the jump SLAMS in
+    G.shake = Math.max(G.shake || 0, 0.1 + A.t * 0.12);
+    if (A.t > 2.6 * F) {
+      A.phase = 'jump'; A.t = 0;
+      flashScreen();
       sfx.stairs();
-      G.shake = Math.max(G.shake || 0, 0.35);
-      addMsg('Translation complete — that green world is the target.', 'gold');
+      addMsg('JUMP.', 'gold');
+    }
+  } else if (A.phase === 'jump') {
+    // 12 seconds in the tunnel — spin, counter-spin, scroll, pulse
+    for (const tn of [A.tun, A.tun2]) tn.visible = true;
+    A.tun.material.opacity = Math.min(A.tun.userData.maxOp, A.tun.material.opacity + dt * 1.6);
+    A.tun2.material.opacity = Math.min(A.tun2.userData.maxOp, A.tun2.material.opacity + dt * 1.6);
+    A.tun.rotateY(dt * (7 + Math.sin(A.t * 0.7) * 2)); // spin on the tunnel's OWN axis
+    A.tun2.rotateY(-dt * 4.5);
+    A.tun.material.map.offset.x -= dt * 2.2;
+    A.tun2.material.map.offset.x += dt * 1.4;
+    if (A.stars) A.stars.material.opacity = Math.max(0.15, 1 - A.t * 0.5);
+    if (Math.random() < dt * 2.2) G.shake = Math.max(G.shake || 0, 0.1);
+    if (A.t > 12 * F) {
+      A.phase = 'drop'; A.t = 0;
+      flashScreen();
+      A.pl.visible = true;
+      if (A.stars) A.stars.material.opacity = 1;
+      sfx.rumble();
+      G.shake = Math.max(G.shake || 0, 0.45);
+      addMsg('Translation complete. There she is — the green world they took.', 'gold');
+      say('Translation complete. Destination in view.');
     }
   } else if (A.phase === 'drop') {
-    A.tun.material.opacity = Math.max(0, A.tun.material.opacity - dt * 3);
-    if (A.tun.material.opacity <= 0) A.tun.visible = false;
-    if (A.t > 2.4 * F) {
+    // the tunnel collapses; the planet hangs small and far in the glass
+    A.tun.material.opacity = Math.max(0, A.tun.material.opacity - dt * 2.5);
+    A.tun2.material.opacity = Math.max(0, A.tun2.material.opacity - dt * 2.5);
+    if (A.tun.material.opacity <= 0) { A.tun.visible = false; A.tun2.visible = false; }
+    A.pl.scale.setScalar(Math.min(0.45, A.pl.scale.x + dt * 0.02));
+    A.pl.position.z = A.plZ0;
+    if (A.t > 5 * F) {
       A.phase = 'descend'; A.t = 0;
       sfx.rumble();
-      addMsg('Beginning descent…');
+      addMsg('Beginning descent — atmospheric interface in ten.', 'gold');
     }
   } else if (A.phase === 'descend') {
-    A.pl.scale.setScalar(1 + A.t * (A.fast ? 2.2 : 0.28)); // the planet grows as we drop
-    if (Math.random() < dt * 2) G.shake = Math.max(G.shake || 0, 0.12);
-    if (A.t > 2.6 * F) {
+    // 10s down: the planet swells (capped OUTSIDE the glass), the starfield
+    // gives way to bright haze — you can FEEL the atmosphere take the hull
+    const k = Math.min(1, A.t / (10 * F));
+    const ease = k * k * (3 - 2 * k);
+    // the planet GROWS on screen but RECEDES in space — its surface can
+    // never cross the glass into the room (the old version ballooned in)
+    A.pl.scale.setScalar(0.45 + ease * 2.1);
+    A.pl.position.z = A.plZ0 - ease * 55;
+    if (A.stars) A.stars.material.opacity = Math.max(0, 1 - ease * 1.2);
+    A.haze.material.opacity = Math.min(0.85, ease * 1.0);
+    if (k > 0.55) A.pl.material.opacity = 1; // (kept: the haze covers the final swell)
+    if (k > 0.75 && !A.buffet) { A.buffet = true; sfx.rumble(); addMsg('Atmospheric interface — buffeting.', 'gold'); }
+    if (Math.random() < dt * (1 + k * 3)) G.shake = Math.max(G.shake || 0, 0.08 + k * 0.14);
+    if (A.t > 10 * F + 1.2) {
       A.phase = 'done';
+      A.pl.visible = false; // below the cloud deck — outside is bright haze now
+      if (A.stars) A.stars.material.opacity = 0;
+      A.haze.material.opacity = 0.75;
       say('Altitude is stable. Docking bay portal is open.');
       addMsg('"Altitude is stable. Docking bay portal is open." — take the breach portal down.', 'gold');
       landfallPortalReady();
@@ -343,6 +438,7 @@ function startFlight(from) {
   const kit = cockpitKit();
   kit.position.set(0, 0.9, -0.6);
   ship.add(kit);
+  ship.userData.monitor = kit.userData.monitor;
   ship.position.copy(from.pos);
   ship.quaternion.copy(from.quat);
   fs.meshGroup.add(ship);
@@ -357,7 +453,9 @@ function startFlight(from) {
   const fwd = new THREE.Vector3(0, 0, -1).applyQuaternion(L.ship.quaternion);
   L.vel.copy(fwd).multiplyScalar(L.speed);
   document.getElementById('waveHud')?.classList.remove('hidden');
-  addMsg('Bomber away. T locks a target; the BOMBSIGHT flashes RED in the release window (SPACE drops).', 'gold');
+  const tr = document.getElementById('topright');
+  if (tr) tr.style.display = 'none'; // the bombsight lives on the dash monitor
+  addMsg('Bomber away. T locks a target; the DASH MONITOR flashes RED in the release window (SPACE drops).', 'gold');
   addMsg('Six bombs. Dry racks? Fly back IN through the hangar mouth and set down to rearm.', 'gold');
   refreshHud();
 }
@@ -377,6 +475,8 @@ function endFlight(result) {
   const time0 = L.time0;
   hideLockWidgets();
   document.getElementById('waveHud')?.classList.add('hidden');
+  const trE = document.getElementById('topright');
+  if (trE) trE.style.display = '';
   G.keys['Escape'] = false;
   for (const c of G.camera.children) c.visible = true;
   const kills = LW ? LW.targets.filter((t) => t.hp <= 0).length : 0;
@@ -471,9 +571,11 @@ function impactPoint(out) {
 
 // ---------------- the bombsight monitor ----------------
 function drawBombsight(dt) {
-  const cv = document.getElementById('minimap');
-  if (!cv) return;
+  const mon = L.ship.userData.monitor;
+  if (!mon) return;
+  const cv = mon.canvas;
   const ctx = cv.getContext('2d');
+  mon.tex.needsUpdate = true;
   const W = cv.width, H = cv.height;
   ctx.clearRect(0, 0, W, H);
   ctx.fillStyle = 'rgba(6, 10, 12, 0.88)';
@@ -586,30 +688,70 @@ export function updateLandfall(dt) {
     addMsg('Leaving the op zone — turning back into the haze.', 'bad');
   }
 
-  // THE CARRIER IS SOLID (except the mouth corridor — that's the door)
+  // ASSISTED DOCKING: no tractor. The assist eases your nose onto the glide
+  // line, but SPEED, HEIGHT and DRIFT are yours — blow any of them at the
+  // threshold and you get waved off.
+  L.approach = false;
   if (D) {
     const p = L.ship.position;
-    const inMouthX = p.x > D.mouthX0 + 3 && p.x < D.mouthX1 - 3;
-    const corridor = inMouthX && p.y > 0.4 && p.y < 7 && p.z > -6 && p.z < D.mouthZ + 44;
+    const xC = (D.mouthX0 + D.mouthX1) / 2;
+    const halfW = (D.mouthX1 - D.mouthX0) / 2;
+    const inApproach = p.z > D.mouthZ + 2 && p.z < D.mouthZ + 130
+      && Math.abs(p.x - xC) < halfW + 50 && p.y > -16 && p.y < 40 && L.vel.z < -2;
+    if (inApproach) {
+      L.approach = true;
+      const want = new THREE.Vector3((xC - p.x) * 0.9, (3.2 - p.y) * 0.7, -70).normalize();
+      const tq = new THREE.Quaternion().setFromUnitVectors(new THREE.Vector3(0, 0, -1), want);
+      L.ship.quaternion.rotateTowards(tq, 0.5 * dt); // a nudge, not a grab
+      L.dockOk = L.speed <= 32 && Math.abs(p.x - xC) < halfW - 7 && p.y > 0.5 && p.y < 7.2;
+    }
+    // the threshold: cross it clean or get thrown back out
+    const inMouthX = p.x > D.mouthX0 + 4 && p.x < D.mouthX1 - 4;
+    if (p.z <= D.mouthZ + 2 && p.z > D.mouthZ - 10 && L.vel.z < 0 && inMouthX && p.y > 0.3 && p.y < 8.5) {
+      if (L.speed <= 34 && Math.abs(p.x - xC) < halfW - 5) {
+        L.phase = 'dock';
+        L.landT = 0;
+        L.landAt = new THREE.Vector3(L.boardAt.x, 1.4, L.boardAt.z + 6);
+        L.landQ = new THREE.Quaternion().setFromEuler(new THREE.Euler(0, (L.boardAt.yaw || 0) + Math.PI, 0));
+        addMsg('Threshold clean — deck crew waving you to the pad.', 'gold');
+        sfx.stairs();
+        return;
+      }
+      // WAVE OFF
+      L.ship.position.z = D.mouthZ + 30;
+      L.vel.set(0, 2, 26);
+      L.speed = Math.min(L.speed, 24);
+      if (L.speed > 30) { hurtBomber(8); if (!L) return; }
+      addMsg('WAVE OFF — under 30, centered, deck height. Go around.', 'bad');
+      G.shake = Math.max(G.shake || 0, 0.3);
+    }
+    // the rest of the deck slice is solid
     const insideDeckBox = p.x > -4 && p.x < D.deckW + 4 && p.y > -3 && p.y < 15 && p.z > -4 && p.z < D.mouthZ + 1;
+    const corridor = inMouthX && p.y > 0.3 && p.y < 8.5 && p.z > -6;
     if (insideDeckBox && !corridor) {
-      // bounced off the hull
       L.vel.multiplyScalar(-0.4);
       L.ship.position.addScaledVector(L.vel, dt * 4);
       hurtBomber(10);
       if (!L) return;
       addMsg('HULL STRIKE — the bay mouth is the only way in.', 'bad');
     }
-    // DOCKING: fly in through the mouth, lined up — the deck crew takes you
-    // the rest of the way to the pad
-    if (corridor && p.z < D.mouthZ - 2 && L.vel.z < 0) {
-      L.phase = 'dock';
-      L.landT = 0;
-      L.landAt = new THREE.Vector3(L.boardAt.x, 1.4, L.boardAt.z + 6);
-      L.landQ = new THREE.Quaternion().setFromEuler(new THREE.Euler(0, (L.boardAt.yaw || 0) + Math.PI, 0));
-      addMsg('Through the mouth — deck crew waving you to the pad.', 'gold');
-      sfx.stairs();
-      return;
+  }
+  // the COLOSSAL hull is solid too (fly around her, not through her)
+  if (LW?.hullBoxes) {
+    const p = L.ship.position;
+    const nearMouth = D && p.z > D.mouthZ - 12 && p.z < D.mouthZ + 60
+      && p.x > D.mouthX0 - 20 && p.x < D.mouthX1 + 20 && p.y > -12 && p.y < 30;
+    if (!nearMouth) for (const hb of LW.hullBoxes) {
+      if (Math.abs(p.x - hb.x) >= hb.hx || Math.abs(p.y - hb.y) >= hb.hy || Math.abs(p.z - hb.z) >= hb.hz) continue;
+      const dx = hb.hx - Math.abs(p.x - hb.x), dy = hb.hy - Math.abs(p.y - hb.y), dz = hb.hz - Math.abs(p.z - hb.z);
+      const sgn = (v) => (v >= 0 ? 1 : -1);
+      if (dx <= dy && dx <= dz) { p.x = hb.x + sgn(p.x - hb.x) * hb.hx; L.vel.x *= -0.3; }
+      else if (dy <= dz) { p.y = hb.y + sgn(p.y - hb.y) * hb.hy; L.vel.y *= -0.3; }
+      else { p.z = hb.z + sgn(p.z - hb.z) * hb.hz; L.vel.z *= -0.3; }
+      hurtBomber(8);
+      if (!L) return;
+      addMsg('HULL STRIKE — she is a lot of ship. Fly around her.', 'bad');
+      break;
     }
   }
 
@@ -728,9 +870,13 @@ export function updateLandfall(dt) {
   const left = LW ? LW.targets.filter((t) => t.hp > 0).length : 0;
   const wh = document.getElementById('waveHud');
   if (wh) {
-    wh.textContent = L.bombs <= 0
-      ? 'BOMBS OUT — FLY BACK IN THROUGH THE MOUTH'
-      : left ? `TARGETS ${left} · BOMBS ${L.bombs}` : 'LAND ON THE GREEN BEACON — low and slow';
+    if (L.approach) {
+      wh.textContent = `DOCKING — SPEED ${Math.round(L.speed)}/30 ${L.speed <= 32 ? '✓' : 'SLOW'} · ${L.dockOk ? 'ON THE LINE' : 'LINE UP'}`;
+    } else {
+      wh.textContent = L.bombs <= 0
+        ? 'BOMBS OUT — FLY BACK IN THROUGH THE MOUTH'
+        : left ? `TARGETS ${left} · BOMBS ${L.bombs}` : 'LAND ON THE GREEN BEACON — low and slow';
+    }
   }
   const hpfill = document.getElementById('hpfill'), hptext = document.getElementById('hptext');
   if (hpfill) hpfill.style.width = `${Math.max(0, (L.hull / L.maxHull) * 100)}%`;

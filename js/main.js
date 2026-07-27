@@ -115,7 +115,7 @@ async function boot() {
     // ?fly=1 — straight into the cockpit, no clears required
     if (params.get('fly')) setTimeout(() => startSpaceFlight(null, false, !!params.get('dock')), 600);
     if (params.get('bomb')) {
-      G.fastArrival = true;
+      G.fastArrival = params.get('bomb') === '2'; // 1 = the full ride
       setTimeout(() => {
         beginSortie('landfall');
         const poll = setInterval(() => {

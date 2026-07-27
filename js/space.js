@@ -73,7 +73,7 @@ function starSphere() {
 }
 
 // ---- THE CARRIER: an actual warship, not two boxes ----
-export function buildCarrier() {
+export function buildCarrier(aperture = null) {
   const ship = new THREE.Group();
   const hull = new THREE.MeshStandardMaterial({ color: 0x77828e, metalness: 0.45, roughness: 0.6 });
   const dark = new THREE.MeshStandardMaterial({ color: 0x4a525c, metalness: 0.4, roughness: 0.7 });
@@ -92,7 +92,19 @@ export function buildCarrier() {
   prow.position.set(150, 0, 0);
   ship.add(prow);
   B(hull, 90, 22, 40, 76, 0, 0);       // fore hull
-  B(hull, 120, 30, 54, -20, 0, 0);     // mid hull
+  if (aperture) {
+    // same outer volume as the single mid-hull box, with a notch through the
+    // +z flank where a hangar mouth opens (landfall's deck sits inside)
+    const { x0, x1, y0, y1 } = aperture; // local coords on the mid-hull flank
+    B(hull, 120, 30, 27, -20, 0, -13.5);                                  // back half, solid
+    const fz = 13.5, fd = 27;                                             // front half, framed
+    if (x0 > -80) B(hull, x0 - (-80), 30, fd, (-80 + x0) / 2, 0, fz);     // left of the mouth
+    if (40 > x1) B(hull, 40 - x1, 30, fd, (x1 + 40) / 2, 0, fz);          // right of the mouth
+    if (y0 > -15) B(hull, x1 - x0, y0 - (-15), fd, (x0 + x1) / 2, (-15 + y0) / 2, fz); // below
+    if (15 > y1) B(hull, x1 - x0, 15 - y1, fd, (x0 + x1) / 2, (y1 + 15) / 2, fz);      // above
+    B(teal, x1 - x0 + 2, 1.2, 1.2, (x0 + x1) / 2, y1 + 0.6, 27);          // mouth header glow
+    B(teal, x1 - x0 + 2, 1.2, 1.2, (x0 + x1) / 2, y0 - 0.6, 27);          // mouth sill glow
+  } else B(hull, 120, 30, 54, -20, 0, 0); // mid hull
   B(dark, 70, 36, 60, -110, 0, 0);     // aft block
   B(dark, 26, 26, 44, -158, 0, 0);     // engine housing
   for (const oz of [-14, 0, 14]) {     // engine bells + glow
@@ -299,14 +311,33 @@ export function cockpitKit() {
     g.add(m); return m;
   };
   B(dark, 1.9, 0.3, 0.55, 0, -0.64, -1.15);                        // slim dash
-  for (const wx of [-0.55, 0, 0.55]) B(scrM, 0.4, 0.04, 0.2, wx, -0.47, -1.1, 0.35);
-  for (const wx of [-0.3, 0, 0.3]) B(amberM, 0.1, 0.04, 0.07, wx, -0.48, -1.32);
+  for (const wx of [-0.62, 0.62]) B(scrM, 0.34, 0.04, 0.18, wx, -0.47, -1.1, 0.35);
+  for (const wx of [-0.3, 0, 0.3]) B(amberM, 0.1, 0.04, 0.07, wx, -0.5, -1.34);
   for (const sx of [-1, 1]) B(dark, 0.08, 1.3, 0.08, sx * 0.95, 0.07, -1.0, 0, sx * 0.42); // A-pillars
   B(dark, 1.7, 0.07, 0.07, 0, 0.74, -0.85);                        // top rail
+  // THE MONITOR: a real screen on the dash — the radar/bombsight render HERE,
+  // in the cockpit, not in a corner of your visor
+  const mc = document.createElement('canvas');
+  mc.width = 256; mc.height = 200;
+  const mctx = mc.getContext('2d');
+  mctx.fillStyle = '#04090b';
+  mctx.fillRect(0, 0, 256, 200);
+  const mtex = new THREE.CanvasTexture(mc);
+  mtex.colorSpace = THREE.SRGBColorSpace;
+  const bezel = new THREE.Mesh(new THREE.BoxGeometry(0.68, 0.5, 0.05), dark);
+  bezel.position.set(0, -0.36, -1.06);
+  bezel.rotation.x = 0.42;
+  g.add(bezel);
+  const mon = new THREE.Mesh(new THREE.PlaneGeometry(0.6, 0.44),
+    new THREE.MeshBasicMaterial({ map: mtex, toneMapped: false }));
+  mon.position.set(0, -0.355, -1.028);
+  mon.rotation.x = 0.42;
+  g.add(mon);
+  g.userData.monitor = { canvas: mc, tex: mtex };
   return g;
 }
 
-function flashScreen() {
+export function flashScreen() {
   let d = document.getElementById('launchflash');
   if (!d) {
     d = document.createElement('div');
@@ -332,6 +363,7 @@ function launchHandoff(sealedHold = false) {
     bs.position.set(ud.x, 0, ud.z);
     ud.open = false;
     if (bs.userData.canopyGroup) bs.userData.canopyGroup.position.copy(bs.userData.canClosed);
+    for (const ch of bs.children) ch.visible = true; // parked and whole for your return
     SB = null;
     landfallHook(from);
     return;
@@ -340,6 +372,7 @@ function launchHandoff(sealedHold = false) {
   bs.position.set(ud.x, 0, ud.z);
   ud.open = false;
   if (bs.userData.canopyGroup) bs.userData.canopyGroup.position.copy(bs.userData.canClosed);
+  for (const ch of bs.children) ch.visible = true; // parked and whole for your return
   SB = null;
   flashScreen();
   // a mouth launch already flew you out of a hangar — carry your speed and
@@ -357,6 +390,7 @@ function updateBoarding(dt) {
     for (const c of G.camera.children) c.visible = true;
     document.getElementById('waveHud')?.classList.add('hidden');
     ud.open = false; // canopy seals behind you
+    for (const ch of bs.children) ch.visible = true; // the parked ship is whole again
     if (SB.pre) SB.pre.scene.group.traverse((n) => { if (n.isMesh) n.geometry.dispose(); });
     G.mode = 'playing';
     SB = null;
@@ -372,6 +406,23 @@ function updateBoarding(dt) {
     if (t >= 1.2) {
       SB.phase = 'power'; SB.t = 0;
       ud.open = false; // the canopy slides shut over you
+      // seated view === flight view: hide everything but the cockpit kit
+      for (const ch of bs.children) ch.visible = (ch === bs.userData.kit);
+      const mon = bs.userData.kit?.userData?.monitor;
+      if (mon) { // pre-flight boot screen until the flight system takes over
+        const mx = mon.canvas.getContext('2d');
+        mx.fillStyle = '#04090b';
+        mx.fillRect(0, 0, mon.canvas.width, mon.canvas.height);
+        mx.strokeStyle = 'rgba(79,232,224,0.7)';
+        mx.lineWidth = 2;
+        mx.strokeRect(3, 3, mon.canvas.width - 6, mon.canvas.height - 6);
+        mx.fillStyle = '#7fffee';
+        mx.font = '600 16px Menlo, monospace';
+        mx.textAlign = 'center';
+        mx.fillText('PRE-FLIGHT', mon.canvas.width / 2, mon.canvas.height / 2 - 10);
+        mx.fillText('SYSTEMS GREEN', mon.canvas.width / 2, mon.canvas.height / 2 + 14);
+        mon.tex.needsUpdate = true;
+      }
       sfx.chest();
       sfx.rumble();
       G.shake = Math.max(G.shake || 0, 0.3);
@@ -448,6 +499,7 @@ function buildSpaceScene(lvl, comp) {
   const kit = cockpitKit(); // the same console you climbed into on the deck
   kit.position.set(0, 0.78, -0.35);
   ship.add(kit);
+  ship.userData.monitor = kit.userData.monitor;
   // you launch FROM the bay room, nose out (+z)
   ship.position.copy(BAYIN);
   ship.quaternion.setFromEuler(new THREE.Euler(0, Math.PI, 0)); // nose -z flipped => flying +z
@@ -510,6 +562,8 @@ export function startSpaceFlight(level = null, fromNet = false, drill = false, b
   G.mode = 'space';
   for (const c of G.camera.children) c.visible = false;
   document.getElementById('waveHud')?.classList.remove('hidden');
+  const tr = document.getElementById('topright');
+  if (tr) tr.style.display = 'none'; // the radar lives on the dash monitor now
   if (opts?.carrySpeed) {
     // you already flew out of a hangar mouth under your own power — pick up
     // just outside the carrier bay at the speed you left with
@@ -545,6 +599,8 @@ function endSpaceFlight(result) {
   G.keys['Escape'] = false;
   for (const c of G.camera.children) c.visible = true;
   document.getElementById('waveHud')?.classList.add('hidden');
+  const trE = document.getElementById('topright');
+  if (trE) trE.style.display = '';
   hideLockWidgets();
   const lost = result === 'CARRIER LOST';
   const boardAt = S.boardAt;
@@ -1127,9 +1183,11 @@ export function updateSpace(dt) {
 // little CUBE with a stalk down to the mid-plane (stalk length = how far
 // above/below you it is; grid square = where it is around you) ----
 function drawDomeRadar(alive) {
-  const cv = document.getElementById('minimap');
-  if (!cv) return;
+  const mon = S.ship.userData.monitor;
+  if (!mon) return;
+  const cv = mon.canvas;
   const ctx = cv.getContext('2d');
+  mon.tex.needsUpdate = true;
   const W = cv.width, H = cv.height;
   ctx.clearRect(0, 0, W, H);
   ctx.fillStyle = 'rgba(4, 12, 16, 0.85)';

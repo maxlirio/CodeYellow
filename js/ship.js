@@ -392,6 +392,7 @@ export function generateShipDeck(seedStr, floor) {
   // Overwatch spawns up there; below stays a clean underpass.
   const gravlifts = [];
   for (const l of holds) {
+    if (hangarMode && l.role === 'bay') continue; // NOTHING blocks the mouth
     if (l.w < 8 || l.h < 8 || !rng.chance(ARCH.balcony)) continue;
     const along = l.w >= l.h;
     const lane = along ? (rng.chance(0.5) ? l.y + 1 : l.y + l.h - 2)

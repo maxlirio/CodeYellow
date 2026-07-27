@@ -160,6 +160,7 @@ function buildBoardship(d, mats) {
   kit.position.set(0, 2.3, 2.6);
   kit.rotation.y = Math.PI;
   grp.add(kit);
+  grp.userData.kit = kit;
   grp.userData.seatEye = new THREE.Vector3(0, 2.3, 2.6);
   // THE CANOPY: glass shell + frame rails; slides AFT-and-up along the spine
   const can = new THREE.Group();
@@ -650,7 +651,7 @@ export function buildShipStatic(fs) {
 
   // LANDFALL: the planet renders BELOW the deck in this same group — the
   // city 300m down, haze horizons, daylight. One world.
-  if (g.landfall) buildWorldBelow(group);
+  if (g.landfall) buildWorldBelow(group, g);
 
   // THE BRIDGE: starfield wrapped all the way around, a central holo table,
   // and stations built into the wall as SCREENS — a control room, not an office
@@ -659,8 +660,9 @@ export function buildShipStatic(fs) {
     // space, in every window: a star cylinder wrapping the whole deck
     const stars = new THREE.Mesh(
       new THREE.CylinderGeometry(38, 38, 44, 24, 1, true),
-      new THREE.MeshBasicMaterial({ map: makeStarTex(), toneMapped: false, fog: false, side: THREE.BackSide })
+      new THREE.MeshBasicMaterial({ map: makeStarTex(), toneMapped: false, fog: false, side: THREE.BackSide, transparent: true })
     );
+    stars.name = 'bridgeStars';
     stars.position.set(cx0, 4, cz0);
     group.add(stars);
     // the battle wheels right past the bridge glass — every window, live.
