@@ -820,11 +820,15 @@ export function buildFloorMeshes(fs) {
   // bridge's TOUCH surfaces for click interaction
   fs.liftDiscs = [];
   fs.stationMeshes = [];
-  fs.driftShips = [];
+  fs.warShips = [];
+  fs.boardShips = [];
+  fs.warFx = null;
   group.traverse((n) => {
     if (n.userData.gravlift) fs.liftDiscs.push(n);
     if (n.userData.station && n.isMesh) fs.stationMeshes.push(n);
-    if (n.userData.driftShip) fs.driftShips.push(n);
+    if (n.userData.war) fs.warShips.push(n);
+    if (n.userData.boardShip) fs.boardShips.push(n);
+    if (n.name === 'warfx') fs.warFx = n;
   });
   fs.built = true;
 }
@@ -841,14 +845,156 @@ export function liftDiscY(gl) {
   if (p < 0.85) return lo + (1 - ss((p - 0.5) / 0.35)) * (top - lo);
   return lo;
 }
-export function updateGravLifts(fs) {
+export function updateGravLifts(fs, dt = 0.016) {
   if (!fs) return;
   if (fs.liftDiscs) for (const d of fs.liftDiscs) d.position.y = liftDiscY(d.userData.gravlift) - 0.14;
-  // the fighters outside the glass drift on slow patrol lines
-  if (fs.driftShips) for (const f of fs.driftShips) {
-    const d = f.userData.driftShip;
-    f.position.x = d.x0 + Math.sin((G.time || 0) * d.sp + d.ph) * d.amp;
-    f.rotation.z = Math.sin((G.time || 0) * d.sp * 2 + d.ph) * 0.15;
+  updateBoardShips(fs, dt);
+  updateWar(fs, dt);
+}
+
+// ---- boardable dropships: hinge the ramp toward its target, and keep the
+// aft DOOR collider in sync (it only exists while the ramp is sealed) ----
+function updateBoardShips(fs, dt) {
+  if (!fs.boardShips) return;
+  for (const bs of fs.boardShips) {
+    const ud = bs.userData.boardShip, ramp = bs.userData.rampGroup;
+    if (!ramp) continue;
+    const tgt = ud.open ? bs.userData.rampOpen : bs.userData.rampClosed;
+    const dr = tgt - ramp.rotation.x;
+    if (Math.abs(dr) > 0.005) ramp.rotation.x += Math.sign(dr) * Math.min(Math.abs(dr), 1.5 * dt);
+    const sealed = Math.abs(ramp.rotation.x - bs.userData.rampClosed) < 0.5;
+    if (ud.doorCol === undefined && fs.grid.colliders) ud.doorCol = fs.grid.colliders.find((c) => c.doorId === ud.id) || null;
+    if (ud.doorCol) ud.doorCol.off = !sealed;
+  }
+}
+
+// ---- the war outside the windows: a LIVE dogfight — fast passes, banked
+// turns, pursuit, tracer fire, kills and respawns. Purely theatrical, but it
+// flies by the same steering rules as the real void-patrol fighters ----
+const _wv = new THREE.Vector3(), _wn = new THREE.Vector3(), _wq = new THREE.Quaternion();
+const _WNOSE = new THREE.Vector3(0, 0, -1);
+function warRespawn(w, f) {
+  const rg = w.rg;
+  if (rg.ring) {
+    const a = Math.random() * Math.PI * 2;
+    f.position.set(rg.cx + Math.cos(a) * rg.r1, rg.y0 + Math.random() * (rg.y1 - rg.y0), rg.cz + Math.sin(a) * rg.r1);
+  } else {
+    f.position.set(rg.x0 + Math.random() * (rg.x1 - rg.x0), rg.y0 + Math.random() * (rg.y1 - rg.y0), rg.z1);
+  }
+}
+function warNewTarget(w, f, ships) {
+  const rg = w.rg;
+  // half the time: hunt a ship on the other side — that's what makes it a
+  // dogfight instead of traffic
+  if (Math.random() < 0.5) {
+    const prey = ships.filter((o) => o !== f && o.visible && o.userData.war.rg === rg && o.userData.war.hostile !== w.hostile);
+    if (prey.length) {
+      const p = prey[Math.floor(Math.random() * prey.length)];
+      w.target.copy(p.position);
+      w.target.x += (Math.random() - 0.5) * 8;
+      w.target.y += (Math.random() - 0.5) * 5;
+      w.retarget = 1.2 + Math.random() * 1.6;
+      return;
+    }
+  }
+  if (rg.ring) {
+    const a = Math.random() * Math.PI * 2;
+    const r = rg.r0 + Math.random() * (rg.r1 - rg.r0);
+    w.target.set(rg.cx + Math.cos(a) * r, rg.y0 + Math.random() * (rg.y1 - rg.y0), rg.cz + Math.sin(a) * r);
+  } else {
+    w.target.set(rg.x0 + Math.random() * (rg.x1 - rg.x0), rg.y0 + Math.random() * (rg.y1 - rg.y0), rg.z0 + Math.random() * (rg.z1 - rg.z0));
+  }
+  w.retarget = 1.8 + Math.random() * 2.4;
+}
+function warShot(fs, f, nose, hostile) {
+  if (!fs.warFx) return;
+  for (const b of fs.warFx.children) {
+    if (b.userData.boom || b.visible) continue;
+    b.visible = true;
+    b.material.color.setHex(hostile ? 0xff5533 : 0x66f2e0);
+    b.position.copy(f.position).addScaledVector(nose, 3);
+    b.quaternion.copy(f.quaternion);
+    b.userData.v = (b.userData.v || new THREE.Vector3()).copy(nose).multiplyScalar(95);
+    b.userData.life = 0.9;
+    return;
+  }
+}
+function updateWar(fs, dt) {
+  const ships = fs.warShips;
+  if (!ships || !ships.length) return;
+  for (const f of ships) {
+    const w = f.userData.war;
+    if (w.dead > 0) {
+      w.dead -= dt;
+      if (w.dead <= 0) { warRespawn(w, f); f.visible = true; }
+      continue;
+    }
+    w.retarget -= dt;
+    if (w.retarget <= 0 || f.position.distanceToSquared(w.target) < 49) warNewTarget(w, f, ships);
+    const dir = _wv.copy(w.target).sub(f.position).normalize();
+    _wq.setFromUnitVectors(_WNOSE, dir);
+    f.quaternion.rotateTowards(_wq, w.turn * dt);
+    const nose = _wn.copy(_WNOSE).applyQuaternion(f.quaternion);
+    f.position.addScaledVector(nose, w.speed * dt);
+    // a wide turn must never carry a fighter through the hull into the room
+    if (w.rg.ring) {
+      const rdx = f.position.x - w.rg.cx, rdz = f.position.z - w.rg.cz;
+      const rd = Math.hypot(rdx, rdz);
+      if (rd < w.rg.r0 - 1 && rd > 0.01) {
+        const k = (w.rg.r0 - 1) / rd;
+        f.position.x = w.rg.cx + rdx * k;
+        f.position.z = w.rg.cz + rdz * k;
+      }
+    } else if (f.position.z < w.rg.z0 - 4) f.position.z = w.rg.z0 - 4;
+    // bank INTO the turn — the vis child rolls, the group keeps clean heading
+    const lean = (nose.x * dir.z - nose.z * dir.x) * 2.4;
+    const vis = f.userData.vis;
+    if (vis) vis.rotation.z += (Math.max(-1.1, Math.min(1.1, lean)) - vis.rotation.z) * Math.min(1, dt * 3.5);
+    // guns: loose a tracer when someone from the other side is downrange
+    w.fireT -= dt;
+    if (w.fireT <= 0) {
+      w.fireT = 0.7 + Math.random() * 1.9;
+      for (const o of ships) {
+        if (o === f || !o.visible || o.userData.war.hostile === w.hostile || o.userData.war.rg !== w.rg) continue;
+        _wv.copy(o.position).sub(f.position);
+        if (_wv.lengthSq() < 5600 && _wv.normalize().angleTo(nose) < 0.35) { warShot(fs, f, nose, w.hostile); break; }
+      }
+    }
+  }
+  // tracers + explosion flashes
+  if (fs.warFx) for (const b of fs.warFx.children) {
+    if (!b.visible) continue;
+    if (b.userData.boom) {
+      b.userData.boomT -= dt;
+      const k = 1 - Math.max(0, b.userData.boomT) / 0.5;
+      b.scale.setScalar(1 + k * 8);
+      b.material.opacity = 0.9 * (1 - k);
+      if (b.userData.boomT <= 0) b.visible = false;
+    } else {
+      b.userData.life -= dt;
+      b.position.addScaledVector(b.userData.v, dt);
+      if (b.userData.life <= 0) b.visible = false;
+    }
+  }
+  // the battle has casualties — someone goes up in flames every so often
+  fs.warKillT = (fs.warKillT ?? 3 + Math.random() * 4) - dt;
+  if (fs.warKillT <= 0) {
+    fs.warKillT = 5 + Math.random() * 8;
+    const alive = ships.filter((s) => s.visible);
+    const f = alive[Math.floor(Math.random() * alive.length)];
+    if (f && fs.warFx) {
+      for (const b of fs.warFx.children) {
+        if (!b.userData.boom || b.visible) continue;
+        b.visible = true;
+        b.position.copy(f.position);
+        b.scale.setScalar(1);
+        b.material.opacity = 0.9;
+        b.userData.boomT = 0.5;
+        break;
+      }
+      f.visible = false;
+      f.userData.war.dead = 2 + Math.random() * 3;
+    }
   }
 }
 
@@ -913,6 +1059,7 @@ export function groundHeightAt(x, z, curY = 0, grid = null) {
   // so you never get popped up while walking past at ground level.
   if (g.colliders) {
     for (const c of g.colliders) {
+      if (c.off) continue; // lowered ramp doors — temporarily not there
       const top = c.h;
       if (top === undefined || top > curY + 0.5 || top <= ground) continue;
       if (c.hx !== undefined) {
@@ -963,8 +1110,12 @@ export function moveWithCollision(pos, dx, dz, radius = 0.55, opts = {}) {
     if (g.colliders && !ghost) {
       const pr = radius * 0.55; // hug props tighter than walls
       for (const c of g.colliders) {
+        if (c.off) continue;
         const top = c.h ?? (c.hx !== undefined ? 99 : 3);
-        if (y >= top - 0.05 || y + 2.0 <= (c.y0 ?? 0)) continue;
+        // a top within step height doesn't block — you WALK up onto it (the
+        // ground snap lifts you the same frame). This is what makes stair
+        // runs and ramp steps climbable without a hop.
+        if (top <= y + 0.5 || y + 2.0 <= (c.y0 ?? 0)) continue;
         if (c.hx !== undefined) {
           if (Math.abs(nx - c.x) < c.hx + pr && Math.abs(nz - c.z) < c.hz + pr) n++;
         } else {
@@ -1010,9 +1161,13 @@ export function posBlocked(x, z, y, grid = null, height = 2.0, pad = 0) {
   if (c === SOLID) return true;
   if (c === OBSTACLE && y < 2.4) return true;
   if (g.colliders) {
+    // bodies (height >= 1) can STEP onto anything within 0.5 of their feet;
+    // point probes (bolts) keep the tight gate so shots still clip ledges
+    const stepUp = height >= 1 ? 0.5 : 0.05;
     for (const col of g.colliders) {
+      if (col.off) continue;
       const top = col.h ?? (col.hx !== undefined ? 99 : 3);
-      if (y >= top - 0.05 || y + height <= (col.y0 ?? 0)) continue;
+      if (top <= y + stepUp || y + height <= (col.y0 ?? 0)) continue;
       if (col.hx !== undefined) {
         if (Math.abs(x - col.x) < col.hx + pad && Math.abs(z - col.z) < col.hz + pad) return true;
       } else {

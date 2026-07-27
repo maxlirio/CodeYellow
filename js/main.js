@@ -73,7 +73,7 @@ async function boot() {
   scene.fog = new THREE.FogExp2(0x0a0812, 0.03);
   G.scene = scene;
 
-  G.camera = new THREE.PerspectiveCamera(66, innerWidth / innerHeight, 0.08, 130);
+  G.camera = new THREE.PerspectiveCamera(66, innerWidth / innerHeight, 0.08, 340); // far enough to see the war outside the mouth
   G.camera.position.set(0, 6, 8);
   G.camera.rotation.order = 'YXZ';
 
@@ -1227,6 +1227,7 @@ function loop(t) {
     updatePlayer(dt);
     updateDeath(dt);
     setCrosshairAiming(!!G.player?.aiming);
+    updateSpace(dt); // watches for you walking into an armed cockpit
   } else if (G.player && simActive) {
     G.player.anim.update(dt);
   }
@@ -1249,7 +1250,7 @@ function loop(t) {
     updateMachines(dt);
     updateHorde(dt);
     if (runMode === 'campaign') updateMissions(dt);
-    updateGravLifts(G.floors.get(G.floor));
+    updateGravLifts(G.floors.get(G.floor), dt);
     updateBuildGhost();
     updateMachineGhost();
     if (G.runMode === 'duel' && G.mode === 'playing') {

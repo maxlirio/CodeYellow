@@ -359,6 +359,32 @@ export function generateShipDeck(seedStr, floor) {
     return true;
   };
 
+  // A dropship you WALK INTO: shell colliders form a real interior (floor you
+  // stand on, hull walls, roof, flight console) with an aft DOOR collider that
+  // vanishes when the ramp lowers. Local frame: nose +z, ramp aft (-z);
+  // yaw rotates the whole thing (0 or ±π/2 — colliders stay axis-aligned).
+  let bsN = 0;
+  const addBoardship = (cxw, cyw, yaw) => {
+    const id = 'bs' + (bsN++);
+    const c0 = Math.cos(yaw), s0 = Math.sin(yaw);
+    const P = (lx, lz, hx, hz, y0, h, extra) => {
+      const wx = cxw + c0 * lx + s0 * lz, wz = cyw - s0 * lx + c0 * lz;
+      const swap = Math.abs(Math.round(s0)) === 1;
+      colliders.push({ x: wx, z: wz, hx: swap ? hz : hx, hz: swap ? hx : hz, y0, h, noMesh: true, ...(extra || {}) });
+    };
+    P(0, 0, 1.8, 5.4, 0, 0.55);                    // cabin floor — you stand ON it
+    P(-2.05, 0.3, 0.4, 5.6, 0, 3.55);              // port hull
+    P(2.05, 0.3, 0.4, 5.6, 0, 3.55);               // starboard hull
+    P(0, 0.3, 2.3, 5.5, 3.05, 4.05);               // roof over the hold (h = absolute top)
+    P(0, 4.85, 1.8, 0.6, 0, 1.45);                 // flight console — the seat stops here
+    P(0, 6.3, 1.8, 0.85, 0, 3.55);                 // nose cap
+    P(0, -4.95, 1.6, 0.3, 0, 3.5, { doorId: id }); // aft door — OFF while the ramp is down
+    P(0, -6.5, 1.35, 0.85, 0, 0.28);               // lowered-ramp step up
+    shipDecor.push({ kind: 'boardship', x: cxw, z: cyw, yaw, id });
+    deckNpcs.push({ model: null, noModel: true, sign: false, name: 'Dropship', shop: 'board_ship',
+      label: 'BOARD DROPSHIP — FLY THE VOID PATROL', x: cxw - 8.4 * s0, z: cyw - 8.4 * c0 });
+  };
+
   // ---- BALCONIES: a second level along one wall of the big holds, reached
   // by a GRAV LIFT beam at one end — step in and the field carries you up.
   // Overwatch spawns up there; below stays a clean underpass.
@@ -441,12 +467,8 @@ export function generateShipDeck(seedStr, floor) {
           if (at(cx2 + dx, cy2 + dy) !== FLOOR || elev[idxOf(cx2 + dx, cy2 + dy)]) open = false;
         if (!open) continue;
         const cxw = cx2 * CELL, cyw = cy2 * CELL;
-        colliders.push({ x: cxw, z: cyw, hx: 2.5, hz: 5.0, y0: 0, h: 3.1, noMesh: true }); // hull
-        colliders.push({ x: cxw, z: cyw - 6.4, hx: 1.5, hz: 1.5, y0: 0, h: 1.4, noMesh: true }); // aft ramp — mantleable
-        shipDecor.push({ kind: 'ship', x: cxw, z: cyw, w: 5, d: 10, h: 3.1, yaw: 0, tone: rng.int(0, 2) });
-        // walk to the ramp and BOARD it — the dropship flies the void patrol
-        deckNpcs.push({ model: null, noModel: true, sign: false, name: 'Dropship', shop: 'board_ship',
-          label: 'BOARD DROPSHIP — FLY THE VOID PATROL', x: cxw, z: cyw - 8.2 });
+        // a REAL boardable dropship: ramp lowers, you walk in, take the seat
+        addBoardship(cxw, cyw, 0);
         for (let dy = -2; dy <= 2; dy++) for (let dx = -1; dx <= 1; dx++) occupied.add(idxOf(cx2 + dx, cy2 + dy));
         if (rng.chance(0.7)) { // ground crew clutter beside the pad
           const gx = cx2 + (rng.chance(0.5) ? -2 : 2), gy = cy2 + rng.int(-2, 2);
@@ -513,12 +535,8 @@ export function generateShipDeck(seedStr, floor) {
         for (let dx = -Math.ceil(hx / CELL); dx <= Math.ceil(hx / CELL); dx++)
           if (at(l.cx + dx, l.cy + dy) !== FLOOR) footprintOpen = false;
       if (!footprintOpen) { l.role = 'cargo'; continue; } // fall back to crates next pass? no — just crates below
-      // a real dropship on a pad (the renderer draws hull/wings/engines)
-      colliders.push({ x: cxw, z: cyw, hx: along ? 5.0 : 2.5, hz: along ? 2.5 : 5.0, y0: 0, h: 3.1, noMesh: true });
-      colliders.push({ x: cxw - (along ? 6.4 : 0), z: cyw - (along ? 0 : 6.4), hx: 1.5, hz: 1.5, y0: 0, h: 1.4, noMesh: true }); // aft ramp — mantleable
-      shipDecor.push({ kind: 'ship', x: cxw, z: cyw, w: 5, d: 10, h: 3.1, yaw: along ? Math.PI / 2 : 0, tone: rng.int(0, 2) });
-      deckNpcs.push({ model: null, noModel: true, sign: false, name: 'Dropship', shop: 'board_ship',
-        label: 'BOARD DROPSHIP — FLY THE VOID PATROL', x: cxw - (along ? 8.2 : 0), z: cyw - (along ? 0 : 8.2) });
+      // a real dropship on a pad — walk-in interior, lowerable ramp
+      addBoardship(cxw, cyw, along ? Math.PI / 2 : 0);
       for (let dy = -Math.ceil(hz / CELL) - 1; dy <= Math.ceil(hz / CELL) + 1; dy++)
         for (let dx = -Math.ceil(hx / CELL) - 1; dx <= Math.ceil(hx / CELL) + 1; dx++)
           occupied.add(idxOf(l.cx + dx, l.cy + dy));

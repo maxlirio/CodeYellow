@@ -121,6 +121,166 @@ function makeMats(accent, facility = false, deckType = null) {
   };
 }
 
+// ---- THE BOARDABLE DROPSHIP: a live group (not merged) with a genuine
+// interior — troop benches, ribs, cockpit console + seat, a windshield you
+// see the hangar through — and a hinged aft ramp that lowers on E.
+// Local frame matches ship.js addBoardship: nose +z, ramp aft.
+function buildBoardship(d, mats) {
+  const grp = new THREE.Group();
+  grp.position.set(d.x, 0, d.z);
+  grp.rotation.y = d.yaw || 0;
+  grp.userData.boardShip = { id: d.id, x: d.x, z: d.z, yaw: d.yaw || 0, open: false };
+  const B = (mat, sx, sy, sz, x, y, z, ry = 0, rx = 0) => {
+    const m = new THREE.Mesh(new THREE.BoxGeometry(sx, sy, sz), typeof mat === 'string' ? mats[mat] : mat);
+    m.position.set(x, y, z);
+    m.rotation.set(rx, ry, 0);
+    grp.add(m); return m;
+  };
+  // landing pad ring + skids
+  const ring = new THREE.Mesh(new THREE.CylinderGeometry(5.6, 5.6, 0.05, 24, 1, true), mats.accent);
+  ring.position.y = 0.05;
+  grp.add(ring);
+  for (const sx of [-1.55, 1.55]) B('frame', 0.5, 0.42, 8.6, sx, 0.21, 0.4);
+  // hull: floor slab (top = 0.55, the surface you stand on), walls, roof
+  B('dark', 4.2, 0.55, 10.9, 0, 0.275, 0);
+  for (const sx of [-2.05, 2.05]) {
+    B('machine', 0.42, 2.8, 10.6, sx, 1.95, 0.2);
+    B('accent', 0.06, 0.12, 7.2, sx * 1.12, 2.6, -0.4); // hull running lights
+  }
+  B('machine', 4.9, 0.4, 10.9, 0, 3.5, 0.2);      // roof
+  B('frame', 0.3, 1.6, 2.6, 0, 4.1, -3.4);        // tail fin
+  // wings + engines
+  for (const sx of [-1, 1]) {
+    B('machine', 2.8, 0.26, 3.4, sx * 3.4, 2.5, -1.2);
+    const eng = new THREE.Mesh(new THREE.CylinderGeometry(0.6, 0.68, 2.8, 8), mats.frame);
+    eng.rotation.x = Math.PI / 2;
+    eng.position.set(sx * 3.9, 2.5, -2.6);
+    grp.add(eng);
+    B('accent', 0.75, 0.75, 0.14, sx * 3.9, 2.5, -4.05);
+  }
+  // nose: converging cheek panels + the WINDSHIELD (transparent — the hangar
+  // beyond it is simply the real hangar)
+  for (const sx of [-1, 1]) B('machine', 0.42, 2.6, 2.6, sx * 1.62, 1.85, 6.0, sx * -0.5);
+  B('machine', 3.6, 0.55, 2.4, 0, 0.275, 6.0);    // nose floor pan
+  B('machine', 3.0, 0.5, 2.2, 0, 3.35, 5.9, 0, 0.5); // brow
+  const glassM = new THREE.MeshBasicMaterial({
+    color: 0x9fdcff, transparent: true, opacity: 0.13, toneMapped: false,
+    side: THREE.DoubleSide, depthWrite: false,
+  });
+  const shield = new THREE.Mesh(new THREE.PlaneGeometry(2.9, 1.9), glassM);
+  shield.position.set(0, 2.25, 5.75);
+  shield.rotation.x = -0.42;
+  grp.add(shield);
+  B(glassM, 0.04, 1.0, 1.5, -1.85, 2.35, 4.4);    // side cockpit glass
+  B(glassM, 0.04, 1.0, 1.5, 1.85, 2.35, 4.4);
+  // cockpit: console with live widgets, pilot seat — screens glow softly,
+  // they don't floodlight the canopy
+  B('dark', 3.1, 0.85, 0.95, 0, 0.98, 4.75);
+  const scrM = new THREE.MeshBasicMaterial({ color: 0x1f6e66, toneMapped: false });
+  for (const wx of [-0.85, 0, 0.85]) B(scrM, 0.62, 0.05, 0.34, wx, 1.43, 4.62, 0, -0.3);
+  const amberM = new THREE.MeshBasicMaterial({ color: 0x8a5a24, toneMapped: false });
+  for (const wx of [-0.5, -0.15, 0.35]) B(amberM, 0.14, 0.05, 0.1, wx, 1.44, 4.95);
+  B('dark', 0.95, 0.32, 0.9, 0, 0.86, 3.5);       // seat pan
+  B('dark', 0.95, 1.2, 0.22, 0, 1.55, 3.02);      // seat back
+  B('accent', 0.6, 0.1, 0.2, 0, 2.2, 3.02);       // headrest strip
+  // troop hold: benches, harness posts, ribs, light strips
+  for (const sx of [-1.5, 1.5]) {
+    B('dark', 0.66, 0.35, 5.4, sx, 0.9, -1.5);
+    B('machine', 0.3, 1.1, 5.4, sx * 1.23, 1.6, -1.5);
+    for (let hz = -3.6; hz <= 0.8; hz += 1.1) B('accent', 0.05, 0.7, 0.1, sx * 1.17, 1.75, hz);
+  }
+  for (const rz of [-3.7, -1.3, 1.1]) {
+    B('frame', 0.22, 2.75, 0.24, -1.92, 1.9, rz);
+    B('frame', 0.22, 2.75, 0.24, 1.92, 1.9, rz);
+    B('frame', 4.1, 0.2, 0.24, 0, 3.25, rz);
+  }
+  const stripM = new THREE.MeshBasicMaterial({ color: 0xbfe9ff, toneMapped: false });
+  B(stripM, 0.16, 0.05, 7.6, -0.7, 3.28, 0);
+  B(stripM, 0.16, 0.05, 7.6, 0.7, 3.28, 0);
+  B(new THREE.MeshBasicMaterial({ color: 0xff4433, toneMapped: false }), 0.3, 0.14, 0.14, 0, 3.24, -4.5); // jump light
+  const inLight = new THREE.PointLight(0xffe2b8, 5, 8, 1.8);
+  inLight.position.set(0, 2.7, -1.2);
+  grp.add(inLight);
+  const cockLight = new THREE.PointLight(0x9fdcff, 4, 6, 1.8);
+  cockLight.position.set(0, 2.3, 4.2);
+  grp.add(cockLight);
+  // THE RAMP: hinged at the aft sill. Closed = swung up sealing the hold,
+  // open = a walk-up slope to the deck. dungeon animates rotation.x.
+  const ramp = new THREE.Group();
+  ramp.position.set(0, 0.5, -5.35);
+  const plate = new THREE.Mesh(new THREE.BoxGeometry(3.1, 0.16, 3.4), mats.machine);
+  plate.position.z = -1.65;
+  ramp.add(plate);
+  for (const tz of [-0.7, -1.6, -2.5]) {
+    const tread = new THREE.Mesh(new THREE.BoxGeometry(2.7, 0.05, 0.16), mats.accent);
+    tread.position.set(0, 0.1, tz);
+    ramp.add(tread);
+  }
+  for (const sx of [-1.45, 1.45]) {
+    const edge = new THREE.Mesh(new THREE.BoxGeometry(0.14, 0.2, 3.4), mats.frame);
+    edge.position.set(sx, 0.08, -1.65);
+    ramp.add(edge);
+  }
+  grp.userData.rampGroup = ramp;
+  grp.userData.rampClosed = 1.42;
+  grp.userData.rampOpen = -0.15;
+  ramp.rotation.x = grp.userData.rampClosed;
+  grp.add(ramp);
+  return grp;
+}
+
+// ---- THE WAR OUTSIDE: live fighters beyond a window — full speed, banked
+// turns, pursuit, tracer fire, kills. dungeon.updateGravLifts flies them.
+function warPoint(rg, out) {
+  if (rg.ring) {
+    const a = Math.random() * Math.PI * 2;
+    const r = rg.r0 + Math.random() * (rg.r1 - rg.r0);
+    out.set(rg.cx + Math.cos(a) * r, rg.y0 + Math.random() * (rg.y1 - rg.y0), rg.cz + Math.sin(a) * r);
+  } else {
+    out.set(rg.x0 + Math.random() * (rg.x1 - rg.x0),
+      rg.y0 + Math.random() * (rg.y1 - rg.y0),
+      rg.z0 + Math.random() * (rg.z1 - rg.z0));
+  }
+  return out;
+}
+function addWar(group, rg, nHostile, nFriendly, scale) {
+  let fx = group.getObjectByName('warfx');
+  if (!fx) {
+    fx = new THREE.Group();
+    fx.name = 'warfx';
+    const boltGeo = new THREE.BoxGeometry(0.16, 0.16, 3.2);
+    for (let i = 0; i < 22; i++) {
+      const b = new THREE.Mesh(boltGeo, new THREE.MeshBasicMaterial({ color: 0xff5533, toneMapped: false, fog: false }));
+      b.visible = false;
+      fx.add(b);
+    }
+    for (let i = 0; i < 4; i++) {
+      const s = new THREE.Mesh(new THREE.SphereGeometry(1.7, 10, 8),
+        new THREE.MeshBasicMaterial({ color: 0xffb347, transparent: true, opacity: 0.9, toneMapped: false, fog: false, depthWrite: false }));
+      s.visible = false;
+      s.userData.boom = true;
+      fx.add(s);
+    }
+    group.add(fx);
+  }
+  for (let i = 0; i < nHostile + nFriendly; i++) {
+    const hostile = i < nHostile;
+    const f = buildFighter(hostile, !hostile);
+    f.scale.setScalar(scale);
+    f.traverse((n) => { if (n.isMesh) n.material.fog = false; });
+    warPoint(rg, f.position);
+    f.rotation.y = Math.random() * Math.PI * 2;
+    f.userData.war = {
+      hostile, rg,
+      speed: (rg.ring ? 15 : 26) + Math.random() * (rg.ring ? 10 : 22),
+      turn: rg.ring ? 1.7 : 1.35,
+      fireT: Math.random() * 2, retarget: 0, dead: 0,
+      target: warPoint(rg, new THREE.Vector3()),
+    };
+    group.add(f);
+  }
+}
+
 export function buildShipStatic(fs) {
   const g = fs.grid;
   const accent = fs.theme?.accent ?? 0xffa63d;
@@ -280,6 +440,7 @@ export function buildShipStatic(fs) {
   // Parts are built in ship-local coords (nose/long axis +z or +x as noted),
   // then rotated by the decor's yaw and dropped at its world position ----
   for (const d of g.shipDecor || []) {
+    if (d.kind === 'boardship') continue; // live group, built after the merge
     const part = (mat, geo, ox, oy, oz) => { geo.translate(ox, oy, oz); add(mat, geo, d.x, 0, d.z, d.yaw || 0); };
     const B = (mat, sx, sy, sz, ox, oy, oz) => part(mat, new THREE.BoxGeometry(sx, sy, sz), ox, oy, oz);
     if (d.kind === 'ship') {
@@ -426,6 +587,11 @@ export function buildShipStatic(fs) {
     for (const gg of geos) gg.dispose();
   }
 
+  // boardable dropships are LIVE groups — their ramps hinge and they fly
+  for (const d of g.shipDecor || []) {
+    if (d.kind === 'boardship') group.add(buildBoardship(d, mats));
+  }
+
   // deployment doors: glowing frames where the waves come in
   for (const gt of g.gates || []) {
     const gx = gt.x * CELL, gz = gt.y * CELL;
@@ -492,21 +658,17 @@ export function buildShipStatic(fs) {
     field.position.set((mx0 + mx1) / 2, (MH2 - 1.4) / 2 + 0.5, mz);
     group.add(field);
     const stars = new THREE.Mesh(
-      new THREE.PlaneGeometry(mx1 - mx0 + 70, 34),
-      new THREE.MeshBasicMaterial({ map: makeStarTex(), toneMapped: false })
+      new THREE.PlaneGeometry(mx1 - mx0 + 260, 120),
+      new THREE.MeshBasicMaterial({ map: makeStarTex(), toneMapped: false, fog: false })
     );
-    stars.position.set((mx0 + mx1) / 2, 3, mz + 11);
+    stars.position.set((mx0 + mx1) / 2, 10, mz + 92);
     stars.rotation.y = Math.PI; // face back into the hangar
     group.add(stars);
-    // the war outside: hostile fighters drift past the mouth
-    for (let i = 0; i < 3; i++) {
-      const f = buildFighter(true);
-      f.scale.setScalar(0.8);
-      f.position.set(mx0 + 20 + i * 26, 3 + i * 2, mz + 8.5);
-      f.rotation.y = Math.PI / 2 + i * 0.35;
-      f.userData.driftShip = { x0: f.position.x, amp: 8 + i * 4, sp: 0.12 + i * 0.05, ph: i * 2.1 };
-      group.add(f);
-    }
+    // THE BATTLE OUTSIDE: a live dogfight raging beyond the mouth — it was
+    // already underway when you got here, and it doesn't stop for you
+    addWar(group, {
+      x0: mx0 - 30, x1: mx1 + 30, y0: -4, y1: 26, z0: mz + 10, z1: mz + 80,
+    }, 5, 2, 0.85);
   }
 
   // THE BRIDGE: starfield wrapped all the way around, a central holo table,
@@ -516,18 +678,13 @@ export function buildShipStatic(fs) {
     // space, in every window: a star cylinder wrapping the whole deck
     const stars = new THREE.Mesh(
       new THREE.CylinderGeometry(38, 38, 44, 24, 1, true),
-      new THREE.MeshBasicMaterial({ map: makeStarTex(), toneMapped: false, side: THREE.BackSide })
+      new THREE.MeshBasicMaterial({ map: makeStarTex(), toneMapped: false, fog: false, side: THREE.BackSide })
     );
     stars.position.set(cx0, 4, cz0);
     group.add(stars);
-    for (let i = 0; i < 2; i++) {
-      const f = buildFighter(true);
-      f.scale.setScalar(0.65);
-      f.position.set(cx0 - 12 + i * 24, 4 + i * 2, cz0 - 30);
-      f.rotation.y = Math.PI / 2;
-      f.userData.driftShip = { x0: f.position.x, amp: 10, sp: 0.1 + i * 0.04, ph: i * 3 };
-      group.add(f);
-    }
+    // the battle wheels right past the bridge glass — every window, live.
+    // The ring sits OUTSIDE the room's walls and inside the star cylinder.
+    addWar(group, { ring: true, cx: cx0, cz: cz0, r0: 29, r1: 36, y0: 2, y1: 12 }, 4, 2, 0.6);
 
     // THE HOLO TABLE — round pedestal, glowing top, a hologram of the hulk
     // floating above it (missions.js spins it and lights it up on red alert)

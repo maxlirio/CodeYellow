@@ -11,6 +11,7 @@ import { sfx } from './audio.js';
 import { spawnBurst } from './fx.js';
 import { saveReport } from './bridge.js';
 import { netSend, myId } from './net.js';
+import { CELL } from './config.js';
 
 const ORIGIN = new THREE.Vector3(0, 800, 0);
 const FIELD_R = 380;
@@ -233,55 +234,164 @@ function buildBomber() {
 }
 
 export function inSpace() { return !!S; }
-export function _dbg() { return S ? { phase: S.phase, speed: +S.speed.toFixed(1), z: +S.ship.position.z.toFixed(1), kw: !!G.keys.KeyW } : (SB ? { boarding: +SB.t.toFixed(1) } : null); }
+export function _dbg() { return S ? { phase: S.phase, speed: +S.speed.toFixed(1), z: +S.ship.position.z.toFixed(1), kw: !!G.keys.KeyW } : (SB ? { boarding: SB.phase, t: +SB.t.toFixed(1) } : null); }
 
-// pre-flight boarding cinematic state (runs while the DECK is still rendered)
+// ---- BOARDING, for real this time. E lowers the ramp. You WALK up it into
+// the hold, past the benches, and stepping into the cockpit straps you into
+// the pilot seat — through the windshield is the actual hangar you're parked
+// in. The ramp seals, the reactor spools, and HOLD W flies the whole dropship
+// across the deck and out the mouth. ----
 let SB = null;
+const _sv = new THREE.Vector3();
+
 export function startBoarding(npc, drill = false) {
   if (S || SB) return;
-  const p = G.player;
-  SB = {
-    t: 0, drill,
-    from: G.camera.position.clone(), fromQ: G.camera.quaternion.clone(),
-    door: new THREE.Vector3(npc.x, 1.5, npc.z),
-    seat: new THREE.Vector3(npc.x, 1.9, npc.z + 4.2), // inside the hull, facing the mouth
-    boardAt: { x: npc.x, z: npc.z, floor: G.floor },
-  };
-  G.mode = 'space';
-  for (const c of G.camera.children) c.visible = false;
-  addMsg('Boarding the dropship…');
-  sfx.key();
+  const fs = G.floors.get(G.floor);
+  const bs = fs?.boardShips?.find((b) => {
+    const u = b.userData.boardShip;
+    return (u.x - npc.x) ** 2 + (u.z - npc.z) ** 2 < 200;
+  });
+  if (!bs) { // no physical ship on this deck — legacy instant launch
+    startSpaceFlight(null, false, drill, { x: npc.x, z: npc.z, floor: G.floor });
+    return;
+  }
+  const ud = bs.userData.boardShip;
+  ud.armed = { drill, boardAt: { x: npc.x, z: npc.z, floor: G.floor, yaw: ud.yaw } };
+  if (!ud.open) {
+    ud.open = true;
+    sfx.chest();
+    addMsg('Ramp coming down — climb aboard and take the cockpit seat.', 'gold');
+  }
+}
+
+// walking into the cockpit IS the trigger — no second keypress
+function checkSeat() {
+  const fs = G.floors.get(G.floor);
+  if (!fs?.boardShips || !G.player) return;
+  const p = G.player.obj.position;
+  for (const bs of fs.boardShips) {
+    const ud = bs.userData.boardShip;
+    if (!ud.armed || !ud.open) continue;
+    const c0 = Math.cos(ud.yaw), s0 = Math.sin(ud.yaw);
+    const dx = p.x - ud.x, dz = p.z - ud.z;
+    const lx = c0 * dx - s0 * dz, lz = s0 * dx + c0 * dz;
+    const inZone = Math.abs(lx) < 1.35 && lz > 2.2 && lz < 4.5 && p.y > 0.25 && p.y < 1.5;
+    if (ud.seatCd) { if (!inZone) ud.seatCd = false; continue; } // just unstrapped — step out first
+    if (inZone) {
+      bs.updateMatrixWorld(true);
+      SB = {
+        phase: 'seat', t: 0, bs, ud, speed: 0,
+        from: G.camera.position.clone(), fromQ: G.camera.quaternion.clone(),
+        seat: bs.localToWorld(new THREE.Vector3(0, 1.82, 3.45)),
+        seatQ: new THREE.Quaternion().setFromEuler(new THREE.Euler(0, ud.yaw + Math.PI, 0)),
+        drill: ud.armed.drill, boardAt: ud.armed.boardAt,
+      };
+      G.mode = 'space';
+      for (const c of G.camera.children) c.visible = false;
+      sfx.key();
+      addMsg('Strapping in…');
+      return;
+    }
+  }
+}
+
+function flashScreen() {
+  let d = document.getElementById('launchflash');
+  if (!d) {
+    d = document.createElement('div');
+    d.id = 'launchflash';
+    d.style.cssText = 'position:fixed;inset:0;background:#eafcff;pointer-events:none;z-index:60;opacity:0';
+    document.body.appendChild(d);
+  }
+  d.style.transition = 'none';
+  d.style.opacity = '0.9';
+  requestAnimationFrame(() => { d.style.transition = 'opacity .6s'; d.style.opacity = '0'; });
+}
+
+function launchHandoff(sealedHold = false) {
+  const { drill, boardAt, speed, ud, bs } = SB;
+  // put the dropship back on its pad, ramp sealed, for your return
+  bs.position.set(ud.x, 0, ud.z);
+  ud.open = false;
+  ud.armed = null;
+  if (bs.userData.rampGroup) bs.userData.rampGroup.rotation.x = bs.userData.rampClosed;
+  if (ud.doorCol) ud.doorCol.off = false;
+  SB = null;
+  flashScreen();
+  // a mouth launch already flew you out of a hangar — carry your speed and
+  // skip the carrier bay-room launch; a sealed hold catapults you from it
+  startSpaceFlight(null, false, drill, boardAt, sealedHold ? null : { carrySpeed: Math.max(26, speed) });
 }
 
 function updateBoarding(dt) {
   SB.t += dt;
-  const t = SB.t;
+  const t = SB.t, ud = SB.ud, bs = SB.bs;
   const ease = (k) => k * k * (3 - 2 * k);
-  if (t < 1.1) {
-    const k = ease(t / 1.1);
-    G.camera.position.lerpVectors(SB.from, SB.door, k);
-  } else if (t < 1.6) {
-    if (!SB.doored) { SB.doored = true; sfx.chest(); addMsg('Ramp open.'); }
-  } else if (t < 2.9) {
-    const k = ease((t - 1.6) / 1.3);
-    G.camera.position.lerpVectors(SB.door, SB.seat, k);
-    const target = new THREE.Quaternion().setFromEuler(new THREE.Euler(0, Math.PI, 0, 'YXZ')); // face the mouth (south)
-    G.camera.quaternion.slerp(target, Math.min(1, dt * 4));
-  } else if (t < 4.1) {
-    if (!SB.powered) {
-      SB.powered = true;
-      sfx.rumble();
-      addMsg('Reactor spooling… systems green.', 'gold');
-      G.shake = Math.max(G.shake || 0, 0.25);
-    }
-  } else {
-    const opts = SB;
+  if (G.keys['Escape'] && SB.phase !== 'takeoff') { // unstrap — no soft-lock
+    G.keys['Escape'] = false;
+    G.camera.quaternion.copy(SB.fromQ);
+    for (const c of G.camera.children) c.visible = true;
+    document.getElementById('waveHud')?.classList.add('hidden');
+    ud.open = true;     // ramp back down — you are not sealed in
+    ud.seatCd = true;   // don't re-strap until you step out of the cockpit
+    G.mode = 'playing';
     SB = null;
-    startSpaceFlight(null, false, opts.drill, opts.boardAt);
+    addMsg('Unstrapped.');
+    return;
+  }
+  if (SB.phase === 'seat') {
+    const k = ease(Math.min(1, t / 1.1));
+    G.camera.position.lerpVectors(SB.from, SB.seat, k);
+    G.camera.quaternion.slerpQuaternions(SB.fromQ, SB.seatQ, k);
+    if (t >= 1.1) {
+      SB.phase = 'power'; SB.t = 0;
+      ud.open = false; // the ramp whines shut behind you
+      sfx.chest();
+      sfx.rumble();
+      G.shake = Math.max(G.shake || 0, 0.3);
+      addMsg('Ramp sealed. Reactor spooling… systems green.', 'gold');
+    }
+  } else if (SB.phase === 'power') {
+    if (t >= 1.6) {
+      SB.phase = 'ready'; SB.t = 0;
+      document.getElementById('waveHud')?.classList.remove('hidden');
+    }
+  } else if (SB.phase === 'ready') {
+    const wh = document.getElementById('waveHud');
+    if (wh) wh.textContent = 'HOLD W TO LAUNCH';
+    if (G.keys['KeyW']) {
+      SB.phase = 'takeoff'; SB.t = 0;
+      const fs = G.floors.get(G.floor);
+      SB.mouthZ = fs?.grid?.mouth?.length ? (fs.grid.mouth[0].cy + 1.5) * CELL : null;
+      sfx.stairs();
+    }
+  } else if (SB.phase === 'takeoff') {
+    if (G.keys['KeyW']) SB.speed = Math.min(40, SB.speed + 16 * dt);
+    else SB.speed = Math.max(4, SB.speed - 10 * dt);
+    bs.position.y = Math.min(1.7, bs.position.y + 1.1 * dt); // off the pad
+    const wh = document.getElementById('waveHud');
+    if (SB.mouthZ != null) {
+      // fly the REAL hangar: it streams past the windshield on the way out
+      const s0 = Math.sin(ud.yaw), c0 = Math.cos(ud.yaw);
+      bs.position.x += s0 * SB.speed * dt;
+      bs.position.z += c0 * SB.speed * dt;
+      G.shake = Math.max(G.shake || 0, Math.min(0.2, SB.speed * 0.004));
+      if (wh) wh.textContent = SB.speed < 6 ? 'HOLD W TO LAUNCH' : 'LAUNCHING…';
+      if (bs.position.z > SB.mouthZ + 4) { launchHandoff(false); return; }
+    } else {
+      // a sealed hold — no mouth to fly out of; punch out on instruments
+      if (wh) wh.textContent = 'LAUNCHING…';
+      G.shake = Math.max(G.shake || 0, 0.25);
+      if (t > 1.5) { launchHandoff(true); return; }
+    }
+    // camera riveted to the pilot seat
+    bs.updateMatrixWorld(true);
+    G.camera.position.copy(bs.localToWorld(_sv.set(0, 1.82, 3.45)));
+    G.camera.quaternion.copy(SB.seatQ);
   }
 }
 
-export function startSpaceFlight(level = null, fromNet = false, drill = false, boardAt = null) {
+export function startSpaceFlight(level = null, fromNet = false, drill = false, boardAt = null, opts = null) {
   if (S) return;
   if (fromNet && G.mode !== 'playing') { addMsg('The patrol launched without you.'); return; }
   const lvl = level ?? (G.run.patrolLvl || 0) + 1;
@@ -369,6 +479,15 @@ export function startSpaceFlight(level = null, fromNet = false, drill = false, b
   G.mode = 'space';
   for (const c of G.camera.children) c.visible = false;
   document.getElementById('waveHud')?.classList.remove('hidden');
+  if (opts?.carrySpeed) {
+    // you already flew out of a hangar mouth under your own power — pick up
+    // just outside the carrier bay at the speed you left with
+    S.ship.position.set(DOCK.x, DOCK.y, DOCK.z + 16);
+    S.speed = opts.carrySpeed;
+    S.phase = S.afterLaunch;
+    addMsg(drill ? 'You punch out into open space. Fly the pattern, then come home to the beacon.'
+      : 'You punch out into open space — hostiles in the dome. Good hunting.', 'gold');
+  }
   if (drill) {
     addMsg('DOCKING DRILL — empty sky. ARROWS steer, W/S throttle. Follow the light pillar to the bay and fly in.', 'gold');
   } else {
@@ -403,6 +522,7 @@ function endSpaceFlight(result) {
     // set down beside the dropship you took off in — same room, same pad
     G.player.obj.position.set(boardAt.x, 0, boardAt.z + 2);
     G.player.obj.position.y = 0;
+    if (boardAt.yaw !== undefined) G.player.camYaw = boardAt.yaw; // face the hangar, not the sealed ramp
     addMsg('The tractor sets you down on the hangar pad.', 'gold');
   }
   if (result === 'DOCKED') { addMsg('Docked clean. Drill complete.', 'gold'); sfx.levelup(); }
@@ -577,7 +697,8 @@ export function onSpaceNet(m, pid) {
 }
 
 export function updateSpace(dt) {
-  window.__sph = SB ? 'board' : (S ? S.phase : null); // probe hook
+  window.__sph = SB ? 'sb:' + SB.phase : (S ? S.phase : null); // probe hook
+  if (!S && !SB && G.mode === 'playing') checkSeat();
   if (SB) { updateBoarding(dt); return; }
   if (!S) return;
   S.t += dt;
