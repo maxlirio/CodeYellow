@@ -260,7 +260,7 @@ export const ENEMIES = {
   // bosses (deck 3/6 rolls one archetype; deck 9 is still the old god below)
   boss:     { model: 'George', animMap: 'mech', hp: 380, dmg: 22, speed: 4.6, range: 3.4, xp: 170, gold: [60, 90], attackTime: 1.1, aggro: 30, scale: 0.62, boss: true, bossName: 'THE HULK WARDEN', stalwart: true },
   necrolord:{ model: 'Leela', animMap: 'mech', hp: 300, dmg: 18, speed: 3.8, range: 15, xp: 180, gold: [60, 95], attackTime: 1.3, aggro: 30, scale: 0.68, boss: true, ranged: true, tint: 0xddaaff, boltVis: 'laser', boltColor: 0xbb66ff, boltSpeed: 28, summons: true, summonEvery: 8, summonType: 'minion', summonCount: 2, bossName: 'FABRICATOR PRIME', bossMsg: 'prints fresh frames' },
-  reaper:   { model: 'Cyber_Character', animMap: 'cyberhero', hp: 320, dmg: 20, speed: 6.8, range: 2.8, xp: 180, gold: [60, 95], attackTime: 0.6, aggro: 32, scale: 2.3, boss: true, ghost: true, bossName: 'THE SILENT PROTOCOL' },
+  reaper:   { model: 'Cyber_Character', animMap: 'cyberhero', hp: 320, dmg: 20, speed: 6.8, range: 2.8, xp: 180, gold: [60, 95], attackTime: 0.6, aggro: 32, scale: 2.3, boss: true, bossName: 'THE SILENT PROTOCOL' },
   boneking: { model: 'George', animMap: 'mech', hp: 620, dmg: 26, speed: 4.2, range: 16,  xp: 420, gold: [150, 220], attackTime: 1.3, aggro: 40, scale: 0.8, ranged: true, boltVis: 'laser', boltColor: 0xff3322, boltSpeed: 30, boss: true, summons: true, summonEvery: 9, summonType: 'minion', summonCount: 2, tint: 0xffb8a8, bossName: 'THE FOUNDRY TYRANT' },
   mushking: { model: 'Cyber_Enemy_Flying_Gun', animMap: 'cyberfly', fly: true, muzzleY: 0.5, hp: 350, dmg: 20, speed: 4.6, range: 3.0, xp: 190, gold: [70, 100], attackTime: 1.2, aggro: 30, scale: 3.0, boss: true, stalwart: true, tint: 0xb0f0e4, summons: true, summonEvery: 10, summonType: 'slimelet', summonCount: 3, bossName: 'THE NANITE HIVE', bossMsg: 'sheds nanite globs' },
   // deck 9: the old god of the reactor — still the dragon, pending its own rebuild
@@ -274,9 +274,9 @@ export const MIDBOSS_TYPES = ['boss', 'necrolord', 'reaper', 'mushking', 'boneki
 export function enemyPool(floor) {
   if (floor === 1) return ['minion', 'minion', 'goblin', 'goblin', 'rogue'];
   if (floor === 2) return ['minion', 'goblin', 'rogue', 'warrior', 'bomber', 'slime', 'orcwar'];
-  if (floor <= 4) return ['minion', 'goblin', 'rogue', 'warrior', 'mage', 'bomber', 'ghost', 'brute', 'orcwar', 'slime', 'imp'];
-  if (floor <= 6) return ['minion', 'goblin', 'rogue', 'warrior', 'warrior', 'mage', 'bomber', 'frostmage', 'ghost', 'brute', 'berserker', 'sniper', 'plaguebearer', 'orcwar', 'orcwar', 'imp', 'ogre'];
-  return ['rogue', 'warrior', 'warrior', 'mage', 'mage', 'bomber', 'frostmage', 'ghost', 'berserker', 'juggernaut', 'plaguebearer', 'sniper', 'necromancer', 'shade', 'brute', 'orcwar', 'ogre', 'imp', 'drake', 'glub'];
+  if (floor <= 4) return ['minion', 'goblin', 'rogue', 'warrior', 'mage', 'bomber', 'brute', 'orcwar', 'slime', 'imp'];
+  if (floor <= 6) return ['minion', 'goblin', 'rogue', 'warrior', 'warrior', 'mage', 'bomber', 'frostmage', 'brute', 'berserker', 'sniper', 'plaguebearer', 'orcwar', 'orcwar', 'imp', 'ogre'];
+  return ['rogue', 'warrior', 'warrior', 'mage', 'mage', 'bomber', 'frostmage', 'berserker', 'juggernaut', 'plaguebearer', 'sniper', 'necromancer', 'brute', 'orcwar', 'ogre', 'imp', 'drake', 'glub'];
 }
 export const ARCHERS = ['mage', 'frostmage', 'sniper', 'sniper'];
 export const eliteChance = (floor) => Math.min(0.25, 0.04 + floor * 0.025);
@@ -308,7 +308,7 @@ export const THEMES = [
     tiles: ['floor_tile_large', 'floor_tile_small_weeds_A', 'floor_tile_small_weeds_B', 'floor_tile_small_weeds_A', 'floor_tile_large_rocks'],
     props: ['barrel_large', 'box_small', 'shelf_small'],
     banners: ['banner_patternA_blue'],
-    bias: ['ghost', 'plaguebearer', 'slime', 'slime', 'glub'],
+    bias: ['plaguebearer', 'slime', 'slime', 'glub'],
   },
   {
     id: 'ossuary', name: 'The Silent Ossuary', fog: 0x282434, density: 0.016,
@@ -316,7 +316,7 @@ export const THEMES = [
     tiles: ['floor_tile_large', 'floor_tile_large', 'floor_tile_small_broken_A', 'floor_tile_small_broken_B', 'floor_tile_small_decorated'],
     props: ['table_medium', 'shelf_small', 'chair'],
     banners: ['banner_patternA_blue'],
-    bias: ['ghost', 'ghost', 'shade', 'necromancer'],
+    bias: ['necromancer', 'sniper'],
   },
   {
     id: 'forge', name: 'The Ember Forge', fog: 0x2c1008, density: 0.020,
@@ -345,15 +345,10 @@ export const THEMES = [
 ];
 
 // ---------------- floor mutators ----------------
-export const MUTATORS = [
-  { id: 'infested', name: 'INFESTED', desc: 'The dead are legion — half again as many foes.', countMult: 1.5 },
-  { id: 'cursed', name: 'CURSED', desc: 'Foes are hardier, but their bones drip with gold.', hpMult: 1.4, goldMult: 1.8 },
-  { id: 'treasure', name: 'TREASURE VAULT', desc: 'Riches beyond counting hide here.', extraChests: 3, extraCoins: 8 },
-  { id: 'haunted', name: 'HAUNTED', desc: 'Spirits drift through these halls.', poolOverride: ['ghost', 'ghost', 'shade', 'shade', 'necromancer'] },
-  { id: 'swift', name: 'SWIFT DEATH', desc: 'Everything here is faster. Everything.', speedMult: 1.3, xpMult: 1.4 },
-  { id: 'darkness', name: 'PITCH DARK', desc: 'The torches have all but died.', torchMult: 0.35 },
-];
-export const MUTATOR_CHANCE = 0.45;
+// themed floor modifiers are GONE — decks are what they are, no haunted/
+// cursed/pitch-dark variants (user call: no themed levels)
+export const MUTATORS = [];
+export const MUTATOR_CHANCE = 0;
 
 export const LAYOUTS = ['rooms', 'warrens', 'cavern', 'hall'];
 

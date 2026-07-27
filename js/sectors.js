@@ -33,14 +33,14 @@ export const SECTOR_THEMES = {
   },
   hab: {
     id: 'hab', name: 'HAB ROW', fog: 0x07070c, density: 0.0075,
-    hemi: 0xb8c2e4, amb: 0x8890b0, torch: 0xffd9a0, accent: 0x2fd6c8, boost: 1.55,
+    hemi: 0xc4cdec, amb: 0x9aa2c2, torch: 0xffd9a0, accent: 0x2fd6c8, boost: 1.7,
     tiles: [], props: [], banners: [], bias: [],
     pal: { floor: 0x3f4149, wall: 0x5c5f6c, frame: 0x33353d, boxes: [0x6a5c4a] },
     neon: [0xff4fa0, 0x4fe8e0, 0xffce2e, 0x8aff5c, 0xbb66ff],
   },
   engine: {
-    id: 'engine', name: 'THE REACTOR SHAFT', fog: 0x120806, density: 0.006,
-    hemi: 0xffd0b4, amb: 0xc49682, torch: 0xff8050, accent: 0xff4a1f, boost: 1.8,
+    id: 'engine', name: 'THE POWER SHAFT', fog: 0x070302, density: 0.0022,
+    hemi: 0x8a7466, amb: 0x685850, torch: 0xff8050, accent: 0xff4a1f, boost: 1.15,
     tiles: [], props: [], banners: [], bias: [],
     pal: { floor: 0x4a4442, wall: 0x57504c, frame: 0x3a3432, boxes: [0x6a5348] },
   },
@@ -61,6 +61,7 @@ function baseGrid(w, h, id) {
     ramps: new Map(),
     colliders: [],
     gravlifts: [],
+    ladders: [],
     rooms: [],
     stairsLocked: true,
     sector: id,
@@ -97,8 +98,14 @@ function stairs(grid, x0, z0, dx, dz, rise, width = 2.4) {
 }
 
 // a walkable deck slab with a thin body: stand on top, walk under it
-function deck(grid, x, z, hx, hz, top, thick = 0.4) {
-  grid.colliders.push({ x, z, hx, hz, y0: top - thick, h: top, noMesh: true, deck: true });
+function deck(grid, x, z, hx, hz, top, thick = 0.4, opts = null) {
+  grid.colliders.push({ x, z, hx, hz, y0: top - thick, h: top, noMesh: true, deck: true, ...(opts || {}) });
+}
+
+// a LADDER: climbable line from y0 to y1 (player.js: hold W/S against it).
+// nx/nz = the facing normal (which side you climb from) — visuals only.
+function ladder(grid, x, z, y0, y1, nx = 0, nz = 1) {
+  grid.ladders.push({ x, z, y0, y1, nx, nz });
 }
 
 // a wall segment across a vertical span
@@ -180,10 +187,35 @@ function extractionPad(kit, x, z, y = 0) {
 function drawStructural(kit, grid) {
   for (const c of grid.colliders) {
     if (c.stair) kit.box('frame', c.x, (c.y0 + c.h) / 2 + (c.h - c.y0) * 0, c.z, c.hx * 2, c.h, c.hz * 2);
-    else if (c.deck) {
+    else if (c.deck && c.bridge) {
+      // a BRIDGE reads as a bridge: thin plate, truss chords, X-braced sides,
+      // an under-spine, and low rail bars on posts (low — the drop is the point)
+      const alongX = c.hx >= c.hz;
+      const len = Math.max(c.hx, c.hz) * 2, across = Math.min(c.hx, c.hz) * 2;
+      kit.box('floor', c.x, c.h - 0.1, c.z, c.hx * 2, 0.2, c.hz * 2);
+      kit.box('frame', c.x, c.h - 0.42, c.z, alongX ? len * 0.96 : across * 0.4, 0.5, alongX ? across * 0.4 : len * 0.96);
+      for (const sd of [-1, 1]) {
+        const ox = alongX ? 0 : sd * (across / 2 - 0.08), oz = alongX ? sd * (across / 2 - 0.08) : 0;
+        kit.box('frame', c.x + ox, c.h + 0.72, c.z + oz, alongX ? len : 0.09, 0.08, alongX ? 0.09 : len); // rail bar
+        kit.box('frame', c.x + ox, c.h - 0.28, c.z + oz, alongX ? len : 0.14, 0.36, alongX ? 0.14 : len); // side chord
+        const nPost = Math.max(2, Math.floor(len / 2.6));
+        for (let i = 0; i <= nPost; i++) {
+          const t = -len / 2 + (i / nPost) * len;
+          kit.box('frame', c.x + (alongX ? t : ox), c.h + 0.36, c.z + (alongX ? oz : t), 0.09, 0.72, 0.09);
+        }
+      }
+    } else if (c.deck) {
       kit.box('floor', c.x, c.h - 0.2, c.z, c.hx * 2, 0.4, c.hz * 2);
       kit.box('accent', c.x, c.h - 0.42, c.z, c.hx * 2 * 0.9, 0.06, 0.12);
     } else if (c.wall) kit.box('wall', c.x, (c.y0 + c.h) / 2, c.z, c.hx * 2, c.h - c.y0, c.hz * 2);
+  }
+  // ladders: side rails + rungs, facing their normal
+  for (const L of grid.ladders || []) {
+    const px = -L.nz, pz = L.nx; // perpendicular (rail offset direction)
+    const mid = (L.y0 + L.y1) / 2, hgt = L.y1 - L.y0;
+    for (const sd of [-1, 1]) kit.box('frame', L.x + px * sd * 0.42, mid, L.z + pz * sd * 0.42, 0.12, hgt + 0.6, 0.12);
+    for (let y = L.y0 + 0.35; y < L.y1; y += 0.42) kit.box('frame', L.x, y, L.z, Math.abs(px) ? 0.86 : 0.1, 0.07, Math.abs(pz) ? 0.86 : 0.1);
+    kit.box('accent', L.x, L.y1 + 0.15, L.z, Math.abs(px) ? 0.9 : 0.14, 0.07, Math.abs(pz) ? 0.9 : 0.14);
   }
 }
 
@@ -193,6 +225,17 @@ function railing(kit, x, z, hx, hz, y) {
 }
 
 // enemy spawn helper (y = which surface they hold)
+// difficulty padding: sprinkle extra hostiles on random open floor
+function extraFoes(fs, grid, rng, n, pool = ['warrior', 'rogue', 'orcwar', 'mage', 'brute', 'goblin', 'berserker', 'sniper']) {
+  let placed = 0, guard = 0;
+  while (placed < n && guard++ < 500) {
+    const x = rng.int(2, grid.w - 3), y = rng.int(2, grid.h - 3);
+    if (grid.cells[y * grid.w + x] !== FLOOR) continue;
+    fs.enemySpawns.push({ type: rng.pick(pool), x: x * CELL, z: y * CELL, y: 0, elite: rng.chance(0.1 + n * 0.006) });
+    placed++;
+  }
+}
+
 function foes(fs, list) {
   for (const [type, x, z, y = 0, elite = false] of list) {
     if (!ENEMIES[type]) continue;
@@ -203,9 +246,10 @@ function foes(fs, list) {
 // ==================================================================
 // 1. CARGO — THE CONTAINER YARD
 // ==================================================================
-function genCargo(seed) {
+function genCargo(seed, diff = 0) {
   const rng = makeRng(seed + ':yard');
-  const W = 44, H = 34, CEIL = 18;
+  const SZ = [1, 1.25, 1.55][diff];
+  const W = Math.round(44 * SZ), H = Math.round(34 * SZ), CEIL = 18;
   const theme = SECTOR_THEMES.cargo;
   const grid = baseGrid(W, H, 'cargo');
   for (let y = 1; y < H - 1; y++) for (let x = 1; x < W - 1; x++) grid.cells[y * W + x] = FLOOR;
@@ -216,7 +260,7 @@ function genCargo(seed) {
   const stacks = [];
   const CH = 3.2; // container height
   const taken = new Set();
-  for (let i = 0; i < 34; i++) {
+  for (let i = 0; i < Math.round(34 * SZ * SZ); i++) {
     const cx = 3 + rng.int(0, W - 8), cy = 3 + rng.int(0, H - 7);
     const horiz = rng.chance(0.5);
     const k = `${Math.floor(cx / 3)},${Math.floor(cy / 3)}`;
@@ -266,9 +310,11 @@ function genCargo(seed) {
     ['brute', 28 * CELL, 28 * CELL], ['goblin', 18 * CELL, 22 * CELL],
     ['sniper', talls[0] ? talls[0].x : 20 * CELL, talls[0] ? talls[0].z : 20 * CELL, talls[0] ? talls[0].tall * CH : 0],
     ['sniper', (W / 2) * CELL, 2 * CELL, catY],
-    ['imp', 24 * CELL, 10 * CELL, 5], ['slime', 10 * CELL, 12 * CELL],
+    ['imp', 24 * CELL, 10 * CELL, 5], ['goblin', 10 * CELL, 12 * CELL],
   ]);
+  extraFoes(fs, grid, rng, [0, 6, 13][diff]);
   fs.lootSpawns.push({ kind: 'chest', x: 6 * CELL, z: 6 * CELL }, { kind: 'chest', x: (W - 8) * CELL, z: (H - 6) * CELL });
+  if (diff >= 1) fs.lootSpawns.push({ kind: 'chest', x: (W / 2) * CELL, z: 4 * CELL });
   return fs;
 }
 
@@ -284,7 +330,7 @@ function buildCargo(fs) {
     kit.box('accent', wx - CELL / 2, 2.6, wz - CELL / 2, sx === 1 ? 0.3 : sx * 0.95, 0.16, sz === 1 ? 0.3 : sz * 0.95);
   }
   kit.box('frame', W / 2 - CELL / 2, CEIL + 0.2, H / 2 - CELL / 2, W, 0.4, H);
-  for (let i = 0; i < 8; i++) kit.box('panel', (4 + i * 5.4) * CELL, CEIL - 0.05, H / 2, 8, 0.1, 10);
+  for (let i = 0; i < Math.floor(g.w / 5.5); i++) kit.box('panel', (4 + i * 5.4) * CELL, CEIL - 0.05, H / 2, 8, 0.1, 10);
   // the stacks: colored containers with rib frames + stripes
   for (const s of g.stacks) {
     for (let lvl = 0; lvl < s.tall; lvl++) {
@@ -307,7 +353,7 @@ function buildCargo(fs) {
   kit.finish(group);
   for (const gl of g.gravlifts) liftVisual(group, kit, gl);
   // warm high bay lights
-  for (let i = 0; i < 6; i++) {
+  for (let i = 0; i < Math.floor(g.w / 7.5); i++) {
     for (const lz of [H * 0.3, H * 0.7]) {
       const pl = new THREE.PointLight(0xffd9a0, 60, 70, 1.4);
       pl.position.set((5 + i * 7) * CELL, CEIL - 3, lz);
@@ -320,9 +366,10 @@ function buildCargo(fs) {
 // ==================================================================
 // 2. SECURITY — THE PANOPTICON
 // ==================================================================
-function genSecurity(seed) {
+function genSecurity(seed, diff = 0) {
   const rng = makeRng(seed + ':pan');
-  const W = 33, H = 33, C = 16, R = 14.5;
+  const SZ = [1, 1.24, 1.5][diff];
+  const W = (Math.round(33 * SZ) | 1), H = W, C = (W - 1) / 2, R = (W - 4) / 2;
   const theme = SECTOR_THEMES.security;
   const grid = baseGrid(W, H, 'security');
   for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) {
@@ -331,10 +378,10 @@ function genSecurity(seed) {
   const fs = baseFs(grid, theme, 'security');
   grid.ceil = 14;
   const cw = C * CELL;
+  grid.sec = { C, R, cw };
 
   // CENTRAL GUARD TOWER: round, solid below, platform on top at 8
   const towerR = 8.5;
-  grid.colliders.push({ x: cw, z: cw, r: towerR, y0: 0, h: 7.6, noMesh: true }); // tower body
   deck(grid, cw, cw, towerR + 1.6, towerR + 1.6, 8); // tower top (square deck approximates)
   // parapet
   wall3(grid, cw, cw - towerR - 1.4, towerR + 1.6, 0.3, 8, 9.1);
@@ -344,28 +391,29 @@ function genSecurity(seed) {
 
   // GALLERY RING at 8u around the perimeter, 2 cells wide (walk the wall)
   const galInner = (R - 3.4) * CELL, galOuter = (R - 0.8) * CELL;
-  const segs = 28;
+  const segs = Math.round(28 * SZ);
   for (let i = 0; i < segs; i++) {
     const a = (i / segs) * Math.PI * 2;
     const rMid = (galInner + galOuter) / 2;
     const x = cw + Math.cos(a) * rMid, z = cw + Math.sin(a) * rMid;
     deck(grid, x, z, 5.6, 5.6, 8);
   }
-  // BRIDGES tower -> gallery at 8u (N,S,E,W)
+  // BRIDGES tower -> gallery at 8u (N,S,E,W) — real trussed spans
   for (const [dx, dz] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
     const len = (galInner - towerR) / 2 + 2;
     const x = cw + dx * (towerR + len), z = cw + dz * (towerR + len);
-    deck(grid, x, z, Math.abs(dx) ? len + 2 : 1.4, Math.abs(dz) ? len + 2 : 1.4, 8);
+    deck(grid, x, z, Math.abs(dx) ? len + 2 : 1.4, Math.abs(dz) ? len + 2 : 1.4, 8, 0.3, { bridge: true });
   }
   // stairs: two wide runs from floor up to the gallery + one lift to the tower
   stairs(grid, cw + galInner - 2, cw - 2.4, -1, 0, 8);
   stairs(grid, cw - galInner + 2, cw + 2.4, 1, 0, 8);
   lift(grid, cw + towerR + 3.4, cw + towerR + 3.4, 8);
 
-  // ground-story CELL BLOCKS around the rim: bar walls with gaps (visual bars in builder)
+  // ground-story CELL BLOCKS around the rim: bar walls with gaps
   grid.cellsRing = [];
-  for (let i = 0; i < 16; i++) {
-    const a = (i / 16) * Math.PI * 2 + 0.12;
+  const nCells = Math.round(16 * SZ);
+  for (let i = 0; i < nCells; i++) {
+    const a = (i / nCells) * Math.PI * 2 + 0.12;
     const r = (R - 1.9) * CELL;
     const x = cw + Math.cos(a) * r, z = cw + Math.sin(a) * r;
     grid.cellsRing.push({ x, z, a });
@@ -380,9 +428,7 @@ function genSecurity(seed) {
   grid.cells[C * W + C] = STAIRS;
   grid.stairs = { x: cw, z: cw - towerR + 2.2, cx: C, cy: C - 2 };
   grid.portal = { dx: 0, dy: -1, yaw: 0 };
-  // tower door gaps: south entrance (carve by shrinking body: overlap-free door via two arc walls is complex —
-  // instead the tower body collider is a ring of 4 boxes with a south gap)
-  grid.colliders = grid.colliders.filter(c => !(c.r === towerR));
+  // tower body: a ring of 4 wall boxes with a south door gap
   const tb = towerR;
   wall3(grid, cw - tb + 1.2, cw, 1.4, tb, 0, 7.6);
   wall3(grid, cw + tb - 1.2, cw, 1.4, tb, 0, 7.6);
@@ -392,13 +438,15 @@ function genSecurity(seed) {
 
   foes(fs, [
     ['warrior', cw - 20, cw + 12], ['warrior', cw + 22, cw - 10],
-    ['shade', cw - 30, cw - 24], ['shade', cw + 30, cw + 26],
+    ['rogue', cw - 30, cw - 24], ['rogue', cw + 30, cw + 26],
     ['sniper', cw + galInner - 6, cw, 8], ['sniper', cw - galInner + 6, cw, 8],
     ['mage', cw, cw - galInner + 6, 8],
     ['juggernaut', cw, cw + 14], ['necromancer', cw - 12, cw - 16],
     ['rogue', cw + 16, cw + 18], ['rogue', cw - 18, cw + 4],
   ]);
+  extraFoes(fs, grid, rng, [0, 5, 11][diff]);
   fs.lootSpawns.push({ kind: 'chest', x: cw + (R - 2.5) * CELL, z: cw }, { kind: 'chest', x: cw, z: cw - (R - 2.5) * CELL });
+  if (diff >= 1) fs.lootSpawns.push({ kind: 'chest', x: cw, z: cw + towerR + 3, y: 8 });
   return fs;
 }
 
@@ -406,7 +454,7 @@ function buildSecurity(fs) {
   const g = fs.grid, theme = fs.theme;
   const group = new THREE.Group();
   const kit = meshKit(theme.pal, theme.accent);
-  const C = 16, R = 14.5, cw = C * CELL, CEIL = g.ceil;
+  const { C, R, cw } = g.sec, CEIL = g.ceil;
   // cylindrical shell: floor disc, wall ring, roof
   const fl = new THREE.Mesh(new THREE.CylinderGeometry(R * CELL + 2, R * CELL + 2, 0.22, 48), kit.mats.floor);
   fl.position.set(cw, -0.11, cw);
@@ -490,60 +538,61 @@ function neonTex(text, color) {
   return t;
 }
 
-function genHab(seed) {
+function genHab(seed, diff = 0) {
   const rng = makeRng(seed + ':row');
-  const W = 46, H = 26;
+  const off = [0, 8, 18][diff];        // extra street length per difficulty
+  const s1e = 20 + off;                // seg1 east end
+  const W = 46 + off, H = 26;
   const theme = SECTOR_THEMES.hab;
   const grid = baseGrid(W, H, 'hab');
   const fs = baseFs(grid, theme, 'hab');
   grid.ceil = 12;
+  grid.hab = { s1e };
   const set = (x, y, v) => { if (x >= 0 && y >= 0 && x < W && y < H) grid.cells[y * W + x] = v; };
 
-  // S-street: seg1 rows 16-19 (x 2..20), plaza (x 20..27, y 8..19), seg2 rows 6-9 (x 27..44)
-  for (let x = 2; x <= 20; x++) for (let y = 16; y <= 19; y++) set(x, y, FLOOR);
-  for (let x = 20; x <= 27; x++) for (let y = 7; y <= 19; y++) set(x, y, FLOOR);
-  for (let x = 27; x <= 44; x++) for (let y = 6; y <= 9; y++) set(x, y, FLOOR);
+  // S-street: seg1 rows 16-19, plaza, seg2 rows 6-9
+  for (let x = 2; x <= s1e; x++) for (let y = 16; y <= 19; y++) set(x, y, FLOOR);
+  for (let x = s1e; x <= s1e + 7; x++) for (let y = 7; y <= 19; y++) set(x, y, FLOOR);
+  for (let x = s1e + 7; x <= W - 2; x++) for (let y = 6; y <= 9; y++) set(x, y, FLOOR);
 
   // HOMES: units along both sides of each straight segment.
-  // A unit = 3x3 interior carved off the street + door gap + furniture collider.
   grid.units = [];
-  const unit = (ux, uy, doorSide) => { // doorSide: 0 = door faces +y street, 1 = faces -y
+  const unit = (ux, uy, doorSide) => {
     for (let y = uy; y < uy + 3; y++) for (let x = ux; x < ux + 3; x++) set(x, y, FLOOR);
-    const doorX = (ux + 1) * CELL, doorY = doorSide ? uy * CELL - CELL / 2 : (uy + 3) * CELL - CELL / 2;
-    // facade walls with the door gap (colliders; visuals in builder)
     const fz = doorSide ? uy * CELL - CELL / 2 : (uy + 2) * CELL + CELL / 2;
     wall3(grid, (ux) * CELL - 0.9, fz, 1.1, 0.35, 0, 4.2);
     wall3(grid, (ux + 2) * CELL + 0.9, fz, 1.1, 0.35, 0, 4.2);
     grid.units.push({ ux, uy, doorSide, tone: rng.int(0, 4), name: rng.pick(['NOODLE-9', 'VOID BAR', 'HAB 7-C', 'PARTS+', 'ORBIT CUTS', 'STIM STOP', 'BUNK 12', 'K-KIOSK']) });
-    // furniture: a bunk + a table
     grid.colliders.push({ x: (ux + 0.6) * CELL, z: (uy + 1.4) * CELL, hx: 1.4, hz: 0.8, y0: 0, h: 0.85, noMesh: true });
     if (rng.chance(0.5)) fs.lootSpawns.push({ kind: 'chest', x: (ux + 2) * CELL, z: (uy + 1) * CELL });
   };
-  for (let i = 0; i < 5; i++) unit(3 + i * 4, 13, 0);   // seg1 north side (doors face street below)
-  for (let i = 0; i < 4; i++) unit(4 + i * 4, 20, 1);   // seg1 south side
-  for (let i = 0; i < 4; i++) unit(28 + i * 4, 3, 0);   // seg2 north side
-  for (let i = 0; i < 4; i++) unit(28 + i * 4, 10, 1);  // seg2 south side
+  for (let x = 3; x + 3 <= s1e; x += 4) unit(x, 13, 0);        // seg1 north side
+  for (let x = 4; x + 3 <= s1e + 1; x += 4) unit(x, 20, 1);    // seg1 south side
+  for (let x = s1e + 8; x + 3 <= W - 2; x += 4) unit(x, 3, 0); // seg2 north side
+  for (let x = s1e + 8; x + 3 <= W - 2; x += 4) unit(x, 10, 1);// seg2 south side
 
-  // BALCONY level: a continuous 4.4u walkway over the north facades w/ stairs
-  deck(grid, 11.5 * CELL, 15.4 * CELL, 9.5 * CELL, CELL * 0.55, 4.4);
+  // BALCONY level over the north facades w/ stairs (some balcony is right —
+  // the REAL floors live in weapons/engine)
+  deck(grid, ((2 + s1e + 1) / 2) * CELL, 15.4 * CELL, ((s1e - 1) / 2) * CELL, CELL * 0.55, 4.4);
   stairs(grid, 3 * CELL, 16.6 * CELL, 1, 0, 4.4);
-  deck(grid, 35.5 * CELL, 5.4 * CELL, 8.5 * CELL, CELL * 0.55, 4.4);
-  stairs(grid, 28.6 * CELL, 6.6 * CELL, 1, 0, 4.4);
+  deck(grid, ((s1e + 7 + W - 2) / 2) * CELL, 5.4 * CELL, ((W - 9 - s1e) / 2) * CELL, CELL * 0.55, 4.4);
+  stairs(grid, (s1e + 8.6) * CELL, 6.6 * CELL, 1, 0, 4.4);
 
   grid.spawn = { x: 3 * CELL, z: 17.5 * CELL };
   grid.spawnYaw = -Math.PI / 2;
-  grid.cells[8 * W + 43] = STAIRS;
-  grid.stairs = { x: 43 * CELL, z: 8 * CELL, cx: 43, cy: 8 };
+  grid.cells[8 * W + (W - 3)] = STAIRS;
+  grid.stairs = { x: (W - 3) * CELL, z: 8 * CELL, cx: W - 3, cy: 8 };
   grid.portal = { dx: 1, dy: 0, yaw: Math.PI / 2 };
 
   foes(fs, [
-    ['shade', 8 * CELL, 17 * CELL], ['shade', 24 * CELL, 12 * CELL],
-    ['ghost', 30 * CELL, 8 * CELL], ['ghost', 14 * CELL, 18 * CELL],
-    ['orcwar', 22 * CELL, 16 * CELL], ['orcwar', 36 * CELL, 7 * CELL],
-    ['rogue', 10 * CELL, 13 * CELL], ['rogue', 32 * CELL, 4 * CELL],
-    ['sniper', 12 * CELL, 15 * CELL, 4.4], ['sniper', 38 * CELL, 5 * CELL, 4.4],
-    ['berserker', 24 * CELL, 9 * CELL], ['slime', 20 * CELL, 18 * CELL],
+    ['rogue', 8 * CELL, 17 * CELL], ['rogue', (s1e + 4) * CELL, 12 * CELL],
+    ['warrior', (s1e + 10) * CELL, 8 * CELL], ['rogue', 14 * CELL, 18 * CELL],
+    ['orcwar', (s1e + 2) * CELL, 16 * CELL], ['orcwar', (W - 10) * CELL, 7 * CELL],
+    ['rogue', 10 * CELL, 13 * CELL], ['goblin', (s1e + 12) * CELL, 4 * CELL],
+    ['sniper', 12 * CELL, 15 * CELL, 4.4], ['sniper', (W - 8) * CELL, 5 * CELL, 4.4],
+    ['berserker', (s1e + 4) * CELL, 9 * CELL], ['brute', s1e * CELL, 18 * CELL],
   ]);
+  extraFoes(fs, grid, rng, [0, 5, 11][diff]);
   return fs;
 }
 
@@ -583,93 +632,117 @@ function buildHab(fs) {
     neon.position.set(x0 + CELL, 4.4, fz + (u.doorSide ? -0.4 : 0.4));
     if (u.doorSide) neon.rotation.y = Math.PI;
     group.add(neon);
-    const nl = new THREE.PointLight(theme.neon[u.tone], 18, 14, 1.6);
-    nl.position.set(x0 + CELL, 4.2, fz + (u.doorSide ? -1.6 : 1.6));
-    group.add(nl);
-    // a warm bulb inside every unit
-    const il = new THREE.PointLight(0xffe4b8, 10, 9, 1.7);
-    il.position.set(x0 + CELL, 3.4, z0 + CELL);
-    group.add(il);
+    // NO per-unit point lights (2 x 17 units melted the frame rate) — the
+    // neon plane glows on its own and an emissive ceiling patch lights the
+    // room interior for free
+    kit.box('panel', x0 + CELL, 4.12, z0 + CELL, 2.2, 0.08, 2.2);
   }
-  // plaza: mess tables + a kiosk
-  for (const [tx, tz] of [[22, 12], [25, 15], [22, 17]]) {
+  // plaza: mess tables + a kiosk (anchored to the plaza, wherever it sits)
+  const s1e = g.hab.s1e;
+  for (const [tx, tz] of [[s1e + 2, 12], [s1e + 5, 15], [s1e + 2, 17]]) {
     kit.box('frame', tx * CELL, 0.55, tz * CELL, 2.6, 0.14, 1.2);
     kit.box('frame', tx * CELL, 0.28, tz * CELL, 0.3, 0.56, 0.3);
   }
-  kit.box('wall', 24 * CELL, 1.5, 9 * CELL, 4, 3, 3);
-  kit.box('accent', 24 * CELL, 3.15, 9 * CELL, 4.2, 0.14, 3.2);
+  kit.box('wall', (s1e + 4) * CELL, 1.5, 9 * CELL, 4, 3, 3);
+  kit.box('accent', (s1e + 4) * CELL, 3.15, 9 * CELL, 4.2, 0.14, 3.2);
   drawStructural(kit, g);
   extractionPad(kit, g.stairs.x, g.stairs.z, 0);
   kit.finish(group);
   for (const gl of g.gravlifts) liftVisual(group, kit, gl);
-  // dim street lamps
-  for (const [lx, lz] of [[5, 17.5], [10, 17.5], [15, 17.5], [20, 17.5], [23.5, 13], [23.5, 9],
-    [29, 7.5], [34, 7.5], [39, 7.5], [43, 7.5]]) {
-    const pl = new THREE.PointLight(0xffe4b8, 26, 26, 1.5);
-    pl.position.set(lx * CELL, 5.2, lz * CELL);
-    group.add(pl);
+  // street lamps: FIVE real lights with wide throw (was ten narrow ones),
+  // plus unlit lamp posts to keep the street furniture rhythm
+  const LAMP_LIT = [], LAMP_POST = [];
+  for (let x = 5, i = 0; x < s1e - 1; x += 5, i++) (i % 2 ? LAMP_POST : LAMP_LIT).push([x, 17.5]);
+  LAMP_LIT.push([s1e + 3.5, 11]);
+  for (let x = s1e + 9, i = 0; x < g.w - 2; x += 5, i++) (i % 2 ? LAMP_POST : LAMP_LIT).push([x, 7.5]);
+  for (const [lx, lz] of [...LAMP_LIT, ...LAMP_POST]) {
     kit.box('frame', lx * CELL, 2.6, lz * CELL, 0.18, 5.2, 0.18);
     kit.box('panel', lx * CELL, 5.3, lz * CELL, 0.7, 0.3, 0.7);
+  }
+  for (const [lx, lz] of LAMP_LIT) {
+    const pl = new THREE.PointLight(0xffe4b8, 46, 46, 1.5);
+    pl.position.set(lx * CELL, 5.2, lz * CELL);
+    group.add(pl);
   }
   return group;
 }
 
 // ==================================================================
-// 4. ENGINE — THE REACTOR SHAFT (vertical descent)
+// 4. ENGINE — THE POWER SHAFT (there is exactly ONE of these)
+// A narrow, deep chasm: you come in on the top gantry, and the only way
+// down is thin unrailed-feeling bridges and LADDERS bolted to the pylons.
+// Star-Wars power-shaft energy: a humming conduit trunk runs the length
+// of the pit, arcing between pylons. The floor is a long way down.
 // ==================================================================
 function genEngine(seed) {
   const rng = makeRng(seed + ':shaft');
-  const W = 27, H = 27, C = 13, R = 12;
+  const W = 10, H = 27, DEPTH = 28;
   const theme = SECTOR_THEMES.engine;
   const grid = baseGrid(W, H, 'engine');
-  // the BOTTOM floor is the cell footprint
-  for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) {
-    if ((x - C) ** 2 + (y - C) ** 2 <= R * R) grid.cells[y * W + x] = FLOOR;
-  }
+  // the pit floor is the whole footprint
+  for (let y = 1; y < H - 1; y++) for (let x = 1; x < W - 1; x++) grid.cells[y * W + x] = FLOOR;
   const fs = baseFs(grid, theme, 'engine');
-  const cw = C * CELL;
-  grid.ceil = 30;
-  grid.shaft = { cw, R };
+  grid.ceil = DEPTH + 4;
+  const midX = ((W - 1) / 2) * CELL;     // center line of the shaft
+  const WID = (W - 2) * CELL;            // clear width
+  grid.shaft = { midX, DEPTH, WID };
 
-  // THE CORE: central column, full height — hot, solid
-  grid.colliders.push({ x: cw, z: cw, r: 7.5, y0: 0, h: 30, noMesh: true });
+  // entry gantry: a full-width deck at the very top of the south end
+  deck(grid, midX, 1.8 * CELL, WID / 2, 1.6 * CELL, DEPTH);
+  grid.spawn = { x: midX, z: 1.6 * CELL };
+  grid.spawnY = DEPTH;
+  grid.spawnYaw = Math.PI;
 
-  // RINGS at 22 (entry), 14.5, 7 — annulus decks around the core
-  const rings = [22, 14.5, 7];
-  grid.rings = rings;
-  const segs = 22;
-  for (const ry of rings) {
-    for (let i = 0; i < segs; i++) {
-      const a = (i / segs) * Math.PI * 2;
-      const rMid = (7.5 + (R - 1.6) * CELL) / 2 + 4.5;
-      const x = cw + Math.cos(a) * rMid, z = cw + Math.sin(a) * rMid;
-      deck(grid, x, z, 6.4, 6.4, ry);
-    }
-    // inner railing ring is visual; outer edge = the shaft wall
+  // PYLONS: square columns on the center line, full height — the bridges
+  // land on them and the conduit trunk arcs between them
+  const pylonZ = [6, 11, 16, 21].map((cz) => cz * CELL);
+  grid.pylonZ = pylonZ;
+  for (const pz of pylonZ) {
+    grid.colliders.push({ x: midX, z: pz, hx: 1.5, hz: 1.5, y0: 0, h: DEPTH + 2, noMesh: true });
   }
-  // grav lifts BETWEEN rings, alternating sides (down is free — just step off)
-  lift(grid, cw + (R - 3.4) * CELL, cw, 22);
-  lift(grid, cw - (R - 3.4) * CELL, cw, 14.5);
-  lift(grid, cw, cw + (R - 3.4) * CELL, 7);
 
-  grid.spawn = { x: cw + (R - 4) * CELL, z: cw - 6 };
-  grid.spawnY = 22;
-  grid.spawnYaw = Math.PI / 2;
-  // extraction: at the BOTTOM beside the core base
-  const ex = C, ez = C + 5;
-  grid.cells[ez * W + ex] = STAIRS;
-  grid.stairs = { x: cw, z: (C + 5) * CELL, cx: ex, cy: ez };
+  // THE DESCENT: thin bridges cross the width at each pylon, each one a
+  // storey lower; ladders at alternating ends drop you to the next.
+  // 28 (gantry) -> 22 -> 16 -> 10 -> 5 -> 0 (pit floor)
+  const lvls = [22, 16, 10, 5];
+  grid.lvls = lvls;
+  const westX = 1.5 * CELL, eastX = (W - 2.5) * CELL;
+  for (let i = 0; i < lvls.length; i++) {
+    const y = lvls[i], pz = pylonZ[i];
+    deck(grid, midX, pz, WID / 2, 0.9, y, 0.3, { bridge: true });
+    // a small landing ledge on each side wall where the ladders bolt on
+    deck(grid, westX, pz, 1.4, 1.6, y, 0.3);
+    deck(grid, eastX, pz, 1.4, 1.6, y, 0.3);
+    // ladder DOWN from the previous level, alternating ends; the first
+    // drops from the entry gantry's east corner
+    const lx = i % 2 === 0 ? eastX : westX;
+    const fromY = i === 0 ? DEPTH : lvls[i - 1];
+    const fromZ = i === 0 ? 2.9 * CELL : pylonZ[i - 1];
+    // ladder shaft runs along the side wall between the two z positions:
+    // a catwalk ledge bridges the gap at the LOWER level
+    ladder(grid, lx, fromZ + (pz - fromZ) * 0.08, y, fromY, lx < midX ? 1 : -1, 0);
+    deck(grid, lx, (fromZ + pz) / 2, 1.1, (pz - fromZ) / 2 + 1.8, y, 0.3);
+  }
+  // last drop: ladder from the lowest bridge to the pit floor, east end
+  ladder(grid, eastX, pylonZ[3] + 0.6 * CELL, 0, lvls[3], -1, 0);
+
+  // extraction: at the FAR end of the pit floor, past everything
+  const ez = H - 3;
+  grid.cells[ez * W + Math.round(midX / CELL)] = STAIRS;
+  grid.stairs = { x: midX, z: ez * CELL, cx: Math.round(midX / CELL), cy: ez };
   grid.portal = { dx: 0, dy: 1, yaw: 0 };
 
-  const ringR = (7.5 + (R - 1.6) * CELL) / 2 + 4.5;
   foes(fs, [
-    ['warrior', cw + ringR, cw, 22], ['mage', cw - ringR, cw, 22],
-    ['warrior', cw, cw + ringR, 14.5], ['sniper', cw, cw - ringR, 14.5], ['imp', cw + ringR * 0.7, cw + ringR * 0.7, 16],
-    ['brute', cw - ringR * 0.7, cw - ringR * 0.7, 7], ['mage', cw + ringR, cw, 7], ['imp', cw - 10, cw + 10, 9],
-    ['juggernaut', cw + 14, cw + 16, 0], ['necromancer', cw - 16, cw - 10, 0],
-    ['slime', cw + 8, cw - 18, 0], ['berserker', cw - 20, cw + 6, 0],
+    ['sniper', midX - WID * 0.3, pylonZ[0], lvls[0]],
+    ['mage', midX + WID * 0.3, pylonZ[1], lvls[1]],
+    ['sniper', midX - WID * 0.3, pylonZ[2], lvls[2]],
+    ['warrior', midX + 6, pylonZ[3], lvls[3]],
+    ['imp', midX, 9 * CELL, 14], ['imp', midX, 18 * CELL, 8],
+    ['juggernaut', midX, (H - 6) * CELL, 0], ['necromancer', midX - 8, (H - 9) * CELL, 0],
+    ['brute', midX + 8, 20 * CELL, 0], ['berserker', midX - 6, 13 * CELL, 0],
+    ['mage', midX + 6, (H - 12) * CELL, 0],
   ]);
-  fs.lootSpawns.push({ kind: 'chest', x: cw - (R - 3) * CELL, z: cw });
+  fs.lootSpawns.push({ kind: 'chest', x: westX + 2, z: pylonZ[1], y: lvls[1] }, { kind: 'chest', x: midX + 6, z: (H - 4) * CELL });
   return fs;
 }
 
@@ -677,71 +750,91 @@ function buildEngine(fs) {
   const g = fs.grid, theme = fs.theme;
   const group = new THREE.Group();
   const kit = meshKit(theme.pal, theme.accent);
-  const { cw, R } = g.shaft;
-  const HGT = 30;
-  // bottom floor disc + shaft wall cylinder + top cap
-  const fl = new THREE.Mesh(new THREE.CylinderGeometry(R * CELL + 2, R * CELL + 2, 0.24, 40), kit.mats.floor);
-  fl.position.set(cw, -0.12, cw);
-  group.add(fl);
-  const shell = new THREE.Mesh(new THREE.CylinderGeometry(R * CELL + 2.4, R * CELL + 2.4, HGT, 40, 1, true), kit.mats.wall);
-  shell.material.side = THREE.BackSide;
-  shell.position.set(cw, HGT / 2, cw);
-  group.add(shell);
-  const cap = new THREE.Mesh(new THREE.CylinderGeometry(R * CELL + 2.4, R * CELL + 2.4, 0.5, 40), kit.mats.frame);
-  cap.position.set(cw, HGT + 0.25, cw);
-  group.add(cap);
-  // pipe ribs down the shaft wall
-  for (let i = 0; i < 10; i++) {
-    const a = (i / 10) * Math.PI * 2;
-    const pipe = new THREE.Mesh(new THREE.CylinderGeometry(0.6, 0.6, HGT, 8), kit.mats.frame);
-    pipe.position.set(cw + Math.cos(a) * (R * CELL + 0.6), HGT / 2, cw + Math.sin(a) * (R * CELL + 0.6));
-    group.add(pipe);
+  const { midX, DEPTH, WID } = g.shaft;
+  const W = g.w * CELL, H = g.h * CELL;
+  // pit floor + sheer walls the full drop + cap
+  kit.box('floor', W / 2 - CELL / 2, -0.12, H / 2 - CELL / 2, W, 0.24, H);
+  for (const [wx, wz, sx, sz] of [[W / 2, 0.4 * CELL, W, 1.4], [W / 2, (g.h - 1.4) * CELL, W, 1.4], [0.4 * CELL, H / 2, 1.4, H], [(g.w - 1.4) * CELL, H / 2, 1.4, H]]) {
+    kit.box('wall', wx - CELL / 2, (DEPTH + 4) / 2, wz - CELL / 2, sx, DEPTH + 4, sz);
   }
-  // THE CORE: glowing column with pulsing bands
-  const core = new THREE.Mesh(new THREE.CylinderGeometry(7.2, 7.6, HGT, 20), kit.mats.frame);
-  core.position.set(cw, HGT / 2, cw);
-  group.add(core);
-  for (let y = 2; y < HGT; y += 4) {
-    const band = new THREE.Mesh(new THREE.CylinderGeometry(7.45, 7.45, 0.7, 20, 1, true),
-      new THREE.MeshBasicMaterial({ color: 0xff5a2a, toneMapped: false }));
-    band.position.set(cw, y, cw);
-    group.add(band);
+  kit.box('frame', W / 2 - CELL / 2, DEPTH + 4.2, H / 2 - CELL / 2, W, 0.4, H);
+  // wall detail: vertical pipe runs + red warning bands at each bridge level
+  for (let i = 0; i < 7; i++) {
+    const pz = (3 + i * 3.4) * CELL;
+    for (const sd of [1.05 * CELL, (g.w - 2.05) * CELL]) {
+      const pipe = new THREE.Mesh(new THREE.CylinderGeometry(0.5, 0.5, DEPTH + 2, 8), kit.mats.frame);
+      pipe.position.set(sd, (DEPTH + 2) / 2, pz);
+      group.add(pipe);
+    }
   }
-  // ring decks + railings (visual ring at each level's inner edge)
+  for (let i = 0; i < g.lvls.length; i++) {
+    const y = g.lvls[i], pz = g.pylonZ[i];
+    kit.box('accent', 1.02 * CELL, y + 1.3, pz, 0.1, 0.22, 9);
+    kit.box('accent', (g.w - 2.02) * CELL, y + 1.3, pz, 0.1, 0.22, 9);
+  }
+  // PYLONS + THE CONDUIT TRUNK: glowing energy bundle arcing pylon to pylon
+  for (const pz of g.pylonZ) {
+    kit.box('wall', midX, (DEPTH + 2) / 2, pz, 3.0, DEPTH + 2, 3.0);
+    kit.box('frame', midX, DEPTH + 1, pz, 3.8, 1.4, 3.8);
+    for (let y = 3; y < DEPTH; y += 6) kit.box('accent', midX, y, pz, 3.15, 0.35, 3.15);
+  }
+  const beamM = new THREE.MeshBasicMaterial({ color: 0xff5a2a, toneMapped: false, transparent: true, opacity: 0.85 });
+  for (let i = 0; i < g.pylonZ.length - 1; i++) {
+    const z0 = g.pylonZ[i], z1 = g.pylonZ[i + 1];
+    const beam = new THREE.Mesh(new THREE.CylinderGeometry(0.8, 0.8, z1 - z0, 8), beamM);
+    beam.rotation.x = Math.PI / 2;
+    beam.position.set(midX, DEPTH * 0.55, (z0 + z1) / 2);
+    group.add(beam);
+  }
+  const trunk = new THREE.Mesh(new THREE.CylinderGeometry(0.8, 0.9, H * 0.82, 10), kit.mats.frame);
+  trunk.rotation.x = Math.PI / 2;
+  trunk.position.set(midX, DEPTH * 0.55 + 1.3, H / 2 - CELL / 2);
+  group.add(trunk);
+  // the molten channel: a burning strip down the pit floor under the conduit
+  const chan = new THREE.Mesh(new THREE.BoxGeometry(2.4, 0.08, H - 8 * CELL),
+    new THREE.MeshBasicMaterial({ color: 0xff3a12, toneMapped: false }));
+  chan.position.set(midX, 0.05, H / 2 - CELL / 2);
+  group.add(chan);
+  // vertical corner strips — the eye needs lines to fall along
+  for (const [ex2, ez2] of [[1.15, 1.15], [g.w - 2.15, 1.15], [1.15, g.h - 2.15], [g.w - 2.15, g.h - 2.15]]) {
+    kit.box('accent', ex2 * CELL, DEPTH / 2, ez2 * CELL, 0.14, DEPTH, 0.14);
+  }
+  // pit-floor machinery: humming blocks + hazard strip down the middle
+  for (const bz of [8, 14, 19, 24]) {
+    kit.box('frame', midX + (bz % 2 ? 6 : -6), 1.1, bz * CELL, 3.2, 2.2, 2.6);
+    kit.box('accent', midX + (bz % 2 ? 6 : -6), 2.3, bz * CELL, 2.4, 0.1, 0.2);
+  }
   drawStructural(kit, g);
-  for (const ry of g.rings) {
-    const inner = new THREE.Mesh(new THREE.CylinderGeometry(12.4, 12.4, 0.12, 30, 1, true), kit.mats.accent);
-    inner.position.set(cw, ry + 1.1, cw);
-    group.add(inner);
-  }
   extractionPad(kit, g.stairs.x, g.stairs.z, 0);
   kit.finish(group);
   for (const gl of g.gravlifts) liftVisual(group, kit, gl);
-  // heat from below, core glow
-  const heat = new THREE.PointLight(0xff5a2a, 140, 100, 1.4);
-  heat.position.set(cw, 2.5, cw);
+  // heat from the pit, cool top light — the depth reads in the gradient
+  const heat = new THREE.PointLight(0xff4a1a, 55, 55, 1.6);
+  heat.position.set(midX, 2.5, H * 0.55);
   group.add(heat);
-  for (const ry of [7, 14.5, 22, 28]) {
-    for (const a2 of [0, Math.PI]) {
-      const rl = new THREE.PointLight(0xffc9a0, 40, 55, 1.5);
-      rl.position.set(cw + Math.cos(a2) * 26, ry + 3, cw + Math.sin(a2) * 26);
-      group.add(rl);
-    }
+  // a small work light at every bridge level — depth reads as bands of light
+  for (let i = 0; i < g.lvls.length; i++) {
+    const wl = new THREE.PointLight(0xbfd8ff, 22, 22, 1.7);
+    wl.position.set(midX + (i % 2 ? -7 : 7), g.lvls[i] + 2.5, g.pylonZ[i]);
+    group.add(wl);
   }
+  const top = new THREE.PointLight(0xffd9b0, 18, 22, 1.7);
+  top.position.set(midX, DEPTH + 2.5, 1.6 * CELL);
+  group.add(top);
   return group;
 }
 
 // ==================================================================
-// 5. WEAPONS — THE LINE (a linear factory gauntlet)
+// 5. WEAPONS — THE LINE (a linear factory gauntlet, TWO real floors)
 // ==================================================================
-function genWeapons(seed) {
+function genWeapons(seed, diff = 0) {
   const rng = makeRng(seed + ':line');
-  const W = 62, H = 13;
+  const W = 62 + [0, 14, 30][diff], H = 13;
   const theme = SECTOR_THEMES.weapons;
   const grid = baseGrid(W, H, 'weapons');
   for (let y = 1; y < H - 1; y++) for (let x = 1; x < W - 1; x++) grid.cells[y * W + x] = FLOOR;
   const fs = baseFs(grid, theme, 'weapons');
-  grid.ceil = 11;
+  grid.ceil = 12;
   const midZ = Math.floor(H / 2) * CELL;
 
   // THE CONVEYOR: runs the whole hall — a low wall you vault or cross at gaps
@@ -751,27 +844,53 @@ function genWeapons(seed) {
   }
   grid.lineZ = midZ;
 
-  // PRESS STATIONS: paired pistons over the line — the crush zone is a trap cell
+  // PRESS STATIONS spread along the line
   grid.presses = [];
-  for (const px of [12, 26, 40, 52]) {
+  for (let px = 12; px < W - 9; px += 13) {
     grid.presses.push(px);
     fs.traps.push({ x: px * CELL, z: midZ, cx: px, cy: Math.floor(H / 2), cd: 0 });
   }
   // MOLTEN POUR: glowing floor strip mid-hall — trap cells across
+  const moltenX = Math.floor(W * 0.53);
   for (let y = 2; y < H - 2; y++) {
     if (y === Math.floor(H / 2)) continue; // the conveyor bridges it
-    fs.traps.push({ x: 33 * CELL, z: y * CELL, cx: 33, cy: y, cd: 0 });
+    fs.traps.push({ x: moltenX * CELL, z: y * CELL, cx: moltenX, cy: y, cd: 0 });
   }
-  grid.moltenX = 33;
+  grid.moltenX = moltenX;
 
-  // SIDE GALLERIES at 4.4 along both walls with stairs at each end
-  for (const gz of [1.6 * CELL, (H - 2.6) * CELL]) {
-    deck(grid, (W / 2) * CELL, gz, (W / 2 - 5) * CELL, CELL * 0.55, 4.4);
+  // THE UPPER FLOOR: a REAL second storey at 5.2 spanning the hall, with two
+  // long LIGHT WELLS over the conveyor so the line stays open below and you
+  // can drop in. Not a balcony — a floor with rooms on it.
+  const UP = 5.2;
+  grid.upY = UP;
+  const wellHx = (W * 0.18) * CELL;
+  const wells = [
+    { x: (W * 0.3) * CELL, hx: wellHx },
+    { x: (W * 0.72) * CELL, hx: wellHx },
+  ];
+  grid.wells = wells;
+  // slabs: full-width strips along both walls + connectors between the wells
+  deck(grid, (W / 2 - 0.5) * CELL, 1.9 * CELL, (W / 2 - 2.5) * CELL, 1.65 * CELL, UP);
+  deck(grid, (W / 2 - 0.5) * CELL, (H - 2.9) * CELL, (W / 2 - 2.5) * CELL, 1.65 * CELL, UP);
+  const spanFill = (x0, x1) => deck(grid, (x0 + x1) / 2, midZ, (x1 - x0) / 2, 2.7 * CELL, UP);
+  spanFill(2 * CELL, wells[0].x - wells[0].hx);
+  spanFill(wells[0].x + wells[0].hx, wells[1].x - wells[1].hx);
+  spanFill(wells[1].x + wells[1].hx, (W - 3) * CELL);
+  // upstairs rooms: partition walls + rack clutter on the north strip
+  for (let i = 0; i < 3 + diff; i++) {
+    const rx = (8 + i * Math.floor((W - 16) / (3 + diff))) * CELL;
+    wall3(grid, rx, 1.9 * CELL, 0.3, 1.5 * CELL, UP, UP + 3.4);
+    grid.colliders.push({ x: rx + 4, z: 1.6 * CELL, hx: 1.4, hz: 0.7, y0: UP, h: UP + 1.4, noMesh: true, rack: true });
   }
-  stairs(grid, 4 * CELL, 2.6 * CELL, 1, 0, 4.4);
-  stairs(grid, (W - 6) * CELL, (H - 3.6) * CELL, -1, 0, 4.4);
-  lift(grid, 6 * CELL, (H - 2.6) * CELL, 4.4);
-  lift(grid, (W - 8) * CELL, 1.6 * CELL, 4.4);
+  // TRANSIT that works BOTH ways: wide stairs at both ends + lifts in open
+  // shafts CLEAR of the slabs (a lift under a floor is a lift to a ceiling)
+  stairs(grid, 3 * CELL, 2.6 * CELL, 1, 0, UP);
+  stairs(grid, (W - 4) * CELL, (H - 3.6) * CELL, -1, 0, UP);
+  // discs sit flush against the upper-floor edge so you can step ON from
+  // above and ride DOWN — a lift you can only board from below is a trap
+  lift(grid, wells[0].x, 3.55 * CELL + 1.6, UP);
+  lift(grid, wells[1].x, 7.45 * CELL - 1.6, UP);
+  // guard rails around the light wells (visual lip; builder draws)
 
   grid.spawn = { x: 3 * CELL, z: midZ + CELL };
   grid.spawnYaw = -Math.PI / 2;
@@ -781,13 +900,16 @@ function genWeapons(seed) {
 
   foes(fs, [
     ['warrior', 10 * CELL, midZ - 8], ['warrior', 24 * CELL, midZ + 8],
-    ['brute', 30 * CELL, midZ - 6], ['brute', 46 * CELL, midZ + 6],
-    ['mage', 18 * CELL, midZ + 10], ['mage', 42 * CELL, midZ - 10],
-    ['sniper', 20 * CELL, 1.6 * CELL, 4.4], ['sniper', 44 * CELL, (H - 2.6) * CELL, 4.4],
-    ['necromancer', 36 * CELL, midZ + 8], ['goblin', 15 * CELL, midZ - 4],
-    ['juggernaut', 50 * CELL, midZ], ['bomber', 28 * CELL, midZ + 4],
+    ['brute', 30 * CELL, midZ - 6], ['brute', (W - 16) * CELL, midZ + 6],
+    ['mage', 18 * CELL, midZ + 10], ['mage', (W - 20) * CELL, midZ - 10],
+    ['sniper', 20 * CELL, 1.9 * CELL, UP], ['sniper', (W - 18) * CELL, (H - 2.9) * CELL, UP],
+    ['rogue', wells[0].x, 1.9 * CELL, UP], ['rogue', wells[1].x, (H - 2.9) * CELL, UP],
+    ['necromancer', (moltenX + 3) * CELL, midZ + 8], ['goblin', 15 * CELL, midZ - 4],
+    ['juggernaut', (W - 12) * CELL, midZ], ['bomber', 28 * CELL, midZ + 4],
   ]);
-  fs.lootSpawns.push({ kind: 'chest', x: 8 * CELL, z: 2.5 * CELL }, { kind: 'chest', x: 48 * CELL, z: (H - 3) * CELL });
+  extraFoes(fs, grid, rng, [0, 5, 11][diff]);
+  fs.lootSpawns.push({ kind: 'chest', x: 8 * CELL, z: 2.5 * CELL }, { kind: 'chest', x: (W - 14) * CELL, z: (H - 3) * CELL });
+  if (diff >= 1) fs.lootSpawns.push({ kind: 'chest', x: wells[0].x, z: 1.9 * CELL, y: UP });
   return fs;
 }
 
@@ -795,15 +917,27 @@ function buildWeapons(fs) {
   const g = fs.grid, theme = fs.theme;
   const group = new THREE.Group();
   const kit = meshKit(theme.pal, theme.accent);
-  const W = g.w * CELL, H = g.h * CELL, CEIL = g.ceil, midZ = g.lineZ;
+  const W = g.w * CELL, H = g.h * CELL, CEIL = g.ceil, midZ = g.lineZ, UP = g.upY;
   kit.box('floor', W / 2, -0.11, H / 2, W, 0.22, H);
   for (const [wx, wz, sx, sz] of [[W / 2, 0, W, 1.2], [W / 2, H - CELL, W, 1.2], [0, H / 2, 1.2, H], [W - CELL, H / 2, 1.2, H]]) {
     kit.box('wall', wx - CELL / 2, CEIL / 2, wz - CELL / 2, sx, CEIL, sz);
   }
   kit.box('frame', W / 2, CEIL + 0.2, H / 2, W, 0.4, H);
-  for (let i = 0; i < 10; i++) kit.box('panel', (5 + i * 6) * CELL, CEIL - 0.05, H / 2, 6, 0.1, 5);
-  // the conveyor body + hot belt + rollers
-  kit.box('frame', W / 2 - CELL, 0.5, midZ, W - 10 * 1, 1.0, 2.1);
+  for (let i = 0; i < Math.floor(g.w / 6); i++) kit.box('panel', (5 + i * 6) * CELL, CEIL - 0.05, H / 2, 6, 0.1, 5);
+  // upper-floor dressing: well guard rails + under-lighting strips
+  for (const well of g.wells) {
+    for (const sd of [-1, 1]) {
+      const wz = midZ + sd * 2.7 * CELL;
+      kit.box('frame', well.x, UP + 0.55, wz, well.hx * 2, 0.1, 0.14);
+      kit.box('accent', well.x, UP + 1.05, wz, well.hx * 2, 0.07, 0.1);
+      for (let t = -well.hx; t <= well.hx; t += 3.2) kit.box('frame', well.x + t, UP + 0.5, wz, 0.1, 1.0, 0.1);
+    }
+    kit.box('accent', well.x, UP - 0.5, midZ, well.hx * 2 * 0.92, 0.08, 0.14);
+  }
+  // upstairs light panels under the true ceiling
+  for (let i = 0; i < Math.floor(g.w / 8); i++) kit.box('panel', (6 + i * 8) * CELL, CEIL - 0.06, 1.9 * CELL, 4, 0.08, 3);
+  // the conveyor body + hot belt
+  kit.box('frame', W / 2 - CELL, 0.5, midZ, W - 10, 1.0, 2.1);
   kit.box('accent', W / 2 - CELL, 1.08, midZ, W - 12, 0.07, 0.7);
   // press stations: columns + crossbeam + piston + warning stripes
   for (const px of g.presses) {
@@ -826,7 +960,7 @@ function buildWeapons(fs) {
   ml.position.set(mx, 3, H / 2);
   group.add(ml);
   // robot arms along the line
-  for (const ax of [18, 31, 45]) {
+  for (const ax of [18, Math.floor(g.w * 0.5), g.w - 17]) {
     kit.box('frame', ax * CELL, 1.6, midZ + 2.6, 0.5, 3.2, 0.5);
     kit.box('frame', ax * CELL, 3.1, midZ + 1.2, 0.4, 0.4, 2.6);
     kit.box('accent', ax * CELL, 2.6, midZ + 0.2, 0.25, 0.7, 0.25);
@@ -835,7 +969,8 @@ function buildWeapons(fs) {
   extractionPad(kit, g.stairs.x, g.stairs.z, 0);
   kit.finish(group);
   for (const gl of g.gravlifts) liftVisual(group, kit, gl);
-  for (let i = 0; i < 8; i++) {
+  // ground-floor lights through the wells + upstairs pools
+  for (let i = 0; i < Math.min(9, Math.floor(g.w / 8)); i++) {
     const pl = new THREE.PointLight(0xffe0b0, 44, 50, 1.5);
     pl.position.set((5 + i * 8) * CELL, CEIL - 2, H / 2);
     group.add(pl);
@@ -850,5 +985,5 @@ const GENS = { cargo: genCargo, security: genSecurity, hab: genHab, engine: genE
 const BUILDERS = { cargo: buildCargo, security: buildSecurity, hab: buildHab, engine: buildEngine, weapons: buildWeapons };
 
 export function hasSector(id) { return !!GENS[id]; }
-export function generateSector(id, seed) { return GENS[id](seed); }
+export function generateSector(id, seed, diff = 0) { return GENS[id](seed, diff); }
 export function buildSectorMeshes(fs) { return BUILDERS[fs.sectorId](fs); }

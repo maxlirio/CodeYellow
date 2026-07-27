@@ -267,7 +267,7 @@ try {
       cargo: (f) => f.grid.gravlifts.length >= 3 && f.grid.colliders.some(c => c.h >= 6), // climbable stacks
       security: (f) => f.grid.colliders.some(c => c.deck && c.h === 8), // the 8u gallery ring
       hab: (f) => f.grid.colliders.some(c => c.stair) && f.enemySpawns.some(e => e.y > 0), // balcony fights
-      engine: (f) => f.grid.spawnY === 22 && f.grid.gravlifts.length === 3, // descend the shaft
+      engine: (f) => f.grid.spawnY === 28 && f.grid.ladders.length >= 5 && f.grid.colliders.some(c => c.bridge), // the power shaft: ladders + thin bridges
       weapons: (f) => f.traps.length >= 8 && f.grid.colliders.some(c => c.deck), // hazard gauntlet + galleries
     };
     for (const [sid, check] of Object.entries(secChecks)) {
@@ -275,6 +275,14 @@ try {
       assert(f.sectorId === sid && f.grid.stairsLocked === true && f.enemySpawns.length >= 8 && check(f),
         `sector ${sid}: bespoke building generates (${f.grid.colliders.length} colliders)`);
     }
+    // OP SCALE: a PURGE build is bigger and meaner than a SWEEP (engine excepted)
+    for (const sid of ['cargo', 'security', 'hab', 'weapons']) {
+      const sm = generateSector(sid, 'seedT', 0), lg = generateSector(sid, 'seedT', 2);
+      assert(lg.grid.w * lg.grid.h > sm.grid.w * sm.grid.h && lg.enemySpawns.length > sm.enemySpawns.length,
+        `sector ${sid}: PURGE variant scales up (${sm.grid.w}x${sm.grid.h} -> ${lg.grid.w}x${lg.grid.h}, foes ${sm.enemySpawns.length} -> ${lg.enemySpawns.length})`);
+    }
+    const e1 = generateSector('engine', 'seedT', 0), e2 = generateSector('engine', 'seedT', 2);
+    assert(e1.grid.w === e2.grid.w && e1.grid.h === e2.grid.h, 'sector engine: exactly ONE engine room (no scaling)');
   }
 
   document.title = out.some(l => l.startsWith('FAIL') || l.startsWith('ERROR')) ? 'FAILED' : 'PASSED';

@@ -664,7 +664,26 @@ export function updatePlayer(dt) {
       }
       if (p.attackT >= atkTime) p.attacking = false;
     }
-    if (wantsMove) {
+    // LADDERS: stand against one and hold W (climb) or S (descend) — the
+    // engine shaft's only way down. Climbing owns the frame: vertical is
+    // direct, horizontal drive is off, gravity yields.
+    p.onLadder = false;
+    if (G.grid.ladders && (k['KeyW'] || k['KeyS'])) {
+      for (const L of G.grid.ladders) {
+        const ldx = pos.x - L.x, ldz = pos.z - L.z;
+        if (ldx * ldx + ldz * ldz > 1.69) continue;
+        if (pos.y < L.y0 - 0.4 || pos.y > L.y1 + 0.4) continue;
+        const dir = k['KeyW'] ? 1 : -1;
+        pos.y = Math.max(L.y0, Math.min(L.y1, pos.y + dir * 4.6 * dt));
+        // hug the rails so you don't drift off mid-climb
+        pos.x += (L.x + L.nx * 0.55 - pos.x) * Math.min(1, dt * 6);
+        pos.z += (L.z + L.nz * 0.55 - pos.z) * Math.min(1, dt * 6);
+        p.vy = 0;
+        p.onLadder = true;
+        break;
+      }
+    }
+    if (wantsMove && !p.onLadder) {
       const len = Math.hypot(ix, iz);
       ix /= len; iz /= len;
       // camera forward is (-sin(yaw), -cos(yaw)); right is (cos(yaw), -sin(yaw))
@@ -692,6 +711,8 @@ export function updatePlayer(dt) {
     pos.y += ((ground + 2.6) - pos.y) * Math.min(1, dt * 3);
     p.vy = 0;
     if (Math.random() < dt * 6) spawnBurst(pos.clone().setY(pos.y - 0.4), 0xccaaff, 2, 1, 0.08, 0.4);
+  } else if (p.onLadder) {
+    // hands on the rungs — no gravity, no snap
   } else if (pos.y > ground + 0.02) {
     // momentum from a rope release carries through the air
     if (p.airVX || p.airVZ) moveWithCollision(pos, p.airVX * dt, p.airVZ * dt, 0.55, { y: pos.y });

@@ -491,7 +491,7 @@ function ensureFloor(n) {
     else if (G.sortie && n === G.sortie.floorN) {
       // sortie floors are one-shot: fresh seed each insertion. BESPOKE sectors
       // are whole different buildings; the rest use the deck generator.
-      if (hasSector(G.sortie.id)) Object.assign(fs, generateSector(G.sortie.id, G.sortie.seed));
+      if (hasSector(G.sortie.id)) Object.assign(fs, generateSector(G.sortie.id, G.sortie.seed, G.sortie.diff || 0));
       else Object.assign(fs, generateFloorData(G.sortie.seed, n));
       if (fs.theme) fs.theme = { ...fs.theme, name: G.sortie.name };
       fs.grid.stairsLocked = true;

@@ -58,12 +58,12 @@ function portalSet(on) {
 }
 
 // ---- start / sync ----
-export function beginSortie(secId, seed = null, n = null, fromNet = false) {
+export function beginSortie(secId, seed = null, n = null, fromNet = false, diff = 0) {
   const sec = sectionById(secId);
   if (!sec) return;
   sortieCount = n ?? sortieCount + 1;
   G.sortie = {
-    id: sec.id, name: sec.name, floorN: sec.floorN,
+    id: sec.id, name: sec.name, floorN: sec.floorN, diff,
     seed: seed || `${G.seed}:sortie${sortieCount}`, n: sortieCount,
     active: true, entered: false,
   };
@@ -75,12 +75,12 @@ export function beginSortie(secId, seed = null, n = null, fromNet = false) {
   alerted = true; // the alert is answered
   addMsg(`Sortie confirmed: ${sec.name}. The breach portal is open.`, 'gold');
   sfx.stairs();
-  if (!fromNet) netSend({ t: 'mission', sec: sec.id, seed: G.sortie.seed, n: sortieCount });
+  if (!fromNet) netSend({ t: 'mission', sec: sec.id, seed: G.sortie.seed, n: sortieCount, diff });
 }
 
 export function onRemoteMission(m) {
   if (G.sortie && G.sortie.seed === m.seed) return; // self-heal duplicate
-  beginSortie(m.sec, m.seed, m.n, true);
+  beginSortie(m.sec, m.seed, m.n, true, m.diff || 0);
 }
 export function onRemoteMissionEnd() {
   if (!G.sortie) return;
@@ -117,6 +117,8 @@ export function finishSortie(result) {
   if (result === 'CLEARED' && G.sortie) {
     G.run.deepest = Math.max(G.run.deepest || 0, G.sortie.floorN);
     (G.run.clearedSections ||= []).push(G.sortie.id);
+    const bonus = [0, 120, 300][G.sortie.diff || 0];
+    if (bonus) { G.run.gold += bonus; addMsg(`Hazard bonus: +${bonus} credits.`, 'gold'); }
   }
   G.sortie.active = false;
   if (isAuthority()) netSend({ t: 'mend' });
@@ -254,16 +256,35 @@ function renderMap() {
   }
   const sec = sectionById(selectedSec);
   if (sec) {
+    // scalable sectors offer OP SCALE: bigger area, more hostiles, hazard pay.
+    // The ENGINE ROOM doesn't — there is exactly one engine room on this ship.
+    const scalable = ['cargo', 'security', 'hab', 'weapons'].includes(sec.id);
+    const OPS = [
+      { name: 'SWEEP', hint: 'compact · standard pay' },
+      { name: 'ASSAULT', hint: 'larger · +120 cr bonus' },
+      { name: 'PURGE', hint: 'the whole sector · +300 cr bonus' },
+    ];
     detail.innerHTML = `
       <h3>${sec.name}</h3>
       <p class="mm-threat">THREAT ${'▮'.repeat(sec.threat)}${'▯'.repeat(4 - sec.threat)}</p>
-      <p>${sec.desc}</p>
-      <button id="mmConfirm">CONFIRM SORTIE</button>`;
-    document.getElementById('mmConfirm').onclick = () => {
-      if (G.net?.role === 'guest') { addMsg('Only the squad lead can task a sortie.', 'bad'); return; }
-      beginSortie(sec.id);
-      closeMissionMap();
-    };
+      <p>${sec.desc}</p>` + (scalable
+      ? OPS.map((o, i) => `<button class="mmOp" data-d="${i}">${o.name} — <small>${o.hint}</small></button>`).join('')
+      : '<button id="mmConfirm">CONFIRM SORTIE</button>');
+    if (scalable) {
+      for (const b of detail.querySelectorAll('.mmOp')) {
+        b.onclick = () => {
+          if (G.net?.role === 'guest') { addMsg('Only the squad lead can task a sortie.', 'bad'); return; }
+          beginSortie(sec.id, null, null, false, +b.dataset.d);
+          closeMissionMap();
+        };
+      }
+    } else {
+      document.getElementById('mmConfirm').onclick = () => {
+        if (G.net?.role === 'guest') { addMsg('Only the squad lead can task a sortie.', 'bad'); return; }
+        beginSortie(sec.id);
+        closeMissionMap();
+      };
+    }
   } else {
     detail.innerHTML = '<p class="mm-hint">Select an insertion point on the hulk.</p>';
   }
