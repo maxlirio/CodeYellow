@@ -306,6 +306,32 @@ export function buildBomber(hostile = true, tint = null) {
   return grp;
 }
 
+// wraps a hangar deck in REAL space: star sphere + the colossal hull with
+// the mouth aperture — the first brick of the one-world space patrol
+export function buildSpaceAround(group, grid) {
+  const xs = grid.mouth.map((m) => m.cx * 4);
+  const mouthX0 = Math.min(...xs) - 2, mouthX1 = Math.max(...xs) + 2;
+  const mouthZ = (grid.mouth[0].cy + 0.5) * 4;
+  const W = grid.w * 4;
+  const stars = starSphere();
+  stars.scale.setScalar(2.6); // r ~2300 — beyond the hull
+  stars.position.set(W / 2, 0, mouthZ / 2);
+  group.add(stars);
+  const S6 = 6;
+  const C = new THREE.Vector3(W / 2 + 120, 20, mouthZ + 8 - 27 * S6);
+  const aperture = {
+    x0: (mouthX0 - 14 - C.x) / S6, x1: (mouthX1 + 14 - C.x) / S6,
+    y0: (-10 - C.y) / S6, y1: (26 - C.y) / S6,
+  };
+  const hull = buildCarrier(aperture);
+  hull.position.copy(C);
+  hull.scale.setScalar(S6);
+  group.add(hull);
+  const sun = new THREE.DirectionalLight(0xfff2dd, 1.2);
+  sun.position.set(-500, 400, 600);
+  group.add(sun);
+}
+
 export function inSpace() { return !!S; }
 export function _dbg() { return S ? { phase: S.phase, speed: +S.speed.toFixed(1), z: +S.ship.position.z.toFixed(1), kw: !!G.keys.KeyW } : (SB ? { boarding: SB.phase, t: +SB.t.toFixed(1) } : null); }
 

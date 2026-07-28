@@ -873,7 +873,7 @@ export function generateShipDeck(seedStr, floor) {
 
   const grid = {
     w, h, cells, elev, ramps, rooms: holds, colliders,
-    mouth, gravlifts, tall, landfall: landfallMode,
+    mouth, gravlifts, tall, landfall: landfallMode, spaceZone: hangarMode && !landfallMode,
     spawn: { x: spawnCell.x * CELL, z: spawnCell.y * CELL },
     spawnYaw,
     stairs: { x: portal.x * CELL, z: portal.y * CELL, cx: portal.x, cy: portal.y },

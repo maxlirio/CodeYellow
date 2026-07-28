@@ -570,7 +570,7 @@ function applyThemeAtmosphere(fs) {
   G.lights.amb.intensity = 0.7 * (dark < 1 ? 0.55 : 1) * sunny;
   G.lights.sun.intensity = th.sun ? 1.2 : 0; // daylight only above ground
   // a landfall deck looks 300m down at a planet — push the horizon out
-  const wantFar = fs.grid?.landfall ? 3600 : 340;
+  const wantFar = (fs.grid?.landfall || fs.grid?.spaceZone) ? 3600 : 340;
   if (G.camera.far !== wantFar && G.mode !== 'space') {
     G.camera.far = wantFar;
     G.camera.updateProjectionMatrix();

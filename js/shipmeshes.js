@@ -10,7 +10,7 @@ import * as THREE from 'three';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import { CELL, PLATFORM_H } from './config.js';
 import { makePiece } from './assets.js';
-import { buildCarrier, buildFighter, buildBomber, cockpitKit, SHIP_SLOTS } from './space.js';
+import { buildCarrier, buildFighter, buildBomber, cockpitKit, SHIP_SLOTS, buildSpaceAround } from './space.js';
 import { buildWorldBelow } from './landfall.js';
 
 const WALL_H = 7;    // bulkhead height
@@ -636,15 +636,9 @@ export function buildShipStatic(fs) {
     field.position.set((mx0 + mx1) / 2, (MH2 - 1.4) / 2 + 0.5, mz);
     group.add(field);
     if (!g.landfall) {
-      const stars = new THREE.Mesh(
-        new THREE.PlaneGeometry(mx1 - mx0 + 260, 120),
-        new THREE.MeshBasicMaterial({ map: makeStarTex(), toneMapped: false, fog: false })
-      );
-      stars.position.set((mx0 + mx1) / 2, 10, mz + 92);
-      stars.rotation.y = Math.PI; // face back into the hangar
-      group.add(stars);
-      // NO fake battle staged outside the mouth — what you see out there is
-      // what's actually there; the real fight is the one you launch into
+      // ONE WORLD, phase 1: no flat star card — the hangar sits inside the
+      // colossal hull with true space beyond the mouth
+      buildSpaceAround(group, g);
     }
   }
 
