@@ -18,13 +18,20 @@ const FIELD_R = 380;
 const CAP = new THREE.Vector3(0, -70, -150);   // the carrier, group-local
 const DOCK = new THREE.Vector3(30, -64, -119);   // bay mouth, mid-hull flank (+z face)
 const BAYIN = new THREE.Vector3(30, -64, -131);  // inside the launch room
-// hull-segment colliders (group-local): fore+mid hull, prow, aft+engines, tower
-const CARRIER_BOXES = [
-  { x: CAP.x + 20, y: CAP.y, z: CAP.z, hx: 101, hy: 20, hz: 29 },   // fore + mid hull (+ keel)
-  { x: CAP.x + 150, y: CAP.y, z: CAP.z, hx: 32, hy: 9, hz: 15 },    // prow wedge
-  { x: CAP.x - 128, y: CAP.y, z: CAP.z, hx: 55, hy: 20, hz: 31 },   // aft block + engines
-  { x: CAP.x - 18, y: CAP.y + 31, z: CAP.z, hx: 37, hy: 15, hz: 18 }, // superstructure + bridge
+// hull colliders that MATCH THE HULL: one box per visual piece, exact dims
+// (the old fused slabs made huge invisible walls around the tapered shape)
+export const HULL_LOCAL_BOXES = [
+  { x: 76, y: 0, z: 0, hx: 45, hy: 11, hz: 20 },    // fore hull
+  { x: -20, y: 0, z: 0, hx: 60, hy: 15, hz: 27 },   // mid hull
+  { x: 150, y: 0, z: 0, hx: 30, hy: 8, hz: 14 },    // prow wedge
+  { x: -110, y: 0, z: 0, hx: 35, hy: 18, hz: 30 },  // aft block
+  { x: -158, y: 0, z: 0, hx: 13, hy: 13, hz: 22 },  // engine housing
+  { x: -10, y: 20, z: 0, hx: 35, hy: 5, hz: 17 },   // dorsal superstructure
+  { x: -24, y: 38, z: 0, hx: 18, hy: 9, hz: 11 },   // tower + bridge
 ];
+const CARRIER_BOXES = HULL_LOCAL_BOXES.map((b) => ({
+  x: CAP.x + b.x, y: CAP.y + b.y, z: CAP.z + b.z, hx: b.hx, hy: b.hy, hz: b.hz,
+}));
 // switchable fighter weapons — keys 1/2/3 in the cockpit
 const WEAPONS = [
   { name: 'PULSE', cd: 0.16 },

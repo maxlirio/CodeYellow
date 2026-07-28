@@ -17,7 +17,7 @@ import { sfx } from './audio.js';
 import { saveReport } from './bridge.js';
 import { landfallPortalReady } from './missions.js';
 import {
-  buildBomber, buildFighter, buildCarrier, cockpitKit, drawLockAt, hideLockWidgets, setLandfallHook, flashScreen, SHIP_SLOTS, mySlot, slotOf,
+  buildBomber, buildFighter, buildCarrier, cockpitKit, drawLockAt, hideLockWidgets, setLandfallHook, flashScreen, SHIP_SLOTS, mySlot, slotOf, HULL_LOCAL_BOXES,
 } from './space.js';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 
@@ -132,10 +132,10 @@ export function buildWorldBelow(group, grid) {
   for (let ty = 0; ty < N; ty++) for (let tx = 0; tx < N; tx++) {
     const cx = tx * TILE - HALF + TILE / 2, cz = ty * TILE - HALF + TILE / 2;
     if (rnd() < 0.24) continue;
-    const nB = 1 + (rnd() < 0.5 ? 1 : 0);
+    const nB = 1;
     for (let b = 0; b < nB; b++) {
       const bn = BLD[Math.floor(rnd() * BLD.length)];
-      const targetH = 9 + rnd() * rnd() * 20;
+      const targetH = 22 + rnd() * rnd() * 52; // REAL towers now
       const sc = targetH / bldH[bn];
       const ox = (rnd() - 0.5) * (TILE - 18), oz = (rnd() - 0.5) * (TILE - 18);
       const bx = cx + ox, bz = cz + oz;
@@ -151,7 +151,7 @@ export function buildWorldBelow(group, grid) {
         for (const g4 of geos) g4.dispose();
         m.position.set(bx, 1.1, bz);
         world.add(m);
-        buildings.push({ mesh: m, x: bx, z: bz, w: 8 * sc, d: 8 * sc, h: targetH, hp: 1 + Math.round(targetH / 9), falling: 0 });
+        buildings.push({ mesh: m, x: bx, z: bz, w: 8 * sc, d: 8 * sc, h: targetH, hp: 1 + Math.round(targetH / 16), falling: 0 });
       } else {
         _q4.setFromEuler(new THREE.Euler(0, yaw, 0));
         _m4.compose(new THREE.Vector3(bx, 1.1, bz), _q4, _s4.setScalar(sc));
@@ -296,13 +296,8 @@ export function buildWorldBelow(group, grid) {
   carrier.position.copy(C);
   carrier.scale.setScalar(S);
   group.add(carrier);
-  // hull collision volumes (ship-local AABBs, scaled/offset), corridor-exempt
-  const hullBoxes = [
-    { x: 20, y: 0, z: 0, hx: 101, hy: 20, hz: 29 },
-    { x: 150, y: 0, z: 0, hx: 32, hy: 9, hz: 15 },
-    { x: -128, y: 0, z: 0, hx: 55, hy: 20, hz: 31 },
-    { x: -18, y: 31, z: 0, hx: 37, hy: 15, hz: 18 },
-  ].map((b) => ({
+  // hull collision volumes match the visual pieces exactly (scaled/offset)
+  const hullBoxes = HULL_LOCAL_BOXES.map((b) => ({
     x: b.x * S + C.x, y: b.y * S + C.y, z: b.z * S + C.z,
     hx: b.hx * S, hy: b.hy * S, hz: b.hz * S,
   }));
@@ -697,7 +692,11 @@ function endFlight(result) {
 
 export function landfallCycleLock() {
   if (!L || !LW) return;
-  const alive = LW.targets.filter((t) => t.hp > 0);
+  L.homeLock = false;
+  const ground = LW.targets.filter((t) => t.hp > 0);
+  const air = L.foes.filter((f) => f.userData.hp > 0)
+    .map((f) => (f.userData.lockRec ||= { type: 'FIGHTER', foe: f, get pos() { return this.foe.position; }, get hp() { return this.foe.userData.hp; } }));
+  const alive = [...ground, ...air];
   if (!alive.length) { L.lock = null; hideLockWidgets(); return; }
   const nose = new THREE.Vector3(0, 0, -1).applyQuaternion(L.ship.quaternion);
   alive.sort((a, b) =>
@@ -705,7 +704,7 @@ export function landfallCycleLock() {
     b.pos.clone().sub(L.ship.position).normalize().angleTo(nose));
   const i = alive.indexOf(L.lock);
   L.lock = alive[(i + 1) % alive.length];
-  addMsg(`LOCK: ${L.lock.type === 'PYLON' ? 'SHIELD PYLON' : 'AA BATTERY'}`, 'gold');
+  addMsg(`LOCK: ${L.lock.type === 'PYLON' ? 'SHIELD PYLON' : L.lock.type === 'AA' ? 'AA BATTERY' : 'DEFENSE FIGHTER'}`, 'gold');
   sfx.key();
 }
 
@@ -755,12 +754,20 @@ export function landfallDrop() {
   if (L.dropCd > 0) return;
   L.dropCd = 0.4;
   L.bombs--;
+  // released ON the red flash with a ground lock? The bomb takes the lock:
+  // it still falls like a bomb, but it CORRECTS onto the tower. Red = hit.
+  let homing = null;
+  if (L.lock && L.lock.hp > 0 && L.lock.type !== 'FIGHTER') {
+    impactPoint(_ip);
+    if (Math.hypot(_ip.x - L.lock.pos.x, _ip.z - L.lock.pos.z) <= RELEASE_R) homing = L.lock;
+  }
   const b = new THREE.Mesh(new THREE.CylinderGeometry(0.5, 0.7, 2.6, 8),
     new THREE.MeshStandardMaterial({ color: 0x39414c, metalness: 0.5, roughness: 0.6 }));
   b.position.copy(L.ship.position).add(new THREE.Vector3(0, -1.6, 0));
   const fwd = new THREE.Vector3(0, 0, -1).applyQuaternion(L.ship.quaternion);
-  b.userData.v = fwd.clone().multiplyScalar(L.speed);
+  b.userData.v = L.vel.clone();
   b.userData.v.y = Math.min(0, b.userData.v.y);
+  b.userData.home = homing;
   L.fs.meshGroup.add(b);
   L.bombsAway.push(b);
   sfx.bolt();
@@ -857,10 +864,12 @@ function killCar(cr) {
 }
 
 function impactPoint(out) {
-  const h = Math.max(0, L.ship.position.y - CITY_Y);
-  const t = Math.sqrt((2 * h) / GRAV);
-  const fwd = new THREE.Vector3(0, 0, -1).applyQuaternion(L.ship.quaternion);
-  out.set(L.ship.position.x + fwd.x * L.speed * t, CITY_Y, L.ship.position.z + fwd.z * L.speed * t);
+  // the sight predicts with the bomb's REAL release state — actual velocity,
+  // vertical included — so a red flash is a promise, not a guess
+  const h = Math.max(0.1, L.ship.position.y - CITY_Y);
+  const vy = Math.min(0, L.vel.y);
+  const tf = (vy + Math.sqrt(vy * vy + 2 * GRAV * h)) / GRAV;
+  out.set(L.ship.position.x + L.vel.x * tf, CITY_Y, L.ship.position.z + L.vel.z * tf);
   return out;
 }
 
@@ -1011,7 +1020,7 @@ export function updateLandfall(dt) {
     if (!L) return;
     addMsg('TERRAIN — pull up!', 'bad');
   }
-  if (L.ship.position.y > 80) L.ship.position.y = 80; // the carrier's operating ceiling
+  // no ceiling — climb as high as you like
   // soft range: the haze is the border — ease you back, no walls
   const rr = Math.hypot(L.ship.position.x, L.ship.position.z);
   if (rr > 1250) {
@@ -1091,6 +1100,16 @@ export function updateLandfall(dt) {
   for (let i = L.bombsAway.length - 1; i >= 0; i--) {
     const b = L.bombsAway[i];
     b.userData.v.y -= GRAV * dt;
+    const home = b.userData.home;
+    if (home && home.hp > 0) {
+      // guided: steer the horizontal fall so it arrives ON the lock
+      const hLeft = Math.max(0.1, b.position.y - CITY_Y);
+      const vy = b.userData.v.y;
+      const tf = (vy + Math.sqrt(vy * vy + 2 * GRAV * hLeft)) / GRAV || 0.1;
+      const wantX = (home.pos.x - b.position.x) / tf, wantZ = (home.pos.z - b.position.z) / tf;
+      b.userData.v.x += (wantX - b.userData.v.x) * Math.min(1, dt * 5);
+      b.userData.v.z += (wantZ - b.userData.v.z) * Math.min(1, dt * 5);
+    }
     b.position.addScaledVector(b.userData.v, dt);
     if (b.position.y <= CITY_Y + 1) {
       boom(b.position.clone().setY(CITY_Y + 1), false);
@@ -1329,9 +1348,10 @@ export function updateLandfall(dt) {
     const home = new THREE.Vector3((D.mouthX0 + D.mouthX1) / 2, 3, D.mouthZ + 4);
     drawLockAt(home, `HANGAR ${Math.round(L.ship.position.distanceTo(home))}m`, '#ffd166');
   } else if (L.lock && L.lock.hp > 0) {
-    _wp.copy(L.lock.pos).setY(L.lock.type === 'PYLON' ? CITY_Y + 40 : CITY_Y + 8);
+    if (L.lock.type === 'FIGHTER') _wp.copy(L.lock.pos);
+    else _wp.copy(L.lock.pos).setY(L.lock.type === 'PYLON' ? CITY_Y + 40 : CITY_Y + 8);
     drawLockAt(_wp, `${L.lock.type} ${Math.round(L.ship.position.distanceTo(L.lock.pos))}m`,
-      L.lock.type === 'PYLON' ? '#bb99ff' : '#ff8855');
+      L.lock.type === 'PYLON' ? '#bb99ff' : L.lock.type === 'FIGHTER' ? '#ff5533' : '#ff8855');
   } else hideLockWidgets();
 
   // cockpit camera (world coords — no group offset, it's ONE world)
