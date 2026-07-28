@@ -56,6 +56,16 @@ const DUNGEON_PIECES = [
   'candle_lit', 'candle_triple', 'floor_tile_big_spikes', 'floor_tile_grate', 'shelf_small', 'keyring',
 ];
 
+// KayKit City Builder Bits (CC0) — the landfall city is built from these
+export const CITY_PIECES = [
+  'building_A', 'building_B', 'building_C', 'building_D', 'building_E', 'building_F', 'building_G', 'building_H',
+  'car_hatchback', 'car_police', 'car_sedan', 'car_stationwagon', 'car_taxi',
+  'streetlight', 'watertower', 'bench', 'dumpster', 'trafficlight_A',
+];
+// Quaternius Ultimate Monsters (CC0) — the occupation on the streets (and
+// the Act II ground war to come). Full animation rigs.
+export const ALIEN_MODELS = ['Orc', 'Demon', 'BlueDemon'];
+
 export async function loadAll(onProgress) {
   const manager = new THREE.LoadingManager();
   manager.onProgress = (url, loaded, total) => onProgress?.(loaded / total, url);
@@ -81,6 +91,8 @@ export async function loadAll(onProgress) {
   for (const m of SCIFI_BOTS) jobs.push(load(`assets/scifi/chars/${m}.glb`).then(g => { assets.enemy[m] = g; assets.char[m] = g; }));
   for (const w of SCIFI_GUNS) jobs.push(load(`assets/scifi/guns/${w}.glb`).then(g => assets.weapon[w] = g));
   for (const p2 of SCIFI_PROPS) jobs.push(load(`assets/scifi/props/${p2}.glb`).then(g => assets.piece[p2] = g));
+  for (const c of CITY_PIECES) jobs.push(load(`assets/city/${c}.gltf`).then(g => assets.piece['city_' + c] = g));
+  for (const m of ALIEN_MODELS) jobs.push(load(`assets/monsters2/${m}.gltf`).then(g => { assets.enemy[m] = g; assets.char[m] = g; }));
   for (const w of WEAPON2_MODELS) {
     const ext = w.startsWith('Skeleton_') ? 'gltf' : 'glb';
     jobs.push(load(`assets/weapons2/${w}.${ext}`).then(g => assets.weapon[w] = g));
@@ -93,7 +105,7 @@ export async function loadAll(onProgress) {
 
   // Pre-bake static piece geometry (world-transform applied, attributes normalized)
   // so dungeon.js can merge thousands of placements into a handful of draw calls.
-  for (const name of [...DUNGEON_PIECES, ...Object.keys(TOWN_PIECES), ...SCIFI_PROPS]) {
+  for (const name of [...DUNGEON_PIECES, ...Object.keys(TOWN_PIECES), ...SCIFI_PROPS, ...CITY_PIECES.map((c) => 'city_' + c)]) {
     const gltf = assets.piece[name];
     gltf.scene.updateMatrixWorld(true);
     const parts = [];

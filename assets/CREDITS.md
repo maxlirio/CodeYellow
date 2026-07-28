@@ -9,3 +9,6 @@ All 3D models and animations are by **Kay Lousberg (KayKit)** — https://kaylou
 All sound effects are procedurally generated at runtime with the Web Audio API — no audio assets.
 
 - **Black Dragon** (Emberwing boss model) — by 3DHaupt / Dennis Haupt (free3d.com, personal/non-commercial use). This game is free and non-commercial.
+
+- `city/` — [KayKit City Builder Bits 1.0](https://github.com/KayKit-Game-Assets/KayKit-City-Builder-Bits-1.0) — CC0 by Kay Lousberg
+- `monsters2/` — Quaternius Ultimate Monsters (CC0, public domain) — https://quaternius.com, mirrored via github.com/511action/descent-3d-assets

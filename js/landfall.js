@@ -11,6 +11,7 @@
 import * as THREE from 'three';
 import { G } from './state.js';
 import { netSend } from './net.js';
+import { makePiece, makeCharacter, buildMergedStatic, ALIEN_MODELS } from './assets.js';
 import { addMsg, refreshHud } from './ui.js';
 import { sfx } from './audio.js';
 import { saveReport } from './bridge.js';
@@ -41,6 +42,7 @@ export function _dbgL() {
 }
 
 const shipUp = (id) => (G.run?.shipUps?.[id] || 0);
+// (G.assets is populated by loadAll before any deck builds)
 
 function say(text) {
   try {
@@ -86,17 +88,12 @@ export function buildWorldBelow(group, grid) {
     world.add(p);
   }
 
-  // THE CITY, its own thing: pale concrete, steel, and glass — NOT the
-  // swamp's palette. It sits on its own district plate. Center-city
-  // buildings are INDIVIDUAL, damageable meshes (scorch -> rumble ->
-  // collapse); the outer ring is merged scenery.
-  const conc = [0xb8bdc4, 0xd0d4da, 0x8fa3b8, 0xa8a49c].map((c) =>
-    new THREE.MeshStandardMaterial({ color: c, metalness: 0.15, roughness: 0.75 }));
-  const glassM2 = new THREE.MeshBasicMaterial({ color: 0x9fe8ff, toneMapped: false });
-  const neonMats = [0xff4fa0, 0xffce2e, 0x4fe8e0].map((c) => new THREE.MeshBasicMaterial({ color: c, toneMapped: false }));
-  const hiveM = new THREE.MeshBasicMaterial({ color: 0x35e0c0, toneMapped: false });
+  // THE CITY, from a real city kit (KayKit City Builder Bits, CC0): eight
+  // building types, streetlights, water towers, real cars floating the grid.
+  // Center-city buildings are INDIVIDUAL clones — bombable, scorchable,
+  // collapsible; the outer ring merges into a handful of draw calls.
   const TILE = 44, N = 26, HALF = (N * TILE) / 2;
-  // district plate + asphalt street grid
+  const hiveM = new THREE.MeshBasicMaterial({ color: 0x35e0c0, toneMapped: false });
   const plate = new THREE.Mesh(new THREE.BoxGeometry(N * TILE + 30, 1.6, N * TILE + 30),
     new THREE.MeshStandardMaterial({ color: 0x6d7178, metalness: 0.1, roughness: 0.9 }));
   plate.position.y = 0.3;
@@ -108,103 +105,129 @@ export function buildWorldBelow(group, grid) {
     arr.push(g2);
   };
   for (let i = 0; i <= N; i++) {
-    pushG(streetG, N * TILE, 0.4, 6, 0, 1.15, i * TILE - HALF);
-    pushG(streetG, 6, 0.4, N * TILE, i * TILE - HALF, 1.15, 0);
+    pushG(streetG, N * TILE, 0.4, 7, 0, 1.15, i * TILE - HALF);
+    pushG(streetG, 7, 0.4, N * TILE, i * TILE - HALF, 1.15, 0);
   }
-  const farG = conc.map(() => []);
-  const winG = [], hiveG = [], neonG = [[], [], []];
-  const buildings = []; // damageable center-city records
-  const DMG_R = 300;    // inside this radius every building is its own mesh
+  {
+    const merged = mergeGeometries(streetG, false);
+    const m = new THREE.Mesh(merged, new THREE.MeshStandardMaterial({ color: 0x3c4046, metalness: 0.1, roughness: 0.95 }));
+    m.matrixAutoUpdate = false;
+    world.add(m);
+  }
+  const BLD = ['city_building_A', 'city_building_B', 'city_building_C', 'city_building_D',
+    'city_building_E', 'city_building_F', 'city_building_G', 'city_building_H'];
+  // measured height per type -> scale so towers land at 10-26u
+  const bldH = {};
+  for (const bn of BLD) {
+    const g3 = G.assets.piece[bn];
+    let hi = 0.5;
+    for (const bb of g3.bounds || []) hi = Math.max(hi, bb.max.y);
+    bldH[bn] = hi;
+  }
+  const buildings = [];
+  const farPlacements = [];
+  const hiveG = [];
+  const DMG_R = 280;
+  const _m4 = new THREE.Matrix4(), _q4 = new THREE.Quaternion(), _s4 = new THREE.Vector3();
   for (let ty = 0; ty < N; ty++) for (let tx = 0; tx < N; tx++) {
     const cx = tx * TILE - HALF + TILE / 2, cz = ty * TILE - HALF + TILE / 2;
-    if (rnd() < 0.3) continue;
-    const n = 1 + Math.floor(rnd() * 3);
-    for (let b = 0; b < n; b++) {
-      const w = 8 + rnd() * 16, d = 8 + rnd() * 16, h = 10 + rnd() * rnd() * 64;
-      const ox = (rnd() - 0.5) * (TILE - w - 8), oz = (rnd() - 0.5) * (TILE - d - 8);
+    if (rnd() < 0.24) continue;
+    const nB = 1 + (rnd() < 0.5 ? 1 : 0);
+    for (let b = 0; b < nB; b++) {
+      const bn = BLD[Math.floor(rnd() * BLD.length)];
+      const targetH = 9 + rnd() * rnd() * 20;
+      const sc = targetH / bldH[bn];
+      const ox = (rnd() - 0.5) * (TILE - 18), oz = (rnd() - 0.5) * (TILE - 18);
       const bx = cx + ox, bz = cz + oz;
-      const mi = Math.floor(rnd() * conc.length);
+      const yaw = Math.floor(rnd() * 4) * (Math.PI / 2);
       if (Math.hypot(bx, bz) < DMG_R) {
-        // an individual building: one merged geometry, one mesh — bombable
-        const parts = [];
-        const pp = (sx, sy, sz, x, y, z) => { const g3 = new THREE.BoxGeometry(sx, sy, sz); g3.translate(x, y, z); parts.push(g3); };
-        pp(w, h, d, 0, h / 2 + 1, 0);
-        if (h > 24 && rnd() < 0.5) pp(w * 0.6, h * 0.45, d * 0.6, 0, h + h * 0.22, 0);
-        if (rnd() < 0.5) pp(2 + rnd() * 3, 2 + rnd() * 5, 2 + rnd() * 3, (rnd() - 0.5) * w * 0.5, h + 2.4, (rnd() - 0.5) * d * 0.5);
-        const merged = mergeGeometries(parts, false);
-        const m = new THREE.Mesh(merged, conc[mi]);
-        m.position.set(bx, 0, bz);
+        // ONE mesh per damageable building — clones of the raw kit scene were
+        // 3-5 draw calls each and drowned the frame budget
+        const src = G.assets.piece[bn];
+        _q4.setFromEuler(new THREE.Euler(0, yaw, 0));
+        _m4.compose(new THREE.Vector3(0, 0, 0), _q4, _s4.setScalar(sc));
+        const geos = src.baked.map(({ geo }) => geo.clone().applyMatrix4(_m4));
+        const m = new THREE.Mesh(mergeGeometries(geos, false), src.baked[0].mat);
+        for (const g4 of geos) g4.dispose();
+        m.position.set(bx, 1.1, bz);
         world.add(m);
-        buildings.push({ mesh: m, x: bx, z: bz, w, d, h, hp: 1 + Math.round(h / 22), falling: 0 });
+        buildings.push({ mesh: m, x: bx, z: bz, w: 8 * sc, d: 8 * sc, h: targetH, hp: 1 + Math.round(targetH / 9), falling: 0 });
       } else {
-        pushG(farG[mi], w, h, d, bx, h / 2 + 1, bz);
-        if (h > 24 && rnd() < 0.5) pushG(farG[(mi + 1) % 4], w * 0.6, h * 0.45, d * 0.6, bx, h + h * 0.22, bz);
-        if (rnd() < 0.7) {
-          pushG(winG, 0.8, h * 0.55, 0.3, bx - w * 0.22, h * 0.45 + 1, bz + d / 2 + 0.05);
-          pushG(winG, 0.8, h * 0.55, 0.3, bx + w * 0.22, h * 0.45 + 1, bz + d / 2 + 0.05);
-        }
-        if (rnd() < 0.2) pushG(neonG[Math.floor(rnd() * 3)], w * 0.8, 1.0, 0.3, bx, h * 0.8, bz + d / 2 + 0.06);
+        _q4.setFromEuler(new THREE.Euler(0, yaw, 0));
+        _m4.compose(new THREE.Vector3(bx, 1.1, bz), _q4, _s4.setScalar(sc));
+        farPlacements.push({ piece: bn, matrix: _m4.clone() });
       }
-      if (rnd() < 0.1) { // hive pods crouching in the streets
-        const hw = 3 + rnd() * 3, hx2 = bx + (rnd() - 0.5) * 8, hz2 = bz + d / 2 + 5;
+      if (rnd() < 0.1) { // hive pods crouch against the walls
+        const hw = 3 + rnd() * 3, hx2 = bx + (rnd() - 0.5) * 10, hz2 = bz + 6 + rnd() * 4;
         pushG(hiveG, hw, 1.6, hw, hx2, 1.8, hz2);
         pushG(hiveG, hw * 0.62, 1.2, hw * 0.62, hx2, 3.0, hz2);
       }
     }
   }
-  const mkM = (geos, mat) => {
-    if (!geos.length) return;
-    const merged = mergeGeometries(geos, false);
-    if (!merged) return;
-    const m = new THREE.Mesh(merged, mat);
-    m.matrixAutoUpdate = false;
-    world.add(m);
-  };
-  farG.forEach((geos, i) => mkM(geos, conc[i]));
-  mkM(winG, glassM2);
-  mkM(hiveG, hiveM);
-  neonG.forEach((geos, i) => mkM(geos, neonMats[i]));
-  mkM(streetG, new THREE.MeshStandardMaterial({ color: 0x3c4046, metalness: 0.1, roughness: 0.95 }));
+  // street furniture: lights along the grid, water towers on the skyline
+  for (let i = 0; i < N; i += 2) {
+    for (let j = 0; j < N; j += 3) {
+      _q4.setFromEuler(new THREE.Euler(0, (i + j) % 2 ? Math.PI / 2 : 0, 0));
+      _m4.compose(new THREE.Vector3(i * TILE - HALF + 4, 1.1, j * TILE - HALF + 4), _q4, _s4.setScalar(3.4));
+      farPlacements.push({ piece: 'city_streetlight', matrix: _m4.clone() });
+    }
+  }
+  for (let i = 0; i < 10; i++) {
+    _q4.setFromEuler(new THREE.Euler(0, rnd() * Math.PI, 0));
+    _m4.compose(new THREE.Vector3((rnd() - 0.5) * N * TILE * 0.9, 1.1, (rnd() - 0.5) * N * TILE * 0.9), _q4, _s4.setScalar(5));
+    farPlacements.push({ piece: 'city_watertower', matrix: _m4.clone() });
+  }
+  world.add(buildMergedStatic(farPlacements));
+  {
+    const merged = mergeGeometries(hiveG, false);
+    if (merged) {
+      const m = new THREE.Mesh(merged, hiveM);
+      m.matrixAutoUpdate = false;
+      world.add(m);
+    }
+  }
 
-  // STREET LIFE: occupation forces on foot and afloat — aliens, robots,
-  // hover cars gliding the grid. All of them are targets.
+  // STREET LIFE, for real: Quaternius aliens and our own combat frames on
+  // foot, KayKit cars floating the grid. All of them are targets.
   const life = new THREE.Group();
   world.add(life);
   const walkers = [], cars = [];
-  const alienB = new THREE.MeshStandardMaterial({ color: 0x35e0c0, metalness: 0.2, roughness: 0.6 });
-  const robotB = new THREE.MeshStandardMaterial({ color: 0x9aa2ae, metalness: 0.5, roughness: 0.5 });
-  for (let i = 0; i < 90; i++) {
-    const alien = rnd() < 0.6;
-    const wgrp = new THREE.Group();
-    const bodyH = alien ? 1.7 : 1.4;
-    const bm = new THREE.Mesh(new THREE.BoxGeometry(0.7, bodyH, 0.5), alien ? alienB : robotB);
-    bm.position.y = bodyH / 2 + 0.4;
-    wgrp.add(bm);
-    const hm = new THREE.Mesh(new THREE.BoxGeometry(alien ? 0.55 : 0.7, 0.5, 0.5), alien ? alienB : robotB);
-    hm.position.y = bodyH + 0.7;
-    wgrp.add(hm);
+  const ROBOTS = ['Cyber_Enemy_2Legs_Gun', 'RobotExpressive'];
+  for (let i = 0; i < 24; i++) {
+    const alien = rnd() < 0.65;
+    const model = alien ? ALIEN_MODELS[Math.floor(rnd() * ALIEN_MODELS.length)] : ROBOTS[Math.floor(rnd() * ROBOTS.length)];
+    let obj = null, anim = null;
+    try {
+      const c = makeCharacter('enemy', model);
+      obj = c.obj; anim = c.anim;
+      const played = ['Walk', 'Walking', 'Run', 'Running_A', 'Idle'].find((n) => anim.has(n));
+      if (played) anim.play(played, { timeScale: 0.9 + rnd() * 0.3 });
+      obj.scale.setScalar(alien ? 2.2 : 1.8);
+    } catch { continue; }
     const lane = Math.floor(rnd() * (N + 1)) * TILE - HALF;
     const horiz = rnd() < 0.5;
     const t0 = (rnd() - 0.5) * N * TILE * 0.9;
-    wgrp.position.set(horiz ? t0 : lane, 1.4, horiz ? lane : t0);
-    life.add(wgrp);
-    walkers.push({ grp: wgrp, horiz, lane, t: t0, dir: rnd() < 0.5 ? 1 : -1, sp: 1.5 + rnd() * 1.5, alien, dead: false });
+    obj.position.set(horiz ? t0 : lane, 1.4, horiz ? lane : t0);
+    life.add(obj);
+    walkers.push({ grp: obj, anim, horiz, lane, t: t0, dir: rnd() < 0.5 ? 1 : -1, sp: 2 + rnd() * 2.5, alien, dead: false });
   }
-  const carB = new THREE.MeshStandardMaterial({ color: 0x7a86a0, metalness: 0.5, roughness: 0.4 });
-  for (let i = 0; i < 30; i++) {
+  const CARS = ['city_car_hatchback', 'city_car_police', 'city_car_sedan', 'city_car_stationwagon', 'city_car_taxi'];
+  const glowMats = [0xff4fa0, 0xffce2e, 0x4fe8e0].map((c) => new THREE.MeshBasicMaterial({ color: c, toneMapped: false }));
+  for (let i = 0; i < 22; i++) {
     const cgrp = new THREE.Group();
-    const cb = new THREE.Mesh(new THREE.BoxGeometry(3.4, 0.9, 1.6), carB);
-    cgrp.add(cb);
-    const glow = new THREE.Mesh(new THREE.BoxGeometry(3.0, 0.12, 1.2), neonMats[i % 3]);
-    glow.position.y = -0.55;
+    const car = makePiece(CARS[Math.floor(rnd() * CARS.length)]);
+    car.scale.setScalar(3.2);
+    cgrp.add(car);
+    const glow = new THREE.Mesh(new THREE.BoxGeometry(4.4, 0.14, 2.2), glowMats[i % 3]);
+    glow.position.y = -0.35;
     cgrp.add(glow);
     const lane = Math.floor(rnd() * (N + 1)) * TILE - HALF;
     const horiz = rnd() < 0.5;
     const t0 = (rnd() - 0.5) * N * TILE * 0.9;
-    cgrp.position.set(horiz ? t0 : lane, 3.4, horiz ? lane : t0);
+    cgrp.position.set(horiz ? t0 : lane, 3.6, horiz ? lane : t0);
     cgrp.rotation.y = horiz ? Math.PI / 2 : 0;
     life.add(cgrp);
-    cars.push({ grp: cgrp, horiz, lane, t: t0, dir: rnd() < 0.5 ? 1 : -1, sp: 12 + rnd() * 14, dead: false });
+    cars.push({ grp: cgrp, horiz, lane, t: t0, dir: rnd() < 0.5 ? 1 : -1, sp: 14 + rnd() * 14, dead: false });
   }
 
   // TARGETS: 5 shield pylons + 3 AA batteries (positions in WORLD coords)
@@ -705,13 +728,15 @@ function fireGuns() {
   if (L.fireCd > 0) return;
   L.fireCd = 0.15;
   const dir = new THREE.Vector3(0, 0, -1).applyQuaternion(L.ship.quaternion);
+  const aim = L.ship.position.clone().addScaledVector(dir, 90); // wingtips CONVERGE
   for (const side of [-1, 1]) {
     const off = new THREE.Vector3(side * 2.6, 0, -1.2).applyQuaternion(L.ship.quaternion);
     const b = new THREE.Mesh(new THREE.BoxGeometry(0.14, 0.14, 2.6),
       new THREE.MeshBasicMaterial({ color: 0x4fe8e0, toneMapped: false }));
     b.position.copy(L.ship.position).add(off);
-    b.lookAt(b.position.clone().add(dir));
-    b.userData = { dir: dir.clone(), vel: 240, life: 1.6, mine: true };
+    const bd2 = aim.clone().sub(b.position).normalize();
+    b.lookAt(b.position.clone().add(bd2));
+    b.userData = { dir: bd2, vel: 240, life: 1.6, mine: true };
     L.fs.meshGroup.add(b);
     L.bolts.push(b);
   }
@@ -937,6 +962,7 @@ function drawBombsight(dt) {
 // ---------------- per-frame ----------------
 export function updateLandfall(dt) {
   if (!L) return;
+  window.__lfF = (window.__lfF || 0) + 1;
   window.__sphL = L.phase;
   L.t += dt;
   L.dropCd -= dt;
@@ -1121,11 +1147,11 @@ export function updateLandfall(dt) {
         const bl = b.position.clone().sub(LW.world.position);
         for (const cr of LW.cars) {
           if (cr.dead) continue;
-          if (bl.distanceTo(cr.grp.position) < 3) { killCar(cr); dead = true; break; }
+          if (bl.distanceTo(cr.grp.position) < 5.5) { killCar(cr); dead = true; break; }
         }
         if (!dead) for (const wk of LW.walkers) {
           if (wk.dead) continue;
-          if (bl.distanceTo(wk.grp.position) < 1.8) { killWalker(wk); dead = true; break; }
+          if (bl.distanceTo(wk.grp.position) < 2.8) { killWalker(wk); dead = true; break; }
         }
       }
     } else if (!dead && !b.userData.mine) {
@@ -1185,12 +1211,16 @@ export function updateLandfall(dt) {
       if (Math.abs(wk.t) > 550) wk.dir *= -1;
       wk.grp.position.set(wk.horiz ? wk.t : wk.lane, 1.4, wk.horiz ? wk.lane : wk.t);
       wk.grp.rotation.y = wk.horiz ? (wk.dir > 0 ? Math.PI / 2 : -Math.PI / 2) : (wk.dir > 0 ? 0 : Math.PI);
+      // skinned rigs are the frame budget's worst enemy — animate only the
+      // ones close enough to read
+      if (L.ship.position.distanceToSquared(wk.grp.position) < 90000) wk.anim?.update(dt);
     }
     for (const cr of LW.cars) {
       if (cr.dead) continue;
       cr.t += cr.dir * cr.sp * dt;
       if (Math.abs(cr.t) > 550) cr.dir *= -1;
-      cr.grp.position.set(cr.horiz ? cr.t : cr.lane, 3.4 + Math.sin((G.time || 0) * 2 + cr.lane) * 0.3, cr.horiz ? cr.lane : cr.t);
+      cr.grp.position.set(cr.horiz ? cr.t : cr.lane, 3.6 + Math.sin((G.time || 0) * 2 + cr.lane) * 0.3, cr.horiz ? cr.lane : cr.t);
+      cr.grp.rotation.y = cr.horiz ? (cr.dir > 0 ? Math.PI / 2 : -Math.PI / 2) : (cr.dir > 0 ? 0 : Math.PI);
     }
     // collapses: the rumble, the lean, the fall, the dust
     for (const bd of LW.buildings) {
