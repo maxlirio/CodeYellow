@@ -97,6 +97,11 @@ export function buildWorldBelow(group, grid) {
     arr.push(g2);
   };
   const TILE = 44, N = 26, HALF = (N * TILE) / 2;
+  const streetG = [];
+  for (let i = 0; i <= N; i++) { // the street grid — the city reads as a CITY from above
+    push(streetG, N * TILE, 0.3, 5, 0, 0.15, i * TILE - HALF);
+    push(streetG, 5, 0.3, N * TILE, i * TILE - HALF, 0.15, 0);
+  }
   for (let ty = 0; ty < N; ty++) for (let tx = 0; tx < N; tx++) {
     const cx = tx * TILE - HALF + TILE / 2, cz = ty * TILE - HALF + TILE / 2;
     if (rnd() < 0.3) continue;
@@ -104,9 +109,22 @@ export function buildWorldBelow(group, grid) {
     for (let b = 0; b < n; b++) {
       const w = 8 + rnd() * 16, d = 8 + rnd() * 16, h = 8 + rnd() * rnd() * 54;
       const ox = (rnd() - 0.5) * (TILE - w - 6), oz = (rnd() - 0.5) * (TILE - d - 6);
-      push(buckets[Math.floor(rnd() * bldMats.length)], w, h, d, cx + ox, h / 2, cz + oz);
-      if (rnd() < 0.5) push(winG, w * 0.7, 0.7, 0.3, cx + ox, h * (0.3 + rnd() * 0.5), cz + oz + d / 2 + 0.05);
-      if (rnd() < 0.13) push(hiveG, 4 + rnd() * 6, 1.4, 4 + rnd() * 6, cx + ox, 0.7, cz + oz + d / 2 + 3);
+      const mi = Math.floor(rnd() * bldMats.length);
+      push(buckets[mi], w, h, d, cx + ox, h / 2, cz + oz);
+      if (h > 20 && rnd() < 0.5) push(buckets[(mi + 1) % 4], w * 0.6, h * 0.45, d * 0.6, cx + ox, h + h * 0.22, cz + oz); // tier
+      if (rnd() < 0.45) push(buckets[(mi + 2) % 4], 2 + rnd() * 4, 2 + rnd() * 5, 2 + rnd() * 4, cx + ox + (rnd() - 0.5) * w * 0.5, h + 1.6, cz + oz + (rnd() - 0.5) * d * 0.5); // rooftop gear
+      // vertical window strips, two faces
+      if (rnd() < 0.7) {
+        push(winG, 0.7, h * 0.55, 0.3, cx + ox - w * 0.22, h * 0.45, cz + oz + d / 2 + 0.05);
+        push(winG, 0.7, h * 0.55, 0.3, cx + ox + w * 0.22, h * 0.45, cz + oz + d / 2 + 0.05);
+      }
+      // hive pods: small domed growths crouching at street level, not decals
+      if (rnd() < 0.11) {
+        const hw = 3 + rnd() * 3, hx2 = cx + ox + (rnd() - 0.5) * 8, hz2 = cz + oz + d / 2 + 4;
+        push(hiveG, hw, 1.6, hw, hx2, 0.8, hz2);
+        push(hiveG, hw * 0.62, 1.2, hw * 0.62, hx2, 2.0, hz2);
+        push(hiveG, hw * 0.3, 0.9, hw * 0.3, hx2, 2.9, hz2);
+      }
     }
   }
   const mk = (geos, mat) => {
@@ -120,6 +138,7 @@ export function buildWorldBelow(group, grid) {
   buckets.forEach((geos, i) => mk(geos, bldMats[i]));
   mk(winG, winM);
   mk(hiveG, hiveM);
+  mk(streetG, new THREE.MeshStandardMaterial({ color: 0x3a4038, metalness: 0.1, roughness: 0.95 }));
 
   // TARGETS: 5 shield pylons + 3 AA batteries (positions in WORLD coords)
   const targets = [];
@@ -277,9 +296,9 @@ export function startArrival(fast = false) {
     t.wrapS = THREE.RepeatWrapping;
     t.wrapT = THREE.RepeatWrapping;
     t.colorSpace = THREE.SRGBColorSpace;
-    const m = new THREE.Mesh(new THREE.CylinderGeometry(r, r, 320, 24, 1, true),
+    const m = new THREE.Mesh(new THREE.CylinderGeometry(r * 5, r * 5, 1500, 24, 1, true),
       new THREE.MeshBasicMaterial({ map: t, toneMapped: false, fog: false, side: THREE.BackSide, transparent: true, opacity: 0, depthWrite: false }));
-    m.position.set(cx0, 4, cz0 - 110);
+    m.position.set(cx0, 4, cz0 - 320);
     m.rotation.x = Math.PI / 2; // a LONG bore down the line of flight — the
     // streaks converge to a vanishing point ahead, Star Wars style
     m.userData.maxOp = op;
@@ -304,10 +323,10 @@ export function startArrival(fast = false) {
     cctx.fillStyle = rg;
     cctx.fillRect(0, 0, 128, 128);
     const ct = new THREE.CanvasTexture(cc);
-    core = new THREE.Mesh(new THREE.PlaneGeometry(70, 70),
+    core = new THREE.Mesh(new THREE.PlaneGeometry(340, 340),
       new THREE.MeshBasicMaterial({ map: ct, toneMapped: false, fog: false, transparent: true, opacity: 0, depthWrite: false }));
     core.name = 'hyperCore';
-    core.position.set(cx0, 4, cz0 - 255);
+    core.position.set(cx0, 4, cz0 - 1020);
     g.add(core);
   }
   // the planet: a small green marble far out — it GROWS on descent but is
@@ -334,18 +353,18 @@ export function startArrival(fast = false) {
     pl = new THREE.Mesh(new THREE.SphereGeometry(15, 24, 18),
       new THREE.MeshBasicMaterial({ map: pt, toneMapped: false, fog: false }));
     pl.name = 'arrivalPlanet';
-    pl.position.set(cx0, 6, cz0 - 34);
+    pl.position.set(cx0, 10, cz0 - 40);
     g.add(pl);
     const glow = new THREE.Mesh(new THREE.SphereGeometry(15.8, 24, 18),
       new THREE.MeshBasicMaterial({ color: 0xbfe0a8, transparent: true, opacity: 0.18, toneMapped: false, fog: false, side: THREE.BackSide }));
     pl.add(glow);
   }
   pl.visible = false;
-  pl.scale.setScalar(0.32);
+  pl.scale.setScalar(0.62);
   // atmosphere shell: fades in over the stars as we descend into the haze
   let haze = g.getObjectByName('arrivalHaze');
   if (!haze) {
-    haze = new THREE.Mesh(new THREE.CylinderGeometry(37, 37, 44, 24, 1, true),
+    haze = new THREE.Mesh(new THREE.SphereGeometry(860, 24, 16),
       new THREE.MeshBasicMaterial({ color: 0xc2cba6, toneMapped: false, fog: false, side: THREE.BackSide, transparent: true, opacity: 0, depthWrite: false }));
     haze.name = 'arrivalHaze';
     haze.position.set(cx0, 4, cz0);
@@ -380,7 +399,7 @@ export function startArrival(fast = false) {
   // no dogfight in hyperspace — the ambient war stays behind at the hulk
   const war = (G.floors.get(0)?.warShips) || [];
   for (const f of war) f.visible = false;
-  A = { phase: 'spool', t: 0, tun, tun2, core, pl, haze, stars, war, skyline, plZ0: cz0 - 34, fast: !!fast };
+  A = { phase: 'spool', t: 0, tun, tun2, core, pl, haze, stars, war, skyline, plZ0: cz0 - 40, fast: !!fast };
   sfx.rumble();
   G.shake = Math.max(G.shake || 0, 0.35);
   addMsg('All hands: TRANSLATION in 3… 2… 1…', 'gold');
@@ -430,9 +449,10 @@ export function updateArrival(dt) {
     A.tun2.material.opacity = Math.max(0, A.tun2.material.opacity - dt * 2.5);
     A.core.material.opacity = A.tun.material.opacity;
     if (A.tun.material.opacity <= 0) { A.tun.visible = false; A.tun2.visible = false; A.core.visible = false; }
-    A.pl.scale.setScalar(Math.min(0.45, A.pl.scale.x + dt * 0.02));
+    A.pl.scale.setScalar(Math.min(0.8, A.pl.scale.x + dt * 0.08));
     A.pl.position.z = A.plZ0;
-    if (A.t > 5 * F) {
+    if (A.stars) A.stars.rotation.y += dt * 0.008; // still coasting — the sky drifts
+    if (A.t > 2.2 * F) { // straight into the dive — no sitting in the void
       A.phase = 'descend'; A.t = 0;
       sfx.rumble();
       addMsg('Beginning descent — atmospheric interface in ten.', 'gold');
@@ -444,8 +464,9 @@ export function updateArrival(dt) {
     const ease = k * k * (3 - 2 * k);
     // the planet GROWS on screen but RECEDES in space — its surface can
     // never cross the glass into the room (the old version ballooned in)
-    A.pl.scale.setScalar(0.45 + ease * 2.1);
-    A.pl.position.z = A.plZ0 - ease * 55;
+    A.pl.scale.setScalar(0.8 + ease * 2.6);
+    A.pl.position.z = A.plZ0 - ease * 80;
+    if (A.stars) A.stars.rotation.y += dt * 0.008;
     if (A.stars) A.stars.material.opacity = Math.max(0, 1 - ease * 1.2);
     A.haze.material.opacity = Math.min(0.85, ease * 1.0);
     if (k > 0.55) A.pl.material.opacity = 1; // (kept: the haze covers the final swell)
@@ -605,7 +626,11 @@ export function landfallDrop() {
   sfx.bolt();
 }
 
-function hurtBomber(n) {
+function hurtBomber(n, strike = false) {
+  if (strike) { // collision damage has an immunity window — one hit per bump
+    if ((L.strikeCd || 0) > 0) return;
+    L.strikeCd = 0.9;
+  }
   L.hull -= n;
   G.shake = Math.max(G.shake || 0, 0.3);
   if (L.hull <= 0) endFlight('SHOT DOWN');
@@ -736,6 +761,7 @@ export function updateLandfall(dt) {
   window.__sphL = L.phase;
   L.t += dt;
   L.dropCd -= dt;
+  L.strikeCd = (L.strikeCd || 0) - dt;
   if (G.keys['Escape'] && L.phase === 'run') { endFlight('RECOVERED'); return; }
 
   const D = deckInfo();
@@ -774,7 +800,7 @@ export function updateLandfall(dt) {
   if (L.ship.position.y < CITY_Y + 6) {
     L.ship.position.y = CITY_Y + 6;
     if (L.vel.y < 0) L.vel.y = 0;
-    hurtBomber(20);
+    hurtBomber(20, true);
     if (!L) return;
     addMsg('TERRAIN — pull up!', 'bad');
   }
@@ -830,9 +856,9 @@ export function updateLandfall(dt) {
     if (insideDeckBox && !corridor) {
       L.vel.multiplyScalar(-0.4);
       L.ship.position.addScaledVector(L.vel, dt * 4);
-      hurtBomber(10);
+      hurtBomber(10, true);
       if (!L) return;
-      addMsg('HULL STRIKE — the bay mouth is the only way in.', 'bad');
+      if (L.strikeCd > 0.85) addMsg('HULL STRIKE — the bay mouth is the only way in.', 'bad');
     }
   }
   // the COLOSSAL hull is solid too (fly around her, not through her)
@@ -847,9 +873,9 @@ export function updateLandfall(dt) {
       if (dx <= dy && dx <= dz) { p.x = hb.x + sgn(p.x - hb.x) * hb.hx; L.vel.x *= -0.3; }
       else if (dy <= dz) { p.y = hb.y + sgn(p.y - hb.y) * hb.hy; L.vel.y *= -0.3; }
       else { p.z = hb.z + sgn(p.z - hb.z) * hb.hz; L.vel.z *= -0.3; }
-      hurtBomber(8);
+      hurtBomber(8, true);
       if (!L) return;
-      addMsg('HULL STRIKE — she is a lot of ship. Fly around her.', 'bad');
+      if (L.strikeCd > 0.85) addMsg('HULL STRIKE — she is a lot of ship. Fly around her.', 'bad');
       break;
     }
   }

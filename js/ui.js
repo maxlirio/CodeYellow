@@ -81,7 +81,16 @@ export function updateSpellBar(cooldowns) {
     const el = $(`spell${i}`);
     if (!el) return;
     const icon = el.querySelector('.sp-icon');
-    if (icon.textContent !== sp.icon) { icon.textContent = sp.icon; el.title = `${sp.name} (${sp.mana} mana)`; }
+    // the emoji purge left icon:'' — slots read as BLANK. A short text tag
+    // from the spell's name fills the slot instead.
+    const tag = sp.icon || sp.name.split(' ').pop().slice(0, 4).toUpperCase();
+    if (icon.textContent !== tag) {
+      icon.textContent = tag;
+      icon.style.fontSize = sp.icon ? '' : '10px';
+      icon.style.letterSpacing = sp.icon ? '' : '0.5px';
+      icon.style.fontWeight = sp.icon ? '' : '700';
+      el.title = `${sp.name} (${sp.mana} mana)`;
+    }
     const cd = cooldowns[spellId] || 0;
     el.querySelector('.cdmask').style.height = cd > 0 ? `${Math.min(100, (cd / sp.cd) * 100)}%` : '0%';
     el.classList.toggle('nomana', p.mana < sp.mana);

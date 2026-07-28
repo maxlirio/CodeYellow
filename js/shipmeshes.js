@@ -657,16 +657,35 @@ export function buildShipStatic(fs) {
   if (g.bridge) {
     const cx0 = (g.w / 2 - 0.5) * CELL, cz0 = (g.h / 2 - 0.5) * CELL; // room center
     // space, in every window: a star cylinder wrapping the whole deck
+    // the SKY is a full sphere now — because the bridge sits at the STERN,
+    // star-destroyer style, and HER OWN HULL stretches away through the
+    // forward glass. Look out the window: that's your ship, all of her.
     const stars = new THREE.Mesh(
-      new THREE.CylinderGeometry(38, 38, 44, 24, 1, true),
-      new THREE.MeshBasicMaterial({ map: makeStarTex(), toneMapped: false, fog: false, side: THREE.BackSide, transparent: true })
+      new THREE.SphereGeometry(880, 24, 16),
+      new THREE.MeshBasicMaterial({ map: makeStarTex(900, 2048, 1024), toneMapped: false, fog: false, side: THREE.BackSide, transparent: true })
     );
     stars.name = 'bridgeStars';
     stars.position.set(cx0, 4, cz0);
     group.add(stars);
-    // the battle wheels right past the bridge glass — every window, live.
-    // The ring sits OUTSIDE the room's walls and inside the star cylinder.
-    addWar(group, { ring: true, cx: cx0, cz: cz0, r0: 29, r1: 36, y0: 2, y1: 12 }, 4, 2, 0.6);
+    // NO staged battle at the bridge — its tracers flew straight through the
+    // room, and the only fights this game shows are REAL ones.
+    const hull = buildCarrier();
+    hull.name = 'ownHull';
+    hull.rotation.y = Math.PI / 2;   // bow points FORWARD (-z) out the glass
+    hull.scale.setScalar(1.7);
+    // the tower (local -20, 47) lands under the bridge room; the deck line
+    // fills the lower half of the forward view all the way to the prow
+    // sunk low enough that HER tower/mast stay beneath our floor, and slid
+    // aft so the model's own tower hides behind this room — the dorsal deck
+    // line runs forward under the glass all the way to the prow
+    hull.position.set(cx0, -18, cz0 + 26);
+    group.add(hull);
+    // deck floods so her hull READS out the glass, not just its light strips
+    for (const hz of [-60, -170]) {
+      const hl = new THREE.PointLight(0xbfd4e8, 260, 220, 1.6);
+      hl.position.set(cx0, 30, cz0 + hz);
+      group.add(hl);
+    }
 
     // THE HOLO TABLE — round pedestal, glowing top, a hologram of the hulk
     // floating above it (missions.js spins it and lights it up on red alert)
