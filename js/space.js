@@ -26,8 +26,9 @@ export const HULL_LOCAL_BOXES = [
   { x: 150, y: 0, z: 0, hx: 30, hy: 8, hz: 14 },    // prow wedge
   { x: -110, y: 0, z: 0, hx: 35, hy: 18, hz: 30 },  // aft block
   { x: -158, y: 0, z: 0, hx: 13, hy: 13, hz: 22 },  // engine housing
-  { x: -10, y: 20, z: 0, hx: 35, hy: 5, hz: 17 },   // dorsal superstructure
-  { x: -24, y: 38, z: 0, hx: 18, hy: 9, hz: 11 },   // tower + bridge
+  { x: -10, y: 20, z: 0, hx: 35, hy: 5, hz: 17 },     // dorsal superstructure
+  { x: -26, y: 35, z: 0, hx: 11, hy: 10, hz: 8 },     // tower neck
+  { x: -26, y: 51, z: 0, hx: 22, hy: 4.5, hz: 10 },   // bridge slab
 ];
 const CARRIER_BOXES = HULL_LOCAL_BOXES.map((b) => ({
   x: CAP.x + b.x, y: CAP.y + b.y, z: CAP.z + b.z, hx: b.hx, hy: b.hy, hz: b.hz,
@@ -148,14 +149,26 @@ export function buildCarrier(aperture = null) {
     glow.position.set(-181.5, 0, oz);
     ship.add(glow);
   }
-  // dorsal superstructure + bridge tower
-  B(hull, 70, 10, 34, -10, 20, 0);
-  B(hull, 34, 16, 22, -28, 33, 0);
-  B(dark, 14, 12, 12, -20, 47, 0);     // bridge
-  B(teal, 12, 0.9, 0.9, -20, 44, 6.4); // bridge window strips
-  B(teal, 12, 0.9, 0.9, -20, 44, -6.4);
-  B(dark, 2, 26, 2, -44, 46, 0);       // comm mast
-  B(amber, 1.4, 1.4, 1.4, -44, 60, 0); // mast beacon
+  B(teal, 124, 0.5, 0.5, 18, 11.3, 0);      // dorsal spine light, bow-ward
+  B(amber, 0.5, 0.5, 30, 76, 11.3, 0);      // fore-deck cross strip
+  // dorsal superstructure + CONNING TOWER — star-destroyer style: the bridge
+  // is a wide slab held ABOVE the ship on a neck, windows wrapped around it
+  B(hull, 70, 10, 34, -10, 20, 0);          // superstructure base
+  B(hull, 22, 20, 16, -26, 35, 0);          // tower neck
+  B(hull, 44, 7, 20, -26, 50.5, 0);         // the bridge slab — the command deck
+  B(amber, 40, 2.2, 0.8, -26, 51.2, 10.1);  // window bands, both flanks
+  B(amber, 40, 2.2, 0.8, -26, 51.2, -10.1);
+  B(amber, 0.8, 2.2, 18.5, -3.7, 51.2, 0);  // window band, forward face
+  const cap = B(hull, 18, 3, 12, -28, 55.5, 0); // cap deck
+  cap.name = 'towerTop';
+  for (const sz of [-1, 1]) {               // twin sensor globes
+    const globe = new THREE.Mesh(new THREE.SphereGeometry(2.4, 10, 8), dark);
+    globe.position.set(-28, 58.4, sz * 4);
+    globe.name = 'towerTop';
+    ship.add(globe);
+  }
+  B(dark, 2, 26, 2, -44, 46, 0);            // comm mast
+  B(amber, 1.4, 1.4, 1.4, -44, 60, 0);      // mast beacon
   // ventral keel
   B(dark, 90, 14, 8, -10, -20, 0);
   // side sponsons, turrets, window rows, edge strips.
@@ -316,6 +329,10 @@ export function buildBomber(hostile = true, tint = null) {
 // wraps a hangar deck in REAL space: star sphere + the colossal hull with
 // the mouth aperture — the first brick of the one-world space patrol
 export function buildSpaceAround(group, grid) {
+  const sw = new THREE.Group();
+  sw.name = 'spaceWorld'; // hidden wholesale when the ship is at a planet
+  group.add(sw);
+  group = sw;
   const xs = grid.mouth.map((m) => m.cx * 4);
   const mouthX0 = Math.min(...xs) - 2, mouthX1 = Math.max(...xs) + 2;
   const mouthZ = (grid.mouth[0].cy + 0.5) * 4;
@@ -349,6 +366,12 @@ let SB = null;
 const _sv = new THREE.Vector3();
 // a LANDFALL deck hands the takeoff to landfall.js (registered there — no
 // import cycle) — same scene, same coordinates, no seam
+// a hangar deck launches into WHEREVER THE SHIP IS: the landfall deck is
+// always over the planet, and every other flight deck is too once we arrive
+export function deckAtPlanet() {
+  const g = G.floors.get(G.floor)?.grid;
+  return !!(g && (g.landfall || (g.spaceZone && G.shipLoc === 'planet')));
+}
 let landfallHook = null;
 export function setLandfallHook(fn) { landfallHook = fn; }
 const shipUp = (id) => (G.run?.shipUps?.[id] || 0);
@@ -445,7 +468,7 @@ function launchHandoff(sealedHold = false) {
   const { drill, boardAt, speed, ud, bs, pre } = SB;
   // LANDFALL deck: no scene swap at all — the flight continues in the same
   // world the deck lives in, from the exact spot you crossed the mouth
-  if (G.floors.get(G.floor)?.grid?.landfall && landfallHook) {
+  if (deckAtPlanet() && landfallHook) {
     const from = {
       pos: bs.position.clone().add(new THREE.Vector3(0, 1.85, 0)),
       quat: new THREE.Quaternion().setFromEuler(new THREE.Euler(0, ud.yaw + Math.PI, 0)),
@@ -523,7 +546,7 @@ function updateBoarding(dt) {
       // build the ENTIRE space scene NOW, while the reactor spools — the
       // launch handoff is then instant (this is what killed the black gap).
       // A LANDFALL deck skips this: its world is ALREADY out the mouth.
-      if (!G.floors.get(G.floor)?.grid?.landfall) {
+      if (!deckAtPlanet()) {
         const lvl = (G.run.patrolLvl || 0) + 1;
         const comp = SB.drill ? { name: 'DOCKING DRILL', list: [], bombers: 0 } : compositionFor(lvl);
         SB.pre = { lvl, comp, drill: SB.drill, scene: buildSpaceScene(lvl, comp) };

@@ -23,7 +23,7 @@ import {
 } from './missions.js';
 import { openTrainRoom, setSkillHooks } from './skills.js';
 import { updateSpace, spaceMouse, spaceFire, inSpace, startSpaceFlight, setSpaceHooks, spaceSetWeapon, startBoarding, spaceCycleLock, spaceHomeLock } from './space.js';
-import { startArrival, updateArrival, updateLandfall, inLandfall, landfallCycleLock, landfallTrigger, landfallSetWeapon, landfallHomeLock } from './landfall.js';
+import { startArrival, updateArrival, updateLandfall, inLandfall, landfallCycleLock, landfallTrigger, landfallSetWeapon, landfallHomeLock, landfallSyncFloor } from './landfall.js';
 import { initViewmodel, updateViewmodel } from './viewmodel.js';
 import { updateWalls, clearWalls } from './walls.js';
 import { initFloorTraps, updateTraps } from './traps.js';
@@ -517,6 +517,7 @@ function ensureFloor(n) {
 }
 
 // move MY view/simulation to floor n
+window.__dbgFloor = (n) => setLocalFloor(n); // probe hook
 function setLocalFloor(n) {
   const prev = G.floors.get(G.floor);
   if (prev) {
@@ -528,6 +529,7 @@ function setLocalFloor(n) {
   buildFloorMeshes(fs);
   initFloorTraps(fs);
   buildRopesForFloor(fs);
+  landfallSyncFloor(fs); // decks with a view render WHERE THE SHIP IS
   if (fs.npcs) spawnTownNpcs(fs);
   fs.meshGroup.visible = true;
   fs.enemyGroup.visible = true;
@@ -569,11 +571,28 @@ function applyThemeAtmosphere(fs) {
   G.lights.hemi.intensity = 0.85 * (dark < 1 ? 0.55 : 1) * sunny;
   G.lights.amb.intensity = 0.7 * (dark < 1 ? 0.55 : 1) * sunny;
   G.lights.sun.intensity = th.sun ? 1.2 : 0; // daylight only above ground
-  // a landfall deck looks 300m down at a planet — push the horizon out
-  const wantFar = (fs.grid?.landfall || fs.grid?.spaceZone) ? 3600 : 340;
+  // a deck with a view outside — hangar mouth or bridge glass — needs the
+  // horizon pushed out to hold the whole ship and the world it sits in
+  const wantFar = (fs.grid?.landfall || fs.grid?.spaceZone || fs.grid?.bridge) ? 3600 : 340;
   if (G.camera.far !== wantFar && G.mode !== 'space') {
     G.camera.far = wantFar;
     G.camera.updateProjectionMatrix();
+  }
+  // ONE SHIP, ONE WORLD: any deck with a view outside takes its sky from
+  // WHERE THE SHIP IS, not from its interior theme. Bright haze over the
+  // planet; black space everywhere the windows show stars.
+  const hasView = fs.grid?.bridge || fs.grid?.spaceZone || fs.grid?.landfall;
+  if (hasView) {
+    if (G.shipLoc === 'planet') {
+      G.scene.fog.color.setHex(0xb9c29b);
+      G.scene.background.setHex(0xb9c29b);
+      G.scene.fog.density = 0.00055;
+      G.lights.sun.intensity = 1.2;
+    } else if (!fs.grid?.landfall) {
+      G.scene.fog.color.setHex(0x04060b);
+      G.scene.background.setHex(0x04060b);
+      G.scene.fog.density = 0.0005;
+    }
   }
   G.torchColor = th.torch;
 }

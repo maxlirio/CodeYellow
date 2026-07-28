@@ -17,7 +17,7 @@ export const SECTIONS = [
   { id: 'cargo', name: 'CARGO HOLD', floorN: 1, threat: 1, theme: 'cargo',
     roles: ['cargo', 'cargo', 'cargo', 'hangar', 'barracks'],
     desc: 'Container canyons and dormant loader frames. Breach-team shakedown.' },
-  { id: 'spaceport', name: 'SPACE PORT', floorN: 2, threat: 1, theme: 'hab', special: 'hangar',
+  { id: 'spaceport', name: 'SPACE PORT', floorN: 2, threat: 1, theme: 'landfall', special: 'hangar',
     roles: ['cargo', 'machine', 'barracks'],
     desc: 'The hangar deck — hull mouth open to space, dropships on their pads. Long sightlines.' },
   { id: 'security', name: 'SECURITY DECK', floorN: 3, threat: 2, theme: 'command',
@@ -96,6 +96,7 @@ export function beginSortie(secId, seed = null, n = null, fromNet = false, diff 
 // the arrival cinematic ends -> the breach portal lights up
 export function landfallPortalReady() {
   if (!G.sortie || G.sortie.id !== 'landfall') return;
+  G.shipLoc = 'planet'; // the ship is AT the planet now — every deck shows it
   G.sortie.portalReady = true;
   portalSet(true);
   sfx.levelup();

@@ -1,5 +1,8 @@
 // Central mutable game state, shared by all modules (imported everywhere, no imports here).
 export const G = {
+  // ONE SHIP, ONE WORLD: the carrier is a single object that is genuinely
+  // somewhere — every window and hangar mouth renders THIS, not a room theme
+  shipLoc: 'space', // 'space' | 'planet' (set the moment the descent levels off)
   // three.js core
   scene: null, camera: null, renderer: null,
 

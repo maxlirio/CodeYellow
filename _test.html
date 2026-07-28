@@ -241,7 +241,7 @@ try {
   assert(br.enemySpawns.length === 0, 'bridge: no hostiles aboard');
   {
     // every section names a real deck: valid theme id and a unique floor
-    const themeIds = ['cargo', 'hab', 'engineering', 'command'];
+    const themeIds = ['cargo', 'hab', 'engineering', 'command', 'landfall'];
     const floors = SECTIONS.map(s => s.floorN);
     assert(SECTIONS.length >= 6 && new Set(floors).size === floors.length,
       `sections: ${SECTIONS.length} unique decks`);
@@ -256,7 +256,7 @@ try {
     // section identity: each sortie override produces its signature set pieces
     const { setSortieOverride } = await import('./js/ship.js');
     const kindsOf = (fsx) => fsx.grid.shipDecor.reduce((m, d) => (m[d.kind] = (m[d.kind] || 0) + 1, m), {});
-    setSortieOverride({ floorN: 2, theme: 'hab', roles: ['cargo', 'machine', 'barracks'], special: 'hangar' });
+    setSortieOverride({ floorN: 2, theme: 'landfall', roles: ['cargo', 'machine', 'barracks'], special: 'hangar' });
     const hang = generateShipDeck('seedA:sortie3', 2);
     assert(hang.grid.mouth.length >= 12, `spaceport: hull mouth open (${hang.grid.mouth.length} faces)`);
     assert((kindsOf(hang).boardship || 0) >= 2, `spaceport: fighter row parked (${kindsOf(hang).boardship || 0})`);

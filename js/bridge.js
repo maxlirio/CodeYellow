@@ -10,7 +10,7 @@ import { G } from './state.js';
 const SOLID = 0, FLOOR = 1, STAIRS = 3;
 
 export const BRIDGE_THEME = {
-  id: 'bridge', name: 'THE BRIDGE', fog: 0x0a0e14, density: 0.006,
+  id: 'bridge', name: 'THE BRIDGE', fog: 0x0a0e14, density: 0.0012,
   hemi: 0xd5e4f4, amb: 0x93a1b8, torch: 0x9fd8ec, accent: 0x2fd6c8, portal: 0x2fd6c8,
   sun: true, boost: 1.15,
   tiles: [], props: [], banners: [], bias: [],
@@ -37,7 +37,9 @@ export function generateBridgeData() {
     for (const [dx, dy] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
       const nx = x + dx, ny = y + dy;
       if (nx < 0 || ny < 0 || nx >= w || ny >= h || cells[ny * w + nx] !== 0) continue;
-      if (y + dy * 0.5 < C - 0.2) windows.push({ cx: x, cy: y, dx, dy });
+      // a conning-tower bridge is GLASS nearly all the way around — only the
+      // aft screen wall and the two side-screen faces stay solid
+      if (y + dy * 0.5 < 9.6 && !(y === C && dx !== 0)) windows.push({ cx: x, cy: y, dx, dy });
     }
   }
 

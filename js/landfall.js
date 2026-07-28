@@ -303,7 +303,25 @@ export function buildWorldBelow(group, grid) {
   }));
 
   LW = { world, targets, lzWorld: new THREE.Vector3(30, CITY_Y, 30), hullBoxes, carrier, buildings, walkers, cars, scorchMat: new THREE.MeshStandardMaterial({ color: 0x17181a, metalness: 0, roughness: 1 }) };
+  group.userData.LW = LW; // the world belongs to ITS deck — rebind on entry
   return world;
+}
+
+// ONE SHIP, ONE WORLD: called on every floor entry. A deck keeps its own
+// world-below across visits; any flight deck standing at the planet grows
+// the planet under it, and its deep-space backdrop goes dark until we leave.
+export function landfallSyncFloor(fs) {
+  const g = fs?.grid;
+  if (!g || !fs.meshGroup) return;
+  const atPlanet = g.landfall || (g.spaceZone && G.shipLoc === 'planet');
+  const sw = fs.meshGroup.getObjectByName('spaceWorld');
+  if (sw) sw.visible = !atPlanet;
+  if (atPlanet) {
+    if (fs.meshGroup.userData.LW) LW = fs.meshGroup.userData.LW;
+    else buildWorldBelow(fs.meshGroup, g);
+  }
+  const wb = fs.meshGroup.getObjectByName('worldBelow');
+  if (wb) wb.visible = atPlanet;
 }
 
 function buildPylon() {

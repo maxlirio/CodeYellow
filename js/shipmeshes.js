@@ -667,17 +667,17 @@ export function buildShipStatic(fs) {
     hull.name = 'ownHull';
     hull.rotation.y = Math.PI / 2;   // bow points FORWARD (-z) out the glass
     hull.scale.setScalar(1.7);
-    // the tower (local -20, 47) lands under the bridge room; the deck line
-    // fills the lower half of the forward view all the way to the prow
-    // sunk low enough that HER tower/mast stay beneath our floor, and slid
-    // aft so the model's own tower hides behind this room — the dorsal deck
-    // line runs forward under the glass all the way to the prow
-    hull.position.set(cx0, -18, cz0 + 26);
+    // THIS ROOM IS THE CONNING TOWER'S COMMAND DECK. The model's bridge slab
+    // (local -26, 50.5) is placed exactly under the room floor, so out of
+    // every window you look DOWN on your own ship: the dorsal deck runs away
+    // forward to the prow, the mast rises aft, the hangar flanks below.
+    hull.position.set(cx0, -92, cz0 - 44.2);
+    hull.traverse((n) => { if (n.name === 'towerTop') n.visible = false; }); // we ARE the top
     group.add(hull);
     // deck floods so her hull READS out the glass, not just its light strips
-    for (const hz of [-60, -170]) {
-      const hl = new THREE.PointLight(0xbfd4e8, 260, 220, 1.6);
-      hl.position.set(cx0, 30, cz0 + hz);
+    for (const hz of [-40, -150, -260]) {
+      const hl = new THREE.PointLight(0xbfd4e8, 430, 300, 1.5);
+      hl.position.set(cx0, -20, cz0 + hz);
       group.add(hl);
     }
 
