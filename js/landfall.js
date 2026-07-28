@@ -1001,17 +1001,31 @@ export function updateLandfall(dt) {
   const D = deckInfo();
 
   if (L.phase === 'dock' || L.phase === 'land') {
-    // hands off: glide to the set-down point
+    // hands off — but SMOOTH: the deck crew flies you down the curve your own
+    // momentum started. No snap: position rides a bezier from the exact state
+    // you crossed the threshold in, and the pivot to parked heading only
+    // happens at the end, slow, over the pad — a taxi turn, not a yank.
     L.landT += dt;
-    L.ship.position.lerp(L.landAt, Math.min(1, dt * 1.6));
-    L.ship.quaternion.slerp(L.landQ, Math.min(1, dt * 2.2));
+    const T = L.landDur || 3.4;
+    const sN = Math.min(1, L.landT / T);
+    const e = sN * sN * (3 - 2 * sN);
+    if (!L.landMid) {
+      L.landMid = L.landFrom.clone().addScaledVector(L.landV0 || new THREE.Vector3(), 0.26 * T)
+        .lerp(L.landAt, 0.3);
+      L.landMid.y = Math.max(L.landAt.y + 1.8, (L.landFrom.y + L.landAt.y) / 2);
+    }
+    const _pa = L.landFrom.clone().lerp(L.landMid, e);
+    const _pb = L.landMid.clone().lerp(L.landAt, e);
+    L.ship.position.copy(_pa.lerp(_pb, e));
+    const sT = Math.max(0, (sN - 0.5) / 0.5), eT = sT * sT * (3 - 2 * sT);
+    L.ship.quaternion.copy(L.landQ0 || L.landQ).slerp(L.landQ, eT);
     const fwdL = new THREE.Vector3(0, 0, -1).applyQuaternion(L.ship.quaternion);
     const upL = new THREE.Vector3(0, 1, 0).applyQuaternion(L.ship.quaternion);
     G.camera.position.copy(L.ship.position).addScaledVector(upL, 0.9).addScaledVector(fwdL, 0.6);
     G.camera.quaternion.copy(L.ship.quaternion);
     const wh = document.getElementById('waveHud');
     if (wh) wh.textContent = L.phase === 'dock' ? 'DECK CREW HAS YOU — setting down' : 'FLARE… FLARE… touchdown';
-    if (L.landT > 2.8) endFlight(L.phase === 'dock' ? 'DOCKED' : 'LZ SECURED');
+    if (L.landT > T + 0.25) endFlight(L.phase === 'dock' ? 'DOCKED' : 'LZ SECURED');
     return;
   }
 
@@ -1055,21 +1069,29 @@ export function updateLandfall(dt) {
     const p = L.ship.position;
     const xC = (D.mouthX0 + D.mouthX1) / 2;
     const halfW = (D.mouthX1 - D.mouthX0) / 2;
+    // YOUR lane: each squad color flies its approach onto its OWN pad,
+    // so four ships can come home to four different corners of the deck
+    const laneX = Math.min(D.mouthX1 - 7, Math.max(D.mouthX0 + 7, L.boardAt?.x ?? xC));
     const inApproach = p.z > D.mouthZ + 2 && p.z < D.mouthZ + 130
       && Math.abs(p.x - xC) < halfW + 50 && p.y > -16 && p.y < 40 && L.vel.z < -2;
     if (inApproach) {
       L.approach = true;
-      const want = new THREE.Vector3((xC - p.x) * 0.9, (3.2 - p.y) * 0.7, -70).normalize();
+      const want = new THREE.Vector3((laneX - p.x) * 0.9, (3.2 - p.y) * 0.7, -70).normalize();
       const tq = new THREE.Quaternion().setFromUnitVectors(new THREE.Vector3(0, 0, -1), want);
       L.ship.quaternion.rotateTowards(tq, 0.5 * dt); // a nudge, not a grab
-      L.dockOk = L.speed <= 32 && Math.abs(p.x - xC) < halfW - 7 && p.y > 0.5 && p.y < 7.2;
+      L.dockOk = L.speed <= 32 && Math.abs(p.x - laneX) < 12 && p.y > 0.5 && p.y < 7.2;
     }
-    // the threshold: cross it clean or get thrown back out
+    // the threshold: cross it clean — on YOUR lane — or get thrown back out
     const inMouthX = p.x > D.mouthX0 + 4 && p.x < D.mouthX1 - 4;
     if (p.z <= D.mouthZ + 2 && p.z > D.mouthZ - 10 && L.vel.z < 0 && inMouthX && p.y > 0.3 && p.y < 8.5) {
-      if (L.speed <= 34 && Math.abs(p.x - xC) < halfW - 5) {
+      if (L.speed <= 34 && Math.abs(p.x - laneX) < 13) {
         L.phase = 'dock';
         L.landT = 0;
+        L.landDur = 3.4;
+        L.landFrom = L.ship.position.clone();
+        L.landV0 = L.vel.clone();
+        L.landQ0 = L.ship.quaternion.clone();
+        L.landMid = null;
         L.landAt = new THREE.Vector3(L.boardAt.x, 1.4, L.boardAt.z + 6);
         L.landQ = new THREE.Quaternion().setFromEuler(new THREE.Euler(0, (L.boardAt.yaw || 0) + Math.PI, 0));
         addMsg('Threshold clean — deck crew waving you to the pad.', 'gold');
@@ -1081,7 +1103,7 @@ export function updateLandfall(dt) {
       L.vel.set(0, 2, 26);
       L.speed = Math.min(L.speed, 24);
       if (L.speed > 30) { hurtBomber(8); if (!L) return; }
-      addMsg('WAVE OFF — under 30, centered, deck height. Go around.', 'bad');
+      addMsg('WAVE OFF — under 30, on your lane, deck height. Go around.', 'bad');
       G.shake = Math.max(G.shake || 0, 0.3);
     }
     // the rest of the deck slice is solid
@@ -1339,6 +1361,11 @@ export function updateLandfall(dt) {
     if (d2 < 26 && L.ship.position.y < CITY_Y + 40 && L.speed < 36) {
       L.phase = 'land';
       L.landT = 0;
+      L.landDur = 3.0;
+      L.landFrom = L.ship.position.clone();
+      L.landV0 = L.vel.clone();
+      L.landQ0 = L.ship.quaternion.clone();
+      L.landMid = null;
       L.landAt = new THREE.Vector3(LW.lzWorld.x, CITY_Y + 3, LW.lzWorld.z);
       const fwdY = new THREE.Vector3(0, 0, -1).applyQuaternion(L.ship.quaternion);
       L.landQ = new THREE.Quaternion().setFromEuler(new THREE.Euler(0, Math.atan2(-fwdY.x, -fwdY.z) + Math.PI, 0));
