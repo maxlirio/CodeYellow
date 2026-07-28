@@ -33,6 +33,29 @@ const WEAPONS = [
 ];
 let S = null;
 let hooks = { onCarrierLost: null };
+
+// FOUR ships on every flight deck, one color per squad member — you fly
+// YOURS, solo or co-op. Slot 0 is the host / solo pilot.
+export const SHIP_SLOTS = [
+  { name: 'TEAL', trim: 0x4fe8e0, body: 0x8f9aa8 },
+  { name: 'AMBER', trim: 0xffce2e, body: 0x9a948a },
+  { name: 'MAGENTA', trim: 0xff4fa0, body: 0x9a8f9c },
+  { name: 'VIRIDIAN', trim: 0x8aff5c, body: 0x8c9a90 },
+];
+function slotIds() {
+  const ids = [...(G.net.players?.keys() || [])];
+  if (!ids.includes('host')) ids.push('host');
+  return ids.sort((a, b) => (a === 'host' ? -1 : b === 'host' ? 1 : a < b ? -1 : 1));
+}
+export function mySlot() {
+  if (G.net.role === 'solo') return 0;
+  const i = slotIds().indexOf(myId());
+  return i < 0 ? 0 : i % 4;
+}
+export function slotOf(pid) {
+  const i = slotIds().indexOf(pid);
+  return i < 0 ? 0 : i % 4;
+}
 export function setSpaceHooks(h) { hooks = { ...hooks, ...h }; }
 
 // fighter difficulty TIERS — like sector depth, but for the sky
@@ -191,16 +214,16 @@ export function buildCarrier(aperture = null) {
 
 // a boxy dart fighter; hostile = hi-vis orange, friendly wingmates get blue trim.
 // Nose along -z for everyone.
-export function buildFighter(hostile = false, friendly = false, tier = null) {
+export function buildFighter(hostile = false, friendly = false, tier = null, tint = null) {
   const grp = new THREE.Group();
   const vis = new THREE.Group();
   vis.rotation.y = Math.PI;
   if (tier) vis.scale.setScalar(tier.scale);
   grp.add(vis);
   grp.userData.vis = vis;
-  const body = new THREE.MeshStandardMaterial({ color: hostile ? (tier?.body ?? 0xe8734d) : 0x9aa6b4, metalness: 0.3, roughness: 0.55 });
+  const body = new THREE.MeshStandardMaterial({ color: hostile ? (tier?.body ?? 0xe8734d) : (tint?.body ?? 0x9aa6b4), metalness: 0.3, roughness: 0.55 });
   const trim = new THREE.MeshStandardMaterial({
-    color: 0x111111, emissive: hostile ? (tier?.trim ?? 0xff3322) : (friendly ? 0x7fd8ff : 0x4fe8e0),
+    color: 0x111111, emissive: hostile ? (tier?.trim ?? 0xff3322) : (tint?.trim ?? (friendly ? 0x7fd8ff : 0x4fe8e0)),
     emissiveIntensity: hostile ? 2.6 : 1.6, toneMapped: false,
   });
   const M = (geo, mat, x, y, z, rx = 0, rz = 0, ry = 0) => {
@@ -231,28 +254,55 @@ export function buildFighter(hostile = false, friendly = false, tier = null) {
   return grp;
 }
 
-// BOMBER: fat, slow, green-lit, full of torpedoes
-export function buildBomber() {
+// THE HEAVY: a strike bomber in the SAME family as the dart — stretched
+// spine, broad swept deltas, four buried nacelles, a ventral bomb bay.
+// Friendly hulls take squad tints; hostiles wear the raiders' burnt scheme
+// with their own silhouette tells (intake ram, torpedo cheeks).
+export function buildBomber(hostile = true, tint = null) {
   const grp = new THREE.Group();
   const vis = new THREE.Group();
   vis.rotation.y = Math.PI;
   grp.add(vis);
   grp.userData.vis = vis;
-  const body = new THREE.MeshStandardMaterial({ color: 0xc9a23e, metalness: 0.35, roughness: 0.6 });
-  const trim = new THREE.MeshStandardMaterial({ color: 0x111111, emissive: 0x66ff44, emissiveIntensity: 2.4, toneMapped: false });
-  const M = (geo, mat, x, y, z, rx = 0) => {
+  const body = new THREE.MeshStandardMaterial({
+    color: hostile ? 0xd8864a : (tint?.body ?? 0x8f9aa8), metalness: 0.35, roughness: 0.55,
+  });
+  const trim = new THREE.MeshStandardMaterial({
+    color: 0x111111, emissive: hostile ? 0xff4422 : (tint?.trim ?? 0x4fe8e0),
+    emissiveIntensity: hostile ? 2.4 : 1.6, toneMapped: false,
+  });
+  const M = (geo, mat, x, y, z, rx = 0, rz = 0, ry = 0) => {
     const m = new THREE.Mesh(geo, mat);
-    m.position.set(x, y, z); m.rotation.x = rx;
+    m.position.set(x, y, z);
+    m.rotation.set(rx, ry, rz);
     vis.add(m); return m;
   };
-  M(new THREE.BoxGeometry(2.6, 1.6, 6.4), body, 0, 0, 0);          // slab fuselage
-  M(new THREE.BoxGeometry(1.4, 0.9, 2.2), trim, 0, 0.9, 1.6);      // green canopy hump
+  M(new THREE.BoxGeometry(1.15, 0.55, 5.4), body, 0, 0, 0.5);      // long spine
+  M(new THREE.BoxGeometry(0.85, 0.4, 1.6), body, 0, -0.08, -2.4);  // tail boat
+  const nose = M(new THREE.ConeGeometry(0.52, 2.8, 6), body, 0, -0.02, 4.4, Math.PI / 2);
+  nose.scale.x = 1.2; nose.scale.z = 0.55;
+  M(new THREE.BoxGeometry(0.6, 0.3, 1.35), trim, 0, 0.4, 1.9).name = 'canopy';
+  M(new THREE.BoxGeometry(0.66, 0.2, 0.6), body, 0, 0.36, 2.75);   // windscreen fairing
   for (const sx of [-1, 1]) {
-    M(new THREE.BoxGeometry(2.2, 0.3, 3.2), body, sx * 2.3, 0, -0.4);
-    M(new THREE.CylinderGeometry(0.55, 0.62, 2.6, 8), body, sx * 3.2, 0, -1.2, Math.PI / 2);
-    M(new THREE.BoxGeometry(0.8, 0.8, 0.16), trim, sx * 3.2, 0, -2.6);
+    M(new THREE.BoxGeometry(0.6, 0.09, 2.6), body, sx * 0.68, -0.06, 2.7, 0, 0, sx * -0.12); // chines
+    // broad swept deltas, inner + raked tip + tip blade
+    M(new THREE.BoxGeometry(3.0, 0.07, 2.9), body, sx * 1.7, -0.05, -0.3, 0, 0, sx * 0.55);
+    M(new THREE.BoxGeometry(1.4, 0.06, 1.6), body, sx * 3.3, -0.05, -1.5, 0, 0, sx * 0.55);
+    M(new THREE.BoxGeometry(0.16, 0.4, 1.2), trim, sx * 3.85, 0, -2.05, 0, 0, sx * 0.55);
+    // four buried nacelles (two per side), exhaust glow
+    for (const [nx, ny] of [[0.52, 0.12], [1.35, -0.02]]) {
+      M(new THREE.CylinderGeometry(0.26, 0.34, 2.3, 8), body, sx * nx, ny, -2.5, Math.PI / 2);
+      M(new THREE.BoxGeometry(0.46, 0.46, 0.14), trim, sx * nx, ny, -3.7);
+    }
+    M(new THREE.BoxGeometry(0.08, 0.85, 1.3), hostile ? trim : body, sx * 0.42, 0.55, -2.2, 0, sx * -0.4); // canted tails
   }
-  M(new THREE.BoxGeometry(1.2, 0.5, 2.8), trim, 0, -0.95, 0.6);    // torpedo rack glow
+  // ventral bomb bay: the reason she flies
+  M(new THREE.BoxGeometry(0.95, 0.42, 2.8), body, 0, -0.48, 0.7);
+  M(new THREE.BoxGeometry(0.8, 0.06, 2.5), trim, 0, -0.7, 0.7);
+  if (hostile) { // hostile tells: ram intake + torpedo cheeks
+    M(new THREE.BoxGeometry(0.5, 0.5, 1.4), trim, 0, -0.3, 3.4);
+    for (const sx of [-1, 1]) M(new THREE.CylinderGeometry(0.16, 0.16, 1.9, 6), trim, sx * 0.75, -0.3, 2.2, Math.PI / 2);
+  }
   return grp;
 }
 
@@ -282,6 +332,10 @@ export function startBoarding(npc, drill = false) {
     return;
   }
   const ud = bs.userData.boardShip;
+  if (ud.slot !== undefined && ud.slot !== mySlot()) {
+    addMsg(`That's the ${SHIP_SLOTS[ud.slot]?.name || '?'} bird — yours is the ${SHIP_SLOTS[mySlot()].name} one.`, 'bad');
+    return;
+  }
   ud.open = true; // canopy slides back (dungeon animates it)
   bs.updateMatrixWorld(true);
   const eye = bs.userData.seatEye || new THREE.Vector3(0, 2.0, 2.6);
@@ -367,7 +421,9 @@ function launchHandoff(sealedHold = false) {
     bs.position.set(ud.x, 0, ud.z);
     ud.open = false;
     if (bs.userData.canopyGroup) bs.userData.canopyGroup.position.copy(bs.userData.canClosed);
-    for (const ch of bs.children) ch.visible = true; // parked and whole for your return
+    for (const ch of bs.children) ch.visible = true; // whole again for the return
+    bs.visible = false;                               // the pad is EMPTY while you fly
+    from.boardAt.bsId = ud.id;
     SB = null;
     landfallHook(from);
     return;
@@ -376,11 +432,11 @@ function launchHandoff(sealedHold = false) {
   bs.position.set(ud.x, 0, ud.z);
   ud.open = false;
   if (bs.userData.canopyGroup) bs.userData.canopyGroup.position.copy(bs.userData.canClosed);
-  for (const ch of bs.children) ch.visible = true; // parked and whole for your return
+  for (const ch of bs.children) ch.visible = true; // whole again for the return
+  bs.visible = false;                               // …but GONE — you're flying it
+  boardAt.bsId = ud.id;
   SB = null;
-  flashScreen();
-  // a mouth launch already flew you out of a hangar — carry your speed and
-  // skip the carrier bay-room launch; a sealed hold catapults you from it
+  // no flash: the sky was prebuilt during the spool — the cut is invisible
   startSpaceFlight(null, false, drill, boardAt, { pre, ...(sealedHold ? {} : { carrySpeed: Math.max(26, speed) }) });
 }
 
@@ -521,6 +577,7 @@ function buildSpaceScene(lvl, comp) {
     const tier = TIERS[tierId];
     for (let i = 0; i < n; i++) {
       const f = buildFighter(true, false, tier);
+      f.scale.setScalar(1.8); // space ships match the ones on the deck
       place(f, 150);
       f.userData = {
         ...f.userData, i: idx++, type: 'fighter', tier: tierId, hp: tier.hp,
@@ -531,12 +588,25 @@ function buildSpaceScene(lvl, comp) {
     }
   }
   for (let i = 0; i < comp.bombers; i++) {
-    const f = buildBomber();
+    const f = buildBomber(true);
+    f.scale.setScalar(1.7);
     place(f, 260);
     f.userData = { ...f.userData, i: idx++, type: 'bomber', hp: 8, state: 'attack', stateT: 0, fireT: 2, speed: 13, aim: CAP.clone().add(new THREE.Vector3((Math.random() - 0.5) * 80, (Math.random() - 0.5) * 16, (Math.random() - 0.5) * 30)) };
     group.add(f); foes.push(f);
   }
-  return { group, ship, foes };
+  // YOUR SIDE flies too: allied darts working their own corners of the fight
+  // (they chip in, they don't carry you)
+  const allies = [];
+  if (comp.list.length) {
+    for (let i = 0; i < 3; i++) {
+      const a = buildFighter(false, true);
+      a.scale.setScalar(1.8);
+      place(a, 120);
+      a.userData = { ...a.userData, type: 'ally', aiT: Math.random() * 2, fireT: 1 + Math.random() * 2, target: null, speed: 30 + Math.random() * 8 };
+      group.add(a); allies.push(a);
+    }
+  }
+  return { group, ship, foes, allies };
 }
 
 export function startSpaceFlight(level = null, fromNet = false, drill = false, boardAt = null, opts = null) {
@@ -546,11 +616,11 @@ export function startSpaceFlight(level = null, fromNet = false, drill = false, b
   const lvl = pre?.lvl ?? level ?? (G.run.patrolLvl || 0) + 1;
   const comp = pre?.comp ?? (drill ? { name: 'DOCKING DRILL', list: [], bombers: 0 } : compositionFor(lvl));
   // prebuilt during the reactor spool (instant, no black gap) or built now
-  const { group, ship, foes } = pre?.scene ?? buildSpaceScene(lvl, comp);
+  const { group, ship, foes, allies } = pre?.scene ?? buildSpaceScene(lvl, comp);
   G.scene.add(group);
 
   S = {
-    group, ship, foes, bolts: [], fx: [], remote: new Map(),
+    group, ship, foes, allies: allies || [], bolts: [], fx: [], remote: new Map(),
     speed: 0, vel: new THREE.Vector3(0, 0, 0), bank: 0, weapon: 0, lock: null,
     hull: 100 + 25 * shipUp('hull'), maxHull: 100 + 25 * shipUp('hull'),
     maxSpeed: 70 + 8 * shipUp('engine'),
@@ -559,6 +629,13 @@ export function startSpaceFlight(level = null, fromNet = false, drill = false, b
     time0: G.time || 0, prevFog: G.scene.fog.density, prevBg: G.scene.background.getHex(), prevFar: G.camera.far,
     isHost: G.net.role !== 'guest',
   };
+  // the deck you launched from is not scenery in the void — hide the floor
+  // (it read as a moon with an unreachable battle below the dome)
+  const fsHide = G.floors.get(G.floor);
+  S.hidFs = fsHide || null;
+  if (fsHide) for (const grp2 of [fsHide.meshGroup, fsHide.enemyGroup, fsHide.lootGroup]) {
+    if (grp2) grp2.visible = false;
+  }
   G.camera.far = 2400;
   G.camera.updateProjectionMatrix();
   G.scene.fog.density = 0.00012;
@@ -595,6 +672,14 @@ function endSpaceFlight(result) {
   if (result === 'CLEARED') G.run.patrolLvl = Math.max(G.run.patrolLvl || 0, S.level);
   saveReport({ section: `VOID PATROL LV${S.level}`, result, kills: S.kills, credits, time: Math.round((G.time || 0) - S.time0) });
   if (G.net.role !== 'solo') netSend({ t: 'sleave' });
+  if (S.hidFs) for (const grp2 of [S.hidFs.meshGroup, S.hidFs.enemyGroup, S.hidFs.lootGroup]) {
+    if (grp2) grp2.visible = true;
+  }
+  // your bird comes home with you
+  if (S.boardAt?.bsId && S.hidFs?.boardShips) {
+    const bsBack = S.hidFs.boardShips.find((b) => b.userData.boardShip.id === S.boardAt.bsId);
+    if (bsBack) bsBack.visible = true;
+  }
   G.scene.remove(S.group);
   G.scene.fog.density = S.prevFog;
   G.scene.background.setHex(S.prevBg);
@@ -647,11 +732,11 @@ function explode(pos, big = false) {
   if (big) sfx.rumble();
 }
 
-function killFoe(f, broadcast = true) {
+function killFoe(f, broadcast = true, byAlly = false) {
   if (f.userData.hp > 0) f.userData.hp = 0;
   explode(f.position, f.userData.type === 'bomber');
   f.visible = false;
-  S.kills++;
+  if (!byAlly) S.kills++;
   if (broadcast && S.isHost && G.net.role !== 'solo') netSend({ t: 'sboom', i: f.userData.i });
 }
 
@@ -824,7 +909,8 @@ export function onSpaceNet(m, pid) {
   if (m.t === 'sp') {
     let r = S.remote.get(who);
     if (!r) {
-      const grp = buildFighter(false, true);
+      const grp = buildFighter(false, true, null, SHIP_SLOTS[slotOf(who)]);
+      grp.scale.setScalar(1.8);
       S.group.add(grp);
       r = { grp, tp: new THREE.Vector3(), tq: new THREE.Quaternion() };
       S.remote.set(who, r);
@@ -1075,6 +1161,48 @@ export function updateSpace(dt) {
     }
   }
 
+  // ALLIED DARTS: your side works its own corners of the sky. They pick a
+  // bandit, run it, and chip in — the fight is not yours alone.
+  for (const a of S.allies) {
+    const au = a.userData;
+    au.aiT -= dt;
+    if (!au.target || au.target.userData.hp <= 0 || au.aiT <= 0) {
+      const alive = S.foes.filter((f) => f.userData.hp > 0);
+      au.target = alive.length ? alive[Math.floor(Math.random() * alive.length)] : null;
+      au.aiT = 4 + Math.random() * 4;
+    }
+    const noseA = new THREE.Vector3(0, 0, -1).applyQuaternion(a.quaternion);
+    if (au.target) {
+      const dirA = au.target.position.clone().sub(a.position);
+      const dA = dirA.length();
+      dirA.normalize();
+      const tqA = new THREE.Quaternion().setFromUnitVectors(new THREE.Vector3(0, 0, -1), dirA);
+      a.quaternion.rotateTowards(tqA, (dA < 40 ? 0.35 : 0.8) * dt);
+      a.position.addScaledVector(noseA, au.speed * dt);
+      au.fireT -= dt;
+      if (au.fireT <= 0 && dA < 110 && noseA.angleTo(dirA) < 0.25) {
+        au.fireT = 2.2 + Math.random() * 2.2;
+        const bA = new THREE.Mesh(new THREE.BoxGeometry(0.14, 0.14, 2.4),
+          new THREE.MeshBasicMaterial({ color: 0x7fffd8, toneMapped: false }));
+        bA.position.copy(a.position).addScaledVector(noseA, 4);
+        bA.lookAt(a.position.clone().add(noseA));
+        // allies only deal REAL damage on the authoritative sim — guests see fire
+        bA.userData = S.isHost
+          ? { dir: noseA.clone(), vel: 190, life: 1.4, dmg: 1, mine: true, ally: true }
+          : { dir: noseA.clone(), vel: 190, life: 1.4, cosmetic: true, dir2: true };
+        S.group.add(bA);
+        S.bolts.push(bA);
+      }
+    } else {
+      a.position.addScaledVector(noseA, au.speed * 0.6 * dt);
+    }
+    if (a.position.length() > FIELD_R - 20) { // stay inside the dome
+      const inward = a.position.clone().negate().normalize();
+      const tqA = new THREE.Quaternion().setFromUnitVectors(new THREE.Vector3(0, 0, -1), inward);
+      a.quaternion.rotateTowards(tqA, 1.2 * dt);
+    }
+  }
+
   // ---- bolts & torpedoes ----
   for (let i = S.bolts.length - 1; i >= 0; i--) {
     const b = S.bolts[i];
@@ -1094,11 +1222,11 @@ export function updateSpace(dt) {
     } else if (!dead && b.userData.mine) {
       for (const f of S.foes) {
         if (f.userData.hp <= 0) continue;
-        const rad = f.userData.type === 'bomber' ? 3.4 : 2.4 * (TIERS[f.userData.tier]?.scale ?? 1);
+        const rad = (f.userData.type === 'bomber' ? 3.4 : 2.4 * (TIERS[f.userData.tier]?.scale ?? 1)) * 1.8;
         if (b.position.distanceTo(f.position) < rad) {
           if (S.isHost) {
             f.userData.hp -= (b.userData.dmg || 1);
-            if (f.userData.hp <= 0) killFoe(f);
+            if (f.userData.hp <= 0) killFoe(f, true, !!b.userData.ally);
           } else {
             netSend({ t: 'sdmg', i: f.userData.i, d: b.userData.dmg || 1 });
           }

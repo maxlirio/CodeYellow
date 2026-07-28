@@ -10,7 +10,7 @@ import * as THREE from 'three';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import { CELL, PLATFORM_H } from './config.js';
 import { makePiece } from './assets.js';
-import { buildCarrier, buildFighter, buildBomber, cockpitKit } from './space.js';
+import { buildCarrier, buildFighter, buildBomber, cockpitKit, SHIP_SLOTS } from './space.js';
 import { buildWorldBelow } from './landfall.js';
 
 const WALL_H = 7;    // bulkhead height
@@ -130,22 +130,24 @@ function buildBoardship(d, mats) {
   const grp = new THREE.Group();
   grp.position.set(d.x, 0, d.z);
   grp.rotation.y = d.yaw || 0;
-  grp.userData.boardShip = { id: d.id, x: d.x, z: d.z, yaw: d.yaw || 0, open: false };
+  grp.userData.boardShip = { id: d.id, x: d.x, z: d.z, yaw: d.yaw || 0, open: false, slot: d.slot };
   const B = (mat, sx, sy, sz, x, y, z, ry = 0, rx = 0) => {
     const m = new THREE.Mesh(new THREE.BoxGeometry(sx, sy, sz), typeof mat === 'string' ? mats[mat] : mat);
     m.position.set(x, y, z);
     m.rotation.set(rx, ry, 0);
     grp.add(m); return m;
   };
-  // landing pad ring
-  const ring = new THREE.Mesh(new THREE.CylinderGeometry(6.4, 6.4, 0.05, 26, 1, true), mats.accent);
+  // landing pad ring — glows in the OWNER'S squad color
+  const tint = SHIP_SLOTS[d.slot ?? 0];
+  const ring = new THREE.Mesh(new THREE.CylinderGeometry(6.4, 6.4, 0.05, 26, 1, true),
+    new THREE.MeshBasicMaterial({ color: tint.trim, toneMapped: false }));
   ring.position.y = 0.05;
   grp.add(ring);
-  // the airframe itself — the flight dart at 2x (or the fat BOMBER on a
-  // landfall deck), nose +z, tiny canopy hidden (the sliding one replaces it)
-  const inner = d.bomber ? buildBomber() : buildFighter(false);
+  // the airframe itself — the SAME dart/heavy you fly, in your color,
+  // nose +z, tiny canopy hidden (the sliding one replaces it)
+  const inner = d.bomber ? buildBomber(false, tint) : buildFighter(false, false, null, tint);
   inner.rotation.y = Math.PI;
-  inner.scale.setScalar(d.bomber ? 1.5 : 2.0);
+  inner.scale.setScalar(d.bomber ? 1.7 : 2.0);
   inner.position.y = d.bomber ? 1.3 : 1.2;
   inner.traverse((n) => { if (n.name === 'canopy') n.visible = false; });
   grp.add(inner);
@@ -347,14 +349,14 @@ export function buildShipStatic(fs) {
       box('accent', x, PLATFORM_H - 0.4, z, CELL * 0.9, 0.08, 0.1); // underglow line
       // support columns on alternating cells
       if ((cx + cy) % 2 === 0) box('frame', x, (PLATFORM_H - 0.4) / 2, z, 0.6, PLATFORM_H - 0.4, 0.6);
-      // railings along open edges (not toward other elev cells or their ramps)
+      // NO railings — they kept fencing off lift tops and walk lines.
+      // A thin edge glow marks the drop instead.
       for (const [dx, dy] of DIRS) {
         if (isElev(cx + dx, cy + dy)) continue;
         if (at(cx + dx, cy + dy) === 6) continue; // ramp joins here
         const ex = x + dx * (CELL / 2 - 0.1), ez = z + dy * (CELL / 2 - 0.1);
         const along = dx !== 0;
-        box('frame', ex, PLATFORM_H + 0.55, ez, along ? 0.1 : CELL, 1.1, along ? CELL : 0.1);
-        box('accent', ex, PLATFORM_H + 1.12, ez, along ? 0.09 : CELL, 0.07, along ? CELL : 0.09);
+        box('accent', ex, PLATFORM_H - 0.05, ez, along ? 0.09 : CELL, 0.06, along ? CELL : 0.09);
       }
     }
   }
@@ -641,11 +643,8 @@ export function buildShipStatic(fs) {
       stars.position.set((mx0 + mx1) / 2, 10, mz + 92);
       stars.rotation.y = Math.PI; // face back into the hangar
       group.add(stars);
-      // THE BATTLE OUTSIDE: a live dogfight raging beyond the mouth — it was
-      // already underway when you got here, and it doesn't stop for you
-      addWar(group, {
-        x0: mx0 - 30, x1: mx1 + 30, y0: -4, y1: 26, z0: mz + 10, z1: mz + 80,
-      }, 5, 2, 0.85);
+      // NO fake battle staged outside the mouth — what you see out there is
+      // what's actually there; the real fight is the one you launch into
     }
   }
 

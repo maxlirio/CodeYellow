@@ -371,7 +371,7 @@ export function generateShipDeck(seedStr, floor) {
   // slides open on E (no walk-in — you climb into the seat). Local frame:
   // nose +z; yaw rotates the whole thing (0 or ±π/2, colliders stay AABB).
   let bsN = 0;
-  const addBoardship = (cxw, cyw, yaw, bomber = false) => {
+  const addBoardship = (cxw, cyw, yaw, bomber = false, slot = undefined) => {
     const id = 'bs' + (bsN++);
     const c0 = Math.cos(yaw), s0 = Math.sin(yaw);
     const P = (lx, lz, hx, hz, y0, h) => {
@@ -382,7 +382,7 @@ export function generateShipDeck(seedStr, floor) {
     P(0, 1.2, 1.05, 5.6, 0, 2.3);   // fuselage
     P(0, 8.0, 0.6, 1.9, 0, 1.5);    // needle nose
     for (const sx of [-1, 1]) P(sx * 3.4, -1.6, 2.5, 2.3, 0, 0.9); // wing slabs
-    shipDecor.push({ kind: 'boardship', x: cxw, z: cyw, yaw, id, bomber });
+    shipDecor.push({ kind: 'boardship', x: cxw, z: cyw, yaw, id, bomber, slot });
     deckNpcs.push({ model: null, noModel: true, sign: false, name: bomber ? 'Bomber' : 'Fighter', shop: 'board_ship',
       label: bomber ? 'BOARD BOMBER — FLY THE RUN' : 'BOARD FIGHTER — FLY THE VOID PATROL', x: cxw - 8.4 * s0, z: cyw - 8.4 * c0 });
   };
@@ -461,16 +461,17 @@ export function generateShipDeck(seedStr, floor) {
     } else if (l.role === 'bay') {
       // THE HANGAR: a row of parked fighters, noses at the ONE big mouth.
       // Every one of them is boardable.
-      const n = landfallMode ? 1 : Math.min(3, Math.max(2, Math.floor((l.w - 6) / 8)));
+      const n = 4; // one bird per squad slot — fighters here, bombers on landfall
       const rowCy = l.y + Math.floor(l.h * 0.5);
       const step = Math.floor((l.w - 6) / n);
+      let slot = 0;
       for (let i = 0; i < n; i++) {
         const cx2 = l.x + 3 + Math.floor(step / 2) + i * step, cy2 = rowCy;
         let open = true;
         for (let dy = -2; dy <= 2; dy++) for (let dx = -2; dx <= 2; dx++)
           if (at(cx2 + dx, cy2 + dy) !== FLOOR || elev[idxOf(cx2 + dx, cy2 + dy)]) open = false;
         if (!open) continue;
-        addBoardship(cx2 * CELL, cy2 * CELL, 0, landfallMode);
+        addBoardship(cx2 * CELL, cy2 * CELL, 0, landfallMode, slot++);
         for (let dy = -2; dy <= 2; dy++) for (let dx = -2; dx <= 2; dx++) occupied.add(idxOf(cx2 + dx, cy2 + dy));
       }
       for (let i = 0; i < rng.int(3, 5); i++) crate(inset.x + rng.int(0, inset.w - 1), inset.y + 1 + rng.int(0, 2), false);

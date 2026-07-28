@@ -188,34 +188,22 @@ function drawStructural(kit, grid) {
   for (const c of grid.colliders) {
     if (c.stair) kit.box('frame', c.x, (c.y0 + c.h) / 2 + (c.h - c.y0) * 0, c.z, c.hx * 2, c.h, c.hz * 2);
     else if (c.deck && c.bridge) {
-      // a BRIDGE reads as a bridge: thin plate, truss chords, X-braced sides,
-      // an under-spine, and low rail bars on posts (low — the drop is the point)
+      // a BRIDGE reads as a bridge: thin plate, truss chords, an under-spine.
+      // NO rails or posts anywhere — they kept fencing off the walk lines;
+      // a glowing edge strip marks the drop instead.
       const alongX = c.hx >= c.hz;
       const len = Math.max(c.hx, c.hz) * 2, across = Math.min(c.hx, c.hz) * 2;
       kit.box('floor', c.x, c.h - 0.1, c.z, c.hx * 2, 0.2, c.hz * 2);
       kit.box('frame', c.x, c.h - 0.42, c.z, alongX ? len * 0.96 : across * 0.4, 0.5, alongX ? across * 0.4 : len * 0.96);
       for (const sd of [-1, 1]) {
         const ox = alongX ? 0 : sd * (across / 2 - 0.08), oz = alongX ? sd * (across / 2 - 0.08) : 0;
-        kit.box('frame', c.x + ox, c.h + 0.72, c.z + oz, alongX ? len : 0.09, 0.08, alongX ? 0.09 : len); // rail bar
         kit.box('frame', c.x + ox, c.h - 0.28, c.z + oz, alongX ? len : 0.14, 0.36, alongX ? 0.14 : len); // side chord
-        const nPost = Math.max(2, Math.floor(len / 2.6));
-        for (let i = 0; i <= nPost; i++) {
-          const t = -len / 2 + (i / nPost) * len;
-          kit.box('frame', c.x + (alongX ? t : ox), c.h + 0.36, c.z + (alongX ? oz : t), 0.09, 0.72, 0.09);
-        }
+        kit.box('accent', c.x + ox, c.h + 0.02, c.z + oz, alongX ? len : 0.09, 0.05, alongX ? 0.09 : len); // edge glow
       }
     } else if (c.deck) {
       kit.box('floor', c.x, c.h - 0.2, c.z, c.hx * 2, 0.4, c.hz * 2);
       kit.box('accent', c.x, c.h - 0.42, c.z, c.hx * 2 * 0.9, 0.06, 0.12);
     } else if (c.wall) kit.box('wall', c.x, (c.y0 + c.h) / 2, c.z, c.hx * 2, c.h - c.y0, c.hz * 2);
-  }
-  // ladders: side rails + rungs, facing their normal
-  for (const L of grid.ladders || []) {
-    const px = -L.nz, pz = L.nx; // perpendicular (rail offset direction)
-    const mid = (L.y0 + L.y1) / 2, hgt = L.y1 - L.y0;
-    for (const sd of [-1, 1]) kit.box('frame', L.x + px * sd * 0.42, mid, L.z + pz * sd * 0.42, 0.12, hgt + 0.6, 0.12);
-    for (let y = L.y0 + 0.35; y < L.y1; y += 0.42) kit.box('frame', L.x, y, L.z, Math.abs(px) ? 0.86 : 0.1, 0.07, Math.abs(pz) ? 0.86 : 0.1);
-    kit.box('accent', L.x, L.y1 + 0.15, L.z, Math.abs(px) ? 0.9 : 0.14, 0.07, Math.abs(pz) ? 0.9 : 0.14);
   }
 }
 
@@ -383,11 +371,7 @@ function genSecurity(seed, diff = 0) {
   // CENTRAL GUARD TOWER: round, solid below, platform on top at 8
   const towerR = 8.5;
   deck(grid, cw, cw, towerR + 1.6, towerR + 1.6, 8); // tower top (square deck approximates)
-  // parapet
-  wall3(grid, cw, cw - towerR - 1.4, towerR + 1.6, 0.3, 8, 9.1);
-  wall3(grid, cw, cw + towerR + 1.4, towerR + 1.6, 0.3, 8, 9.1);
-  wall3(grid, cw - towerR - 1.4, cw, 0.3, towerR + 1.6, 8, 9.1);
-  wall3(grid, cw + towerR + 1.4, cw, 0.3, towerR + 1.6, 8, 9.1);
+  // NO parapets — they fenced off the bridge landings
 
   // GALLERY RING at 8u around the perimeter, 2 cells wide (walk the wall)
   const galInner = (R - 3.4) * CELL, galOuter = (R - 0.8) * CELL;
@@ -500,10 +484,6 @@ function buildSecurity(fs) {
     kit.box('accent', bx, 3.3, bz, 1.2, 0.1, 0.1, ry);
   }
   drawStructural(kit, g);
-  // gallery rail (inner edge)
-  const rail = new THREE.Mesh(new THREE.CylinderGeometry((R - 3.6) * CELL, (R - 3.6) * CELL, 0.1, 40, 1, true), kit.mats.accent);
-  rail.position.set(cw, 9.1, cw);
-  group.add(rail);
   extractionPad(kit, g.stairs.x, g.stairs.z, 0);
   kit.finish(group);
   for (const gl of g.gravlifts) liftVisual(group, kit, gl);
@@ -713,18 +693,16 @@ function genEngine(seed) {
     // a small landing ledge on each side wall where the ladders bolt on
     deck(grid, westX, pz, 1.4, 1.6, y, 0.3);
     deck(grid, eastX, pz, 1.4, 1.6, y, 0.3);
-    // ladder DOWN from the previous level, alternating ends; the first
-    // drops from the entry gantry's east corner
+    // an EXTRA-TALL grav lift at alternating ends rides the full drop from
+    // pit floor to the level above — step on anywhere along its beam
     const lx = i % 2 === 0 ? eastX : westX;
     const fromY = i === 0 ? DEPTH : lvls[i - 1];
     const fromZ = i === 0 ? 2.9 * CELL : pylonZ[i - 1];
-    // ladder shaft runs along the side wall between the two z positions:
-    // a catwalk ledge bridges the gap at the LOWER level
-    ladder(grid, lx, fromZ + (pz - fromZ) * 0.08, y, fromY, lx < midX ? 1 : -1, 0);
+    lift(grid, lx, fromZ + (pz - fromZ) * 0.16, fromY);
     deck(grid, lx, (fromZ + pz) / 2, 1.1, (pz - fromZ) / 2 + 1.8, y, 0.3);
   }
-  // last drop: ladder from the lowest bridge to the pit floor, east end
-  ladder(grid, eastX, pylonZ[3] + 0.6 * CELL, 0, lvls[3], -1, 0);
+  // and one at the deep end so the pit floor is never a one-way trip
+  lift(grid, eastX, pylonZ[3] + 0.6 * CELL, lvls[3]);
 
   // extraction: at the FAR end of the pit floor, past everything
   const ez = H - 3;
@@ -926,11 +904,9 @@ function buildWeapons(fs) {
   for (let i = 0; i < Math.floor(g.w / 6); i++) kit.box('panel', (5 + i * 6) * CELL, CEIL - 0.05, H / 2, 6, 0.1, 5);
   // upper-floor dressing: well guard rails + under-lighting strips
   for (const well of g.wells) {
-    for (const sd of [-1, 1]) {
+    for (const sd of [-1, 1]) { // NO rails — a bright edge strip marks the well
       const wz = midZ + sd * 2.7 * CELL;
-      kit.box('frame', well.x, UP + 0.55, wz, well.hx * 2, 0.1, 0.14);
-      kit.box('accent', well.x, UP + 1.05, wz, well.hx * 2, 0.07, 0.1);
-      for (let t = -well.hx; t <= well.hx; t += 3.2) kit.box('frame', well.x + t, UP + 0.5, wz, 0.1, 1.0, 0.1);
+      kit.box('accent', well.x, UP + 0.04, wz, well.hx * 2, 0.06, 0.12);
     }
     kit.box('accent', well.x, UP - 0.5, midZ, well.hx * 2 * 0.92, 0.08, 0.14);
   }

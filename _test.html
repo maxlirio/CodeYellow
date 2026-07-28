@@ -267,7 +267,7 @@ try {
       cargo: (f) => f.grid.gravlifts.length >= 3 && f.grid.colliders.some(c => c.h >= 6), // climbable stacks
       security: (f) => f.grid.colliders.some(c => c.deck && c.h === 8), // the 8u gallery ring
       hab: (f) => f.grid.colliders.some(c => c.stair) && f.enemySpawns.some(e => e.y > 0), // balcony fights
-      engine: (f) => f.grid.spawnY === 28 && f.grid.ladders.length >= 5 && f.grid.colliders.some(c => c.bridge), // the power shaft: ladders + thin bridges
+      engine: (f) => f.grid.spawnY === 28 && f.grid.gravlifts.length >= 4 && f.grid.colliders.some(c => c.bridge), // the power shaft: tall lifts + thin bridges
       weapons: (f) => f.traps.length >= 8 && f.grid.colliders.some(c => c.deck), // hazard gauntlet + galleries
     };
     for (const [sid, check] of Object.entries(secChecks)) {

@@ -29,7 +29,8 @@ export async function wireHandlers() {
   const machines = await import('./machines.js');
   const commander = await import('./commander.js');
   const space = await import('./space.js');
-  H = { player, enemies, loot, proj, fx, spells, walls, minions, horde, builds, machines, commander, space };
+  const landfall = await import('./landfall.js');
+  H = { player, enemies, loot, proj, fx, spells, walls, minions, horde, builds, machines, commander, space, landfall };
 }
 
 // CodeBlue lesson: if a guest ever references an entity it doesn't have (missed
@@ -231,6 +232,12 @@ function handleAsHost(conn, m) {
       H?.space.onSpaceNet(m, pid);
       if (m.t !== 'sdmg') relay(conn, { ...m, pid });
       break;
+    case 'lfp':
+    case 'lfhit':
+    case 'lfleave':
+      H?.landfall.onLandfallNet(m, pid);
+      relay(conn, { ...m, pid });
+      break;
     case 'pdead': {
       const p = G.net.players.get(pid);
       addMsg(`${p?.name || 'A companion'} has fallen!`, 'bad');
@@ -346,6 +353,11 @@ function handleAsGuest(m) {
     case 'slost':
     case 'sleave':
       H?.space.onSpaceNet(m, m.pid);
+      break;
+    case 'lfp':
+    case 'lfhit':
+    case 'lfleave':
+      H?.landfall.onLandfallNet(m, m.pid);
       break;
     case 'mission':
       callbacks.onMission?.(m);

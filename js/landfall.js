@@ -10,12 +10,13 @@
 // descend, and the ship's voice clears you down to the bay.
 import * as THREE from 'three';
 import { G } from './state.js';
+import { netSend } from './net.js';
 import { addMsg, refreshHud } from './ui.js';
 import { sfx } from './audio.js';
 import { saveReport } from './bridge.js';
 import { landfallPortalReady } from './missions.js';
 import {
-  buildBomber, buildCarrier, cockpitKit, drawLockAt, hideLockWidgets, setLandfallHook, flashScreen,
+  buildBomber, buildCarrier, cockpitKit, drawLockAt, hideLockWidgets, setLandfallHook, flashScreen, SHIP_SLOTS, mySlot, slotOf,
 } from './space.js';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 
@@ -491,7 +492,7 @@ function deckInfo() {
 
 function startFlight(from) {
   const fs = G.floors.get(G.floor);
-  const ship = buildBomber();
+  const ship = buildBomber(false, SHIP_SLOTS[mySlot()]);
   ship.userData.vis.visible = false;
   const kit = cockpitKit();
   kit.position.set(0, 0.9, -0.6);
@@ -506,7 +507,7 @@ function startFlight(from) {
     maxSpeed: 56 + 6 * shipUp('engine'),
     speed: Math.max(20, from.speed), vel: new THREE.Vector3(), bank: 0, lock: null,
     bombsAway: [], flak: [], fx: [], phase: 'run', t: 0, landT: 0, dropCd: 0, sightFlash: 0,
-    time0: G.time || 0,
+    time0: G.time || 0, netT: 0, remote: new Map(),
   };
   const fwd = new THREE.Vector3(0, 0, -1).applyQuaternion(L.ship.quaternion);
   L.vel.copy(fwd).multiplyScalar(L.speed);
@@ -526,6 +527,13 @@ function endFlight(result) {
   if (!L) return;
   const fs = L.fs;
   fs.meshGroup.remove(L.ship);
+  for (const r of L.remote.values()) fs.meshGroup.remove(r.grp);
+  if (G.net.role !== 'solo') netSend({ t: 'lfleave' });
+  // your bomber is back on its pad
+  if (L.boardAt?.bsId && fs.boardShips) {
+    const bsBack = fs.boardShips.find((b) => b.userData.boardShip.id === L.boardAt.bsId);
+    if (bsBack) bsBack.visible = true;
+  }
   for (const b of L.bombsAway) fs.meshGroup.remove(b);
   for (const f of L.flak) if (f.mesh) fs.meshGroup.remove(f.mesh);
   for (const e of L.fx) fs.meshGroup.remove(e.mesh);
@@ -625,6 +633,39 @@ function impactPoint(out) {
   const fwd = new THREE.Vector3(0, 0, -1).applyQuaternion(L.ship.quaternion);
   out.set(L.ship.position.x + fwd.x * L.speed * t, CITY_Y, L.ship.position.z + fwd.z * L.speed * t);
   return out;
+}
+
+// ---------------- co-op sync ----------------
+export function onLandfallNet(m, pid) {
+  if (m.t === 'lfhit' && LW) {
+    const t = LW.targets[m.i];
+    if (t && t.hp > m.hp) {
+      t.hp = m.hp;
+      if (t.hp <= 0) {
+        t.grp.visible = false;
+        const left = LW.targets.filter((x) => x.hp > 0).length;
+        addMsg(`Squadmate splash — ${left} targets left.`, 'gold');
+        if (!left) {
+          const lz = LW.world.getObjectByName('lzBeacon');
+          if (lz) lz.material.opacity = 0.3;
+        }
+      }
+    }
+  } else if (m.t === 'lfp' && L) {
+    let r = L.remote.get(pid);
+    if (!r) {
+      const grp = buildBomber(false, SHIP_SLOTS[slotOf(pid)]);
+      grp.scale.setScalar(1);
+      L.fs.meshGroup.add(grp);
+      r = { grp, tp: new THREE.Vector3(), tq: new THREE.Quaternion() };
+      L.remote.set(pid, r);
+    }
+    r.tp.fromArray(m.p);
+    r.tq.fromArray(m.q);
+  } else if (m.t === 'lfleave' && L) {
+    const r = L.remote.get(pid);
+    if (r) { L.fs.meshGroup.remove(r.grp); L.remote.delete(pid); }
+  }
 }
 
 // ---------------- the bombsight monitor ----------------
@@ -824,6 +865,7 @@ export function updateLandfall(dt) {
         if (t.hp <= 0) continue;
         if (Math.hypot(b.position.x - t.pos.x, b.position.z - t.pos.z) < 16) {
           t.hp--;
+          if (G.net.role !== 'solo') netSend({ t: 'lfhit', i: LW.targets.indexOf(t), hp: t.hp });
           if (t.hp <= 0) {
             boom(t.pos.clone().setY(CITY_Y + 4), true);
             t.grp.visible = false;
@@ -909,6 +951,20 @@ export function updateLandfall(dt) {
       L.landQ = new THREE.Quaternion().setFromEuler(new THREE.Euler(0, Math.atan2(-fwdY.x, -fwdY.z) + Math.PI, 0));
       addMsg('LZ acquired — flaring for touchdown.', 'gold');
       return;
+    }
+  }
+
+  // co-op: squadmates' bombers fly the same sky
+  if (G.net.role !== 'solo') {
+    L.netT -= dt;
+    if (L.netT <= 0) {
+      L.netT = 0.12;
+      const p2 = L.ship.position, q2 = L.ship.quaternion;
+      netSend({ t: 'lfp', p: [+p2.x.toFixed(1), +p2.y.toFixed(1), +p2.z.toFixed(1)], q: [+q2.x.toFixed(3), +q2.y.toFixed(3), +q2.z.toFixed(3), +q2.w.toFixed(3)] });
+    }
+    for (const r of L.remote.values()) {
+      r.grp.position.lerp(r.tp, Math.min(1, dt * 8));
+      r.grp.quaternion.slerp(r.tq, Math.min(1, dt * 8));
     }
   }
 

@@ -544,10 +544,11 @@ function simulateEnemy(e, fs, players, dt, mine) {
           const to = new THREE.Vector3(t.pos.x, t.pos.y + 1.3, t.pos.z);
           const dir = to.sub(from).normalize();
           const bolt = {
-            x: from.x + dir.x * 0.8, y: from.y, z: from.z + dir.z * 0.8,
+            // the round leaves along the BARREL (3D), not beside it — and a
+            // steep shot flies FAST, so aiming up never reads as a lobbed ball
+            x: from.x + dir.x * 0.8, y: from.y + dir.y * 0.8, z: from.z + dir.z * 0.8,
             dirX: dir.x, dirY: dir.y, dirZ: dir.z,
-            // lasers are FAST — a 13 u/s energy bolt reads as a lobbed ball
-            speed: e.cfg.boltSpeed || (e.cfg.boltVis === 'laser' ? 30 : 16),
+            speed: (e.cfg.boltSpeed || (e.cfg.boltVis === 'laser' ? 30 : 16)) * (1 + Math.abs(dir.y) * 0.9),
             dmg: e.dmg, owner: 'enemy',
             color: e.cfg.boltColor || (e.cfg.slowBolt ? 0x66ccff : 0x9944ff),
             vis: e.cfg.boltVis || (e.cfg.slowBolt ? 'shard' : 'wisp'),
