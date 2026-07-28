@@ -22,8 +22,8 @@ import {
   onRemoteMission, onRemoteMissionEnd, beginSortie,
 } from './missions.js';
 import { openTrainRoom, setSkillHooks } from './skills.js';
-import { updateSpace, spaceMouse, spaceFire, inSpace, startSpaceFlight, setSpaceHooks, spaceSetWeapon, startBoarding, spaceCycleLock } from './space.js';
-import { startArrival, updateArrival, updateLandfall, inLandfall, landfallCycleLock, landfallDrop } from './landfall.js';
+import { updateSpace, spaceMouse, spaceFire, inSpace, startSpaceFlight, setSpaceHooks, spaceSetWeapon, startBoarding, spaceCycleLock, spaceHomeLock } from './space.js';
+import { startArrival, updateArrival, updateLandfall, inLandfall, landfallCycleLock, landfallTrigger, landfallSetWeapon, landfallHomeLock } from './landfall.js';
 import { initViewmodel, updateViewmodel } from './viewmodel.js';
 import { updateWalls, clearWalls } from './walls.js';
 import { initFloorTraps, updateTraps } from './traps.js';
@@ -1141,9 +1141,10 @@ function setupInput() {
   addEventListener('keydown', (e) => {
     G.keys[e.code] = true;
     if (G.mode === 'space') {
-      if (e.code.startsWith('Digit')) { spaceSetWeapon(+e.code.slice(5) - 1); return; }
+      if (e.code.startsWith('Digit')) { (inLandfall() ? landfallSetWeapon : spaceSetWeapon)(+e.code.slice(5) - 1); return; }
       if (e.code === 'KeyT') { (inLandfall() ? landfallCycleLock : spaceCycleLock)(); return; }
-      if (e.code === 'Space' && inLandfall()) { e.preventDefault(); if (!e.repeat) landfallDrop(); return; }
+      if (e.code === 'KeyR') { (inLandfall() ? landfallHomeLock : spaceHomeLock)(); return; }
+      if (e.code === 'Space' && inLandfall()) { e.preventDefault(); if (!e.repeat) landfallTrigger(); return; }
       if (e.code.startsWith('Arrow') || e.code === 'Space') { e.preventDefault(); return; }
     }
     if (e.code === 'Tab') { e.preventDefault(); toggleInventory(); return; }

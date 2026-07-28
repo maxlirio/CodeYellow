@@ -16,7 +16,7 @@ import { sfx } from './audio.js';
 import { saveReport } from './bridge.js';
 import { landfallPortalReady } from './missions.js';
 import {
-  buildBomber, buildCarrier, cockpitKit, drawLockAt, hideLockWidgets, setLandfallHook, flashScreen, SHIP_SLOTS, mySlot, slotOf,
+  buildBomber, buildFighter, buildCarrier, cockpitKit, drawLockAt, hideLockWidgets, setLandfallHook, flashScreen, SHIP_SLOTS, mySlot, slotOf,
 } from './space.js';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 
@@ -72,8 +72,6 @@ export function buildWorldBelow(group, grid) {
     new THREE.MeshStandardMaterial({ color: 0x94875c, metalness: 0.2, roughness: 0.8 }),  // yellow-brown
     new THREE.MeshStandardMaterial({ color: 0x6e7a5a, metalness: 0.2, roughness: 0.85 }), // green-grey
   ];
-  const winM = new THREE.MeshBasicMaterial({ color: 0xfff2c8, toneMapped: false });
-  const hiveM = new THREE.MeshBasicMaterial({ color: 0x35e0c0, toneMapped: false });
 
   // the ground runs to the HAZE, not to an edge: a huge disc, fog eats the rim
   const ground = new THREE.Mesh(new THREE.CylinderGeometry(2800, 2800, 2, 48), matGround);
@@ -88,46 +86,73 @@ export function buildWorldBelow(group, grid) {
     world.add(p);
   }
 
-  // the city: bright futuristic blocks in the planet's own colors
-  const buckets = bldMats.map(() => []);
-  const winG = [], hiveG = [];
-  const push = (arr, sx, sy, sz, x, y, z) => {
+  // THE CITY, its own thing: pale concrete, steel, and glass — NOT the
+  // swamp's palette. It sits on its own district plate. Center-city
+  // buildings are INDIVIDUAL, damageable meshes (scorch -> rumble ->
+  // collapse); the outer ring is merged scenery.
+  const conc = [0xb8bdc4, 0xd0d4da, 0x8fa3b8, 0xa8a49c].map((c) =>
+    new THREE.MeshStandardMaterial({ color: c, metalness: 0.15, roughness: 0.75 }));
+  const glassM2 = new THREE.MeshBasicMaterial({ color: 0x9fe8ff, toneMapped: false });
+  const neonMats = [0xff4fa0, 0xffce2e, 0x4fe8e0].map((c) => new THREE.MeshBasicMaterial({ color: c, toneMapped: false }));
+  const hiveM = new THREE.MeshBasicMaterial({ color: 0x35e0c0, toneMapped: false });
+  const TILE = 44, N = 26, HALF = (N * TILE) / 2;
+  // district plate + asphalt street grid
+  const plate = new THREE.Mesh(new THREE.BoxGeometry(N * TILE + 30, 1.6, N * TILE + 30),
+    new THREE.MeshStandardMaterial({ color: 0x6d7178, metalness: 0.1, roughness: 0.9 }));
+  plate.position.y = 0.3;
+  world.add(plate);
+  const streetG = [];
+  const pushG = (arr, sx, sy, sz, x, y, z) => {
     const g2 = new THREE.BoxGeometry(sx, sy, sz);
     g2.translate(x, y, z);
     arr.push(g2);
   };
-  const TILE = 44, N = 26, HALF = (N * TILE) / 2;
-  const streetG = [];
-  for (let i = 0; i <= N; i++) { // the street grid — the city reads as a CITY from above
-    push(streetG, N * TILE, 0.3, 5, 0, 0.15, i * TILE - HALF);
-    push(streetG, 5, 0.3, N * TILE, i * TILE - HALF, 0.15, 0);
+  for (let i = 0; i <= N; i++) {
+    pushG(streetG, N * TILE, 0.4, 6, 0, 1.15, i * TILE - HALF);
+    pushG(streetG, 6, 0.4, N * TILE, i * TILE - HALF, 1.15, 0);
   }
+  const farG = conc.map(() => []);
+  const winG = [], hiveG = [], neonG = [[], [], []];
+  const buildings = []; // damageable center-city records
+  const DMG_R = 300;    // inside this radius every building is its own mesh
   for (let ty = 0; ty < N; ty++) for (let tx = 0; tx < N; tx++) {
     const cx = tx * TILE - HALF + TILE / 2, cz = ty * TILE - HALF + TILE / 2;
     if (rnd() < 0.3) continue;
     const n = 1 + Math.floor(rnd() * 3);
     for (let b = 0; b < n; b++) {
-      const w = 8 + rnd() * 16, d = 8 + rnd() * 16, h = 8 + rnd() * rnd() * 54;
-      const ox = (rnd() - 0.5) * (TILE - w - 6), oz = (rnd() - 0.5) * (TILE - d - 6);
-      const mi = Math.floor(rnd() * bldMats.length);
-      push(buckets[mi], w, h, d, cx + ox, h / 2, cz + oz);
-      if (h > 20 && rnd() < 0.5) push(buckets[(mi + 1) % 4], w * 0.6, h * 0.45, d * 0.6, cx + ox, h + h * 0.22, cz + oz); // tier
-      if (rnd() < 0.45) push(buckets[(mi + 2) % 4], 2 + rnd() * 4, 2 + rnd() * 5, 2 + rnd() * 4, cx + ox + (rnd() - 0.5) * w * 0.5, h + 1.6, cz + oz + (rnd() - 0.5) * d * 0.5); // rooftop gear
-      // vertical window strips, two faces
-      if (rnd() < 0.7) {
-        push(winG, 0.7, h * 0.55, 0.3, cx + ox - w * 0.22, h * 0.45, cz + oz + d / 2 + 0.05);
-        push(winG, 0.7, h * 0.55, 0.3, cx + ox + w * 0.22, h * 0.45, cz + oz + d / 2 + 0.05);
+      const w = 8 + rnd() * 16, d = 8 + rnd() * 16, h = 10 + rnd() * rnd() * 64;
+      const ox = (rnd() - 0.5) * (TILE - w - 8), oz = (rnd() - 0.5) * (TILE - d - 8);
+      const bx = cx + ox, bz = cz + oz;
+      const mi = Math.floor(rnd() * conc.length);
+      if (Math.hypot(bx, bz) < DMG_R) {
+        // an individual building: one merged geometry, one mesh — bombable
+        const parts = [];
+        const pp = (sx, sy, sz, x, y, z) => { const g3 = new THREE.BoxGeometry(sx, sy, sz); g3.translate(x, y, z); parts.push(g3); };
+        pp(w, h, d, 0, h / 2 + 1, 0);
+        if (h > 24 && rnd() < 0.5) pp(w * 0.6, h * 0.45, d * 0.6, 0, h + h * 0.22, 0);
+        if (rnd() < 0.5) pp(2 + rnd() * 3, 2 + rnd() * 5, 2 + rnd() * 3, (rnd() - 0.5) * w * 0.5, h + 2.4, (rnd() - 0.5) * d * 0.5);
+        const merged = mergeGeometries(parts, false);
+        const m = new THREE.Mesh(merged, conc[mi]);
+        m.position.set(bx, 0, bz);
+        world.add(m);
+        buildings.push({ mesh: m, x: bx, z: bz, w, d, h, hp: 1 + Math.round(h / 22), falling: 0 });
+      } else {
+        pushG(farG[mi], w, h, d, bx, h / 2 + 1, bz);
+        if (h > 24 && rnd() < 0.5) pushG(farG[(mi + 1) % 4], w * 0.6, h * 0.45, d * 0.6, bx, h + h * 0.22, bz);
+        if (rnd() < 0.7) {
+          pushG(winG, 0.8, h * 0.55, 0.3, bx - w * 0.22, h * 0.45 + 1, bz + d / 2 + 0.05);
+          pushG(winG, 0.8, h * 0.55, 0.3, bx + w * 0.22, h * 0.45 + 1, bz + d / 2 + 0.05);
+        }
+        if (rnd() < 0.2) pushG(neonG[Math.floor(rnd() * 3)], w * 0.8, 1.0, 0.3, bx, h * 0.8, bz + d / 2 + 0.06);
       }
-      // hive pods: small domed growths crouching at street level, not decals
-      if (rnd() < 0.11) {
-        const hw = 3 + rnd() * 3, hx2 = cx + ox + (rnd() - 0.5) * 8, hz2 = cz + oz + d / 2 + 4;
-        push(hiveG, hw, 1.6, hw, hx2, 0.8, hz2);
-        push(hiveG, hw * 0.62, 1.2, hw * 0.62, hx2, 2.0, hz2);
-        push(hiveG, hw * 0.3, 0.9, hw * 0.3, hx2, 2.9, hz2);
+      if (rnd() < 0.1) { // hive pods crouching in the streets
+        const hw = 3 + rnd() * 3, hx2 = bx + (rnd() - 0.5) * 8, hz2 = bz + d / 2 + 5;
+        pushG(hiveG, hw, 1.6, hw, hx2, 1.8, hz2);
+        pushG(hiveG, hw * 0.62, 1.2, hw * 0.62, hx2, 3.0, hz2);
       }
     }
   }
-  const mk = (geos, mat) => {
+  const mkM = (geos, mat) => {
     if (!geos.length) return;
     const merged = mergeGeometries(geos, false);
     if (!merged) return;
@@ -135,10 +160,52 @@ export function buildWorldBelow(group, grid) {
     m.matrixAutoUpdate = false;
     world.add(m);
   };
-  buckets.forEach((geos, i) => mk(geos, bldMats[i]));
-  mk(winG, winM);
-  mk(hiveG, hiveM);
-  mk(streetG, new THREE.MeshStandardMaterial({ color: 0x3a4038, metalness: 0.1, roughness: 0.95 }));
+  farG.forEach((geos, i) => mkM(geos, conc[i]));
+  mkM(winG, glassM2);
+  mkM(hiveG, hiveM);
+  neonG.forEach((geos, i) => mkM(geos, neonMats[i]));
+  mkM(streetG, new THREE.MeshStandardMaterial({ color: 0x3c4046, metalness: 0.1, roughness: 0.95 }));
+
+  // STREET LIFE: occupation forces on foot and afloat — aliens, robots,
+  // hover cars gliding the grid. All of them are targets.
+  const life = new THREE.Group();
+  world.add(life);
+  const walkers = [], cars = [];
+  const alienB = new THREE.MeshStandardMaterial({ color: 0x35e0c0, metalness: 0.2, roughness: 0.6 });
+  const robotB = new THREE.MeshStandardMaterial({ color: 0x9aa2ae, metalness: 0.5, roughness: 0.5 });
+  for (let i = 0; i < 90; i++) {
+    const alien = rnd() < 0.6;
+    const wgrp = new THREE.Group();
+    const bodyH = alien ? 1.7 : 1.4;
+    const bm = new THREE.Mesh(new THREE.BoxGeometry(0.7, bodyH, 0.5), alien ? alienB : robotB);
+    bm.position.y = bodyH / 2 + 0.4;
+    wgrp.add(bm);
+    const hm = new THREE.Mesh(new THREE.BoxGeometry(alien ? 0.55 : 0.7, 0.5, 0.5), alien ? alienB : robotB);
+    hm.position.y = bodyH + 0.7;
+    wgrp.add(hm);
+    const lane = Math.floor(rnd() * (N + 1)) * TILE - HALF;
+    const horiz = rnd() < 0.5;
+    const t0 = (rnd() - 0.5) * N * TILE * 0.9;
+    wgrp.position.set(horiz ? t0 : lane, 1.4, horiz ? lane : t0);
+    life.add(wgrp);
+    walkers.push({ grp: wgrp, horiz, lane, t: t0, dir: rnd() < 0.5 ? 1 : -1, sp: 1.5 + rnd() * 1.5, alien, dead: false });
+  }
+  const carB = new THREE.MeshStandardMaterial({ color: 0x7a86a0, metalness: 0.5, roughness: 0.4 });
+  for (let i = 0; i < 30; i++) {
+    const cgrp = new THREE.Group();
+    const cb = new THREE.Mesh(new THREE.BoxGeometry(3.4, 0.9, 1.6), carB);
+    cgrp.add(cb);
+    const glow = new THREE.Mesh(new THREE.BoxGeometry(3.0, 0.12, 1.2), neonMats[i % 3]);
+    glow.position.y = -0.55;
+    cgrp.add(glow);
+    const lane = Math.floor(rnd() * (N + 1)) * TILE - HALF;
+    const horiz = rnd() < 0.5;
+    const t0 = (rnd() - 0.5) * N * TILE * 0.9;
+    cgrp.position.set(horiz ? t0 : lane, 3.4, horiz ? lane : t0);
+    cgrp.rotation.y = horiz ? Math.PI / 2 : 0;
+    life.add(cgrp);
+    cars.push({ grp: cgrp, horiz, lane, t: t0, dir: rnd() < 0.5 ? 1 : -1, sp: 12 + rnd() * 14, dead: false });
+  }
 
   // TARGETS: 5 shield pylons + 3 AA batteries (positions in WORLD coords)
   const targets = [];
@@ -217,7 +284,7 @@ export function buildWorldBelow(group, grid) {
     hx: b.hx * S, hy: b.hy * S, hz: b.hz * S,
   }));
 
-  LW = { world, targets, lzWorld: new THREE.Vector3(30, CITY_Y, 30), hullBoxes, carrier };
+  LW = { world, targets, lzWorld: new THREE.Vector3(30, CITY_Y, 30), hullBoxes, carrier, buildings, walkers, cars, scorchMat: new THREE.MeshStandardMaterial({ color: 0x17181a, metalness: 0, roughness: 1 }) };
   return world;
 }
 
@@ -513,7 +580,7 @@ function deckInfo() {
 
 function startFlight(from) {
   const fs = G.floors.get(G.floor);
-  const ship = buildBomber(false, SHIP_SLOTS[mySlot()]);
+  const ship = buildFighter(false, false, null, SHIP_SLOTS[mySlot()]);
   ship.userData.vis.visible = false;
   const kit = cockpitKit();
   kit.position.set(0, 0.9, -0.6);
@@ -524,19 +591,22 @@ function startFlight(from) {
   fs.meshGroup.add(ship);
   L = {
     ship, fs, boardAt: from.boardAt,
-    bombs: MAX_BOMBS, hull: 140 + 30 * shipUp('hull'), maxHull: 140 + 30 * shipUp('hull'),
-    maxSpeed: 56 + 6 * shipUp('engine'),
+    bombs: MAX_BOMBS, hull: 120 + 25 * shipUp('hull'), maxHull: 120 + 25 * shipUp('hull'),
+    maxSpeed: 62 + 6 * shipUp('engine'),
     speed: Math.max(20, from.speed), vel: new THREE.Vector3(), bank: 0, lock: null,
+    weapon: 1, homeLock: false, fireCd: 0, foes: [], bolts: [], kills: 0,
     bombsAway: [], flak: [], fx: [], phase: 'run', t: 0, landT: 0, dropCd: 0, sightFlash: 0,
     time0: G.time || 0, netT: 0, remote: new Map(),
   };
+  // the city scrambles its defenders the moment you're out
+  spawnDefender(); spawnDefender();
   const fwd = new THREE.Vector3(0, 0, -1).applyQuaternion(L.ship.quaternion);
   L.vel.copy(fwd).multiplyScalar(L.speed);
   document.getElementById('waveHud')?.classList.remove('hidden');
   const tr = document.getElementById('topright');
   if (tr) tr.style.display = 'none'; // the bombsight lives on the dash monitor
-  addMsg('Bomber away. T locks a target; the DASH MONITOR flashes RED in the release window (SPACE drops).', 'gold');
-  addMsg('Six bombs. Dry racks? Fly back IN through the hangar mouth and set down to rearm.', 'gold');
+  addMsg('Fighter away — [1] GUNS · [2] BOMBS · T locks targets · R locks HOME. The monitor flashes RED to release.', 'gold');
+  addMsg('Six bombs. Dry racks? R marks the hangar — fly back in and set down to rearm.', 'gold');
   refreshHud();
 }
 
@@ -548,6 +618,13 @@ function endFlight(result) {
   if (!L) return;
   const fs = L.fs;
   fs.meshGroup.remove(L.ship);
+  for (const f of L.foes) fs.meshGroup.remove(f);
+  for (const b of L.bolts) fs.meshGroup.remove(b);
+  if (L.kills > 0) {
+    const strafe = Math.round(L.kills * 4);
+    G.run.gold += strafe;
+    addMsg(`Strafing tally: +${strafe} credits.`, 'gold');
+  }
   for (const r of L.remote.values()) fs.meshGroup.remove(r.grp);
   if (G.net.role !== 'solo') netSend({ t: 'lfleave' });
   // your bomber is back on its pad
@@ -609,9 +686,47 @@ export function landfallCycleLock() {
   sfx.key();
 }
 
+export function landfallSetWeapon(i) {
+  if (!L || i < 0 || i > 1 || L.weapon === i) return;
+  L.weapon = i;
+  addMsg(i === 0 ? 'Weapon: GUNS' : 'Weapon: BOMBS');
+  sfx.key();
+}
+
+export function landfallHomeLock() {
+  if (!L) return;
+  L.homeLock = !L.homeLock;
+  if (L.homeLock) { L.lock = null; addMsg('NAV LOCK: the hangar mouth.', 'gold'); }
+  else hideLockWidgets();
+  sfx.key();
+}
+
+function fireGuns() {
+  if (L.fireCd > 0) return;
+  L.fireCd = 0.15;
+  const dir = new THREE.Vector3(0, 0, -1).applyQuaternion(L.ship.quaternion);
+  for (const side of [-1, 1]) {
+    const off = new THREE.Vector3(side * 2.6, 0, -1.2).applyQuaternion(L.ship.quaternion);
+    const b = new THREE.Mesh(new THREE.BoxGeometry(0.14, 0.14, 2.6),
+      new THREE.MeshBasicMaterial({ color: 0x4fe8e0, toneMapped: false }));
+    b.position.copy(L.ship.position).add(off);
+    b.lookAt(b.position.clone().add(dir));
+    b.userData = { dir: dir.clone(), vel: 240, life: 1.6, mine: true };
+    L.fs.meshGroup.add(b);
+    L.bolts.push(b);
+  }
+  sfx.bolt();
+}
+
+export function landfallTrigger() {
+  if (!L || L.phase !== 'run') return;
+  if (L.weapon === 0) { fireGuns(); return; }
+  landfallDrop();
+}
+
 export function landfallDrop() {
   if (!L || L.phase !== 'run') return;
-  if (L.bombs <= 0) { addMsg('BOMBS OUT — fly back into the hangar and set down to rearm.', 'bad'); return; }
+  if (L.bombs <= 0) { addMsg('BOMBS OUT — R marks the hangar. Fly home and set down to rearm.', 'bad'); return; }
   if (L.dropCd > 0) return;
   L.dropCd = 0.4;
   L.bombs--;
@@ -624,6 +739,22 @@ export function landfallDrop() {
   L.fs.meshGroup.add(b);
   L.bombsAway.push(b);
   sfx.bolt();
+}
+
+function spawnDefender() {
+  if (!L || !LW) return;
+  if (L.foes.filter((f) => f.userData.hp > 0).length >= 4) return;
+  const f = buildFighter(true);
+  f.scale.setScalar(1.8);
+  const a = Math.random() * Math.PI * 2, r = 220 + Math.random() * 240;
+  f.position.set(Math.cos(a) * r, CITY_Y + 3, Math.sin(a) * r);
+  f.userData = {
+    ...f.userData, hp: 3, state: 'takeoff', stateT: 0, fireT: 1.5,
+    speed: 34 + Math.random() * 8,
+  };
+  L.fs.meshGroup.add(f);
+  L.foes.push(f);
+  addMsg('CONTACT — a defense fighter is lifting off the streets.', 'bad');
 }
 
 function hurtBomber(n, strike = false) {
@@ -651,6 +782,54 @@ function boom(pos, big = false) {
 }
 
 const _ip = new THREE.Vector3(), _wp = new THREE.Vector3();
+
+// a bomb (or burst) chews the city: buildings scorch, rumble, and come down
+function damageBuilding(bd, hits, at) {
+  if (bd.falling) return;
+  bd.hp -= hits;
+  // black bite where it hit
+  const sc = new THREE.Mesh(new THREE.BoxGeometry(3 + Math.random() * 3, 2.2, 3 + Math.random() * 3), LW.scorchMat);
+  sc.position.set(
+    bd.x + Math.max(-bd.w / 2, Math.min(bd.w / 2, at.x - bd.x)),
+    CITY_Y + Math.min(bd.h - 1, Math.max(2, at.y - CITY_Y + 1)),
+    bd.z + Math.max(-bd.d / 2, Math.min(bd.d / 2, at.z - bd.z)));
+  sc.rotation.y = Math.random() * Math.PI;
+  L.fs.meshGroup.add(sc);
+  (bd.scorches ||= []).push(sc);
+  if (bd.hp <= 0) {
+    bd.falling = 0.001; // the rumble begins
+    sfx.collapse();
+    sfx.screams();
+    addMsg('A tower is coming down — you can hear the streets.', 'bad');
+  }
+}
+function bombCity(at) {
+  if (!LW) return;
+  for (const bd of LW.buildings) {
+    if (bd.falling || bd.hp <= 0) continue;
+    const dd = Math.hypot(at.x - bd.x, at.z - bd.z);
+    if (dd < Math.max(bd.w, bd.d) / 2 + 9) damageBuilding(bd, dd < Math.max(bd.w, bd.d) / 2 + 3 ? 2 : 1, at);
+  }
+  for (const wk of LW.walkers) {
+    if (wk.dead) continue;
+    if (Math.hypot(at.x - wk.grp.position.x, at.z - wk.grp.position.z) < 12) killWalker(wk);
+  }
+  for (const cr of LW.cars) {
+    if (cr.dead) continue;
+    if (Math.hypot(at.x - cr.grp.position.x, at.z - cr.grp.position.z) < 12) killCar(cr);
+  }
+}
+function killWalker(wk) {
+  wk.dead = true;
+  wk.grp.visible = false;
+  L.kills++;
+}
+function killCar(cr) {
+  cr.dead = true;
+  cr.grp.visible = false;
+  boom(cr.grp.position.clone().add(LW.world.position), false);
+  L.kills += 2;
+}
 
 function impactPoint(out) {
   const h = Math.max(0, L.ship.position.y - CITY_Y);
@@ -761,7 +940,9 @@ export function updateLandfall(dt) {
   window.__sphL = L.phase;
   L.t += dt;
   L.dropCd -= dt;
+  L.fireCd -= dt;
   L.strikeCd = (L.strikeCd || 0) - dt;
+  if (G.keys['Space'] && L.weapon === 0 && L.phase === 'run') fireGuns();
   if (G.keys['Escape'] && L.phase === 'run') { endFlight('RECOVERED'); return; }
 
   const D = deckInfo();
@@ -788,7 +969,7 @@ export function updateLandfall(dt) {
   const pitchIn = (G.keys['ArrowUp'] ? 1 : 0) - (G.keys['ArrowDown'] ? 1 : 0);
   const rollIn = (G.keys['KeyA'] ? 1 : 0) - (G.keys['KeyD'] ? 1 : 0);
   const qd = new THREE.Quaternion().setFromEuler(
-    new THREE.Euler(pitchIn * 0.95 * dt, yawIn * 1.1 * dt, rollIn * 2.2 * dt, 'YXZ'));
+    new THREE.Euler(pitchIn * 1.15 * dt, yawIn * 1.35 * dt, rollIn * 2.8 * dt, 'YXZ'));
   L.ship.quaternion.multiply(qd);
   const fwd = new THREE.Vector3(0, 0, -1).applyQuaternion(L.ship.quaternion);
   const up = new THREE.Vector3(0, 1, 0).applyQuaternion(L.ship.quaternion);
@@ -887,6 +1068,7 @@ export function updateLandfall(dt) {
     b.position.addScaledVector(b.userData.v, dt);
     if (b.position.y <= CITY_Y + 1) {
       boom(b.position.clone().setY(CITY_Y + 1), false);
+      bombCity(b.position);
       if (LW) for (const t of LW.targets) {
         if (t.hp <= 0) continue;
         if (Math.hypot(b.position.x - t.pos.x, b.position.z - t.pos.z) < 16) {
@@ -897,6 +1079,7 @@ export function updateLandfall(dt) {
             t.grp.visible = false;
             const left = LW.targets.filter((x) => x.hp > 0).length;
             addMsg(`${t.type === 'PYLON' ? 'SHIELD PYLON' : 'AA BATTERY'} DESTROYED — ${left} targets left.`, 'gold');
+            spawnDefender(); // the city answers
             if (t === L.lock) L.lock = null;
             if (!left) {
               addMsg('SHIELD GRID DOWN. The LZ beacon is lit — land on the green column.', 'gold');
@@ -910,6 +1093,123 @@ export function updateLandfall(dt) {
       }
       L.fs.meshGroup.remove(b);
       L.bombsAway.splice(i, 1);
+    }
+  }
+
+  // GUN BOLTS + DEFENSE FIGHTER FIRE
+  for (let i = L.bolts.length - 1; i >= 0; i--) {
+    const b = L.bolts[i];
+    b.userData.life -= dt;
+    b.position.addScaledVector(b.userData.dir, b.userData.vel * dt);
+    let dead = b.userData.life <= 0 || b.position.y < CITY_Y + 0.5;
+    if (!dead && b.userData.mine) {
+      for (const f of L.foes) {
+        if (f.userData.hp <= 0) continue;
+        if (b.position.distanceTo(f.position) < 4.5) {
+          f.userData.hp -= 1;
+          if (f.userData.hp <= 0) {
+            boom(f.position, false);
+            f.visible = false;
+            L.kills += 3;
+            addMsg('Defense fighter down.', 'gold');
+          }
+          dead = true;
+          break;
+        }
+      }
+      if (!dead && LW && b.position.y < CITY_Y + 60) {
+        const bl = b.position.clone().sub(LW.world.position);
+        for (const cr of LW.cars) {
+          if (cr.dead) continue;
+          if (bl.distanceTo(cr.grp.position) < 3) { killCar(cr); dead = true; break; }
+        }
+        if (!dead) for (const wk of LW.walkers) {
+          if (wk.dead) continue;
+          if (bl.distanceTo(wk.grp.position) < 1.8) { killWalker(wk); dead = true; break; }
+        }
+      }
+    } else if (!dead && !b.userData.mine) {
+      if (b.position.distanceTo(L.ship.position) < 2.6) { hurtBomber(6); if (!L) return; dead = true; }
+    }
+    if (dead) { L.fs.meshGroup.remove(b); L.bolts.splice(i, 1); }
+  }
+
+  // DEFENSE FIGHTERS: scrambled off the streets, then they RUN you
+  for (const f of L.foes) {
+    const fu = f.userData;
+    if (fu.hp <= 0) continue;
+    fu.stateT += dt;
+    const nose = new THREE.Vector3(0, 0, -1).applyQuaternion(f.quaternion);
+    if (fu.state === 'takeoff') {
+      f.position.y += 26 * dt;
+      f.quaternion.slerp(new THREE.Quaternion().setFromUnitVectors(new THREE.Vector3(0, 0, -1),
+        L.ship.position.clone().sub(f.position).normalize()), dt * 0.8);
+      if (f.position.y > CITY_Y + 120) { fu.state = 'lineup'; fu.stateT = 0; }
+    } else if (fu.state === 'lineup') {
+      const dir = L.ship.position.clone().sub(f.position).normalize();
+      const tq = new THREE.Quaternion().setFromUnitVectors(new THREE.Vector3(0, 0, -1), dir);
+      f.quaternion.rotateTowards(tq, 0.8 * dt);
+      f.position.addScaledVector(nose, fu.speed * 0.6 * dt);
+      if (nose.angleTo(dir) < 0.15) { fu.state = 'run'; fu.stateT = 0; }
+    } else if (fu.state === 'run') {
+      const toP = L.ship.position.clone().sub(f.position);
+      const d = toP.length();
+      toP.normalize();
+      const tq = new THREE.Quaternion().setFromUnitVectors(new THREE.Vector3(0, 0, -1), toP);
+      f.quaternion.rotateTowards(tq, 0.2 * dt);
+      f.position.addScaledVector(nose, fu.speed * dt);
+      fu.fireT -= dt;
+      if (fu.fireT <= 0 && d < 130 && nose.angleTo(toP) < 0.3) {
+        fu.fireT = 0.7;
+        const b = new THREE.Mesh(new THREE.BoxGeometry(0.16, 0.16, 2.2),
+          new THREE.MeshBasicMaterial({ color: 0xff5533, toneMapped: false }));
+        b.position.copy(f.position).addScaledVector(nose, 4);
+        b.lookAt(f.position.clone().add(nose));
+        b.userData = { dir: nose.clone(), vel: 130, life: 2.2, mine: false };
+        L.fs.meshGroup.add(b);
+        L.bolts.push(b);
+      }
+      if (toP.dot(nose) < -0.2 || fu.stateT > 7) { fu.state = 'egress'; fu.stateT = 0; }
+    } else {
+      f.position.addScaledVector(nose, fu.speed * dt);
+      if (f.position.y < CITY_Y + 40) f.position.y = CITY_Y + 40;
+      if (fu.stateT > 2.5) { fu.state = 'lineup'; fu.stateT = 0; }
+    }
+  }
+
+  // STREET LIFE drifts the grid — and dies where your runs rake it
+  if (LW) {
+    for (const wk of LW.walkers) {
+      if (wk.dead) continue;
+      wk.t += wk.dir * wk.sp * dt;
+      if (Math.abs(wk.t) > 550) wk.dir *= -1;
+      wk.grp.position.set(wk.horiz ? wk.t : wk.lane, 1.4, wk.horiz ? wk.lane : wk.t);
+      wk.grp.rotation.y = wk.horiz ? (wk.dir > 0 ? Math.PI / 2 : -Math.PI / 2) : (wk.dir > 0 ? 0 : Math.PI);
+    }
+    for (const cr of LW.cars) {
+      if (cr.dead) continue;
+      cr.t += cr.dir * cr.sp * dt;
+      if (Math.abs(cr.t) > 550) cr.dir *= -1;
+      cr.grp.position.set(cr.horiz ? cr.t : cr.lane, 3.4 + Math.sin((G.time || 0) * 2 + cr.lane) * 0.3, cr.horiz ? cr.lane : cr.t);
+    }
+    // collapses: the rumble, the lean, the fall, the dust
+    for (const bd of LW.buildings) {
+      if (!bd.falling) continue;
+      bd.falling += dt;
+      const k = bd.falling / 2.2;
+      if (k < 0.35) {
+        bd.mesh.position.x = bd.x + (Math.random() - 0.5) * 0.5; // the rumble
+        bd.mesh.position.z = bd.z + (Math.random() - 0.5) * 0.5;
+      } else if (k < 1) {
+        bd.mesh.position.y = -((k - 0.35) / 0.65) * bd.h * 1.05; // it comes down
+        bd.mesh.rotation.z = (k - 0.35) * 0.25;
+        if (Math.random() < dt * 8) boom(new THREE.Vector3(bd.x, CITY_Y + 3, bd.z).add(new THREE.Vector3((Math.random() - 0.5) * bd.w, 0, (Math.random() - 0.5) * bd.d)), false);
+      } else {
+        LW.world.remove(bd.mesh);
+        for (const sc of bd.scorches || []) L.fs.meshGroup.remove(sc);
+        bd.falling = 0;
+        bd.hp = -999;
+      }
     }
   }
 
@@ -994,8 +1294,11 @@ export function updateLandfall(dt) {
     }
   }
 
-  // lock HUD
-  if (L.lock && L.lock.hp > 0) {
+  // lock HUD (home first — R marks the hangar so it's never lost)
+  if (L.homeLock && D) {
+    const home = new THREE.Vector3((D.mouthX0 + D.mouthX1) / 2, 3, D.mouthZ + 4);
+    drawLockAt(home, `HANGAR ${Math.round(L.ship.position.distanceTo(home))}m`, '#ffd166');
+  } else if (L.lock && L.lock.hp > 0) {
     _wp.copy(L.lock.pos).setY(L.lock.type === 'PYLON' ? CITY_Y + 40 : CITY_Y + 8);
     drawLockAt(_wp, `${L.lock.type} ${Math.round(L.ship.position.distanceTo(L.lock.pos))}m`,
       L.lock.type === 'PYLON' ? '#bb99ff' : '#ff8855');
@@ -1013,14 +1316,15 @@ export function updateLandfall(dt) {
     if (L.approach) {
       wh.textContent = `DOCKING — SPEED ${Math.round(L.speed)}/30 ${L.speed <= 32 ? '✓' : 'SLOW'} · ${L.dockOk ? 'ON THE LINE' : 'LINE UP'}`;
     } else {
-      wh.textContent = L.bombs <= 0
-        ? 'BOMBS OUT — FLY BACK IN THROUGH THE MOUTH'
-        : left ? `TARGETS ${left} · BOMBS ${L.bombs}` : 'LAND ON THE GREEN BEACON — low and slow';
+      const wpn = L.weapon === 0 ? 'GUNS' : `BOMBS ${L.bombs}`;
+      wh.textContent = L.bombs <= 0 && L.weapon === 1
+        ? 'BOMBS OUT — R MARKS THE HANGAR'
+        : left ? `TARGETS ${left} · [${wpn}]` : 'LAND ON THE GREEN BEACON — low and slow';
     }
   }
   const hpfill = document.getElementById('hpfill'), hptext = document.getElementById('hptext');
   if (hpfill) hpfill.style.width = `${Math.max(0, (L.hull / L.maxHull) * 100)}%`;
-  if (hptext) hptext.textContent = `BOMBER ${Math.max(0, Math.round(L.hull))} / ${L.maxHull}`;
+  if (hptext) hptext.textContent = `FIGHTER ${Math.max(0, Math.round(L.hull))} / ${L.maxHull}`;
 
   drawBombsight(dt);
 }

@@ -471,7 +471,7 @@ export function generateShipDeck(seedStr, floor) {
         for (let dy = -2; dy <= 2; dy++) for (let dx = -2; dx <= 2; dx++)
           if (at(cx2 + dx, cy2 + dy) !== FLOOR || elev[idxOf(cx2 + dx, cy2 + dy)]) open = false;
         if (!open) continue;
-        addBoardship(cx2 * CELL, cy2 * CELL, 0, landfallMode, slot++);
+        addBoardship(cx2 * CELL, cy2 * CELL, 0, false, slot++); // landfall flies FIGHTERS with bomb racks
         for (let dy = -2; dy <= 2; dy++) for (let dx = -2; dx <= 2; dx++) occupied.add(idxOf(cx2 + dx, cy2 + dy));
       }
       for (let i = 0; i < rng.int(3, 5); i++) crate(inset.x + rng.int(0, inset.w - 1), inset.y + 1 + rng.int(0, 2), false);

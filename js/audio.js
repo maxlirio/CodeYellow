@@ -57,6 +57,23 @@ export const sfx = {
   levelup() { if (!ctx) return; const t = ctx.currentTime; [523, 659, 784, 1046].forEach((f, i) => osc('triangle', f, t + i * 0.09, 0.22, 0.16)); },
   stairs() { if (!ctx) return; const t = ctx.currentTime; [400, 320, 250, 180].forEach((f, i) => osc('triangle', f, t + i * 0.12, 0.2, 0.13)); },
   bolt() { if (!ctx) return; const t = ctx.currentTime; osc('sawtooth', 880, t, 0.18, 0.1, 220); noise(t, 0.14, 0.08, 3000, 'highpass'); },
+  // distant civilian screams under a collapse — thin, high, sliding wails
+  screams() {
+    if (!ctx) return;
+    const t = ctx.currentTime;
+    for (let i = 0; i < 4; i++) {
+      const f = 620 + Math.random() * 380;
+      osc('sawtooth', f, t + i * 0.14 + Math.random() * 0.1, 0.5, 0.045, f * 0.55);
+    }
+    noise(t, 0.9, 0.05, 900, 'bandpass', 1.2);
+  },
+  collapse() {
+    if (!ctx) return;
+    const t = ctx.currentTime;
+    noise(t, 1.1, 0.4, 220);
+    noise(t + 0.25, 0.8, 0.3, 140);
+    osc('sine', 60, t, 0.9, 0.3, 34);
+  },
   trap() { if (!ctx) return; const t = ctx.currentTime; noise(t, 0.08, 0.25, 4000, 'highpass'); osc('sawtooth', 130, t, 0.15, 0.2, 60); },
   death() { if (!ctx) return; const t = ctx.currentTime; [300, 230, 170, 110, 70].forEach((f, i) => osc('sawtooth', f, t + i * 0.16, 0.26, 0.14)); },
   bossroar() { if (!ctx) return; const t = ctx.currentTime; osc('sawtooth', 70, t, 0.9, 0.3, 45); noise(t, 0.7, 0.2, 250); },

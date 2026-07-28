@@ -823,6 +823,15 @@ export function drawLockAt(worldPos, label, color = '#7fffee') {
   }
 }
 
+// R: lock HOME — the docking bay gets the bracket/arrow so it's never lost
+export function spaceHomeLock() {
+  if (!S) return;
+  S.homeLock = !S.homeLock;
+  if (S.homeLock) { S.lock = null; addMsg('NAV LOCK: the docking bay.', 'gold'); }
+  else hideLockWidgets();
+  sfx.key();
+}
+
 export function spaceCycleLock() {
   if (!S) return;
   const alive = S.foes.filter((f) => f.userData.hp > 0);
@@ -833,6 +842,7 @@ export function spaceCycleLock() {
     const bb = b.position.clone().sub(S.ship.position).normalize().angleTo(nose);
     return aa - bb;
   });
+  S.homeLock = false;
   const i = alive.indexOf(S.lock);
   S.lock = alive[(i + 1) % alive.length];
   const ud = S.lock.userData;
@@ -1278,7 +1288,10 @@ export function updateSpace(dt) {
     const alive = S.foes.filter((f) => f.userData.hp > 0);
     if (alive.length) spaceCycleLock();
   }
-  if (S.lock && S.lock.userData.hp > 0) {
+  if (S.homeLock) {
+    const dHome = S.ship.position.distanceTo(DOCK);
+    drawLockAt(DOCK.clone().add(ORIGIN), `DOCK ${Math.round(dHome)}m`, '#ffd166');
+  } else if (S.lock && S.lock.userData.hp > 0) {
     S.lock.getWorldPosition(_lp);
     const d = S.lock.position.distanceTo(S.ship.position);
     drawLockAt(_lp.clone(), `${Math.round(d)}m`);
