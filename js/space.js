@@ -128,12 +128,16 @@ export function buildCarrier(aperture = null) {
   B(amber, 1.4, 1.4, 1.4, -44, 60, 0); // mast beacon
   // ventral keel
   B(dark, 90, 14, 8, -10, -20, 0);
-  // side sponsons, turrets, window rows, edge strips
+  // side sponsons, turrets, window rows, edge strips.
+  // When a bay APERTURE is cut into the +z flank, that side loses its sponson
+  // and turrets — a launch bay replaces them (they were a wall across the mouth).
   for (const sz of [-1, 1]) {
-    B(dark, 130, 10, 10, -14, -2, sz * 32);
-    for (const tx of [40, -5, -60]) {
-      B(dark, 8, 5, 8, tx, 17, sz * 20);
-      B(dark, 10, 1.6, 1.6, tx + 6, 18, sz * 20); // barrels
+    if (!(aperture && sz === 1)) {
+      B(dark, 130, 10, 10, -14, -2, sz * 32);
+      for (const tx of [40, -5, -60]) {
+        B(dark, 8, 5, 8, tx, 17, sz * 20);
+        B(dark, 10, 1.6, 1.6, tx + 6, 18, sz * 20); // barrels
+      }
     }
     for (const wy of [4, -4]) B(amber, 100, 0.7, 0.7, 10, wy, sz * 27.4);
     B(teal, 200, 0.8, 0.8, -30, 15.4, sz * 27.5);

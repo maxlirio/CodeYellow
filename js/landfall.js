@@ -260,26 +260,29 @@ export function startArrival(fast = false) {
     ctx.fillStyle = 'rgba(2,4,10,0)';
     ctx.clearRect(0, 0, 512, 128);
     for (let i = 0; i < 170; i++) {
-      const y = Math.random() * 128, len = 50 + Math.random() * 190;
-      const gr = ctx.createLinearGradient(0, 0, len, 0);
+      const len = 24 + Math.random() * 70;
+      const gr = ctx.createLinearGradient(0, 0, 0, len); // streaks run ALONG the bore
       const hue = Math.random() < 0.7 ? '190,230,255' : '150,180,255';
       gr.addColorStop(0, `rgba(${hue},0)`);
       gr.addColorStop(0.5, `rgba(${hue},0.95)`);
       gr.addColorStop(1, `rgba(${hue},0)`);
       ctx.save();
-      ctx.translate(Math.random() * 512, y); // gradient is 0..len — draw AT the origin
+      ctx.translate(Math.random() * 512, Math.random() * 128);
       ctx.fillStyle = gr;
-      ctx.fillRect(0, 0, len, 1.8 + Math.random() * 1.8);
+      ctx.fillRect(0, 0, 1.6 + Math.random() * 1.6, len);
       ctx.restore();
     }
     const t = new THREE.CanvasTexture(c);
     t.wrapS = THREE.RepeatWrapping;
+    t.wrapT = THREE.RepeatWrapping;
     t.colorSpace = THREE.SRGBColorSpace;
-    const m = new THREE.Mesh(new THREE.CylinderGeometry(r, r, 46, 24, 1, true),
+    const m = new THREE.Mesh(new THREE.CylinderGeometry(r, r, 320, 24, 1, true),
       new THREE.MeshBasicMaterial({ map: t, toneMapped: false, fog: false, side: THREE.BackSide, transparent: true, opacity: 0, depthWrite: false }));
-    m.position.set(cx0, 4, cz0);
-    m.rotation.z = Math.PI / 2;
+    m.position.set(cx0, 4, cz0 - 110);
+    m.rotation.x = Math.PI / 2; // a LONG bore down the line of flight — the
+    // streaks converge to a vanishing point ahead, Star Wars style
     m.userData.maxOp = op;
+    t.repeat.set(1, 3);
     g.add(m);
     return m;
   };
@@ -287,6 +290,25 @@ export function startArrival(fast = false) {
   let tun2 = g.getObjectByName('hyperTunnel2');
   if (!tun) { tun = mkTunnel(36, 1); tun.name = 'hyperTunnel'; }
   if (!tun2) { tun2 = mkTunnel(33, 0.65); tun2.name = 'hyperTunnel2'; }
+  // the light at the end of the tunnel
+  let core = g.getObjectByName('hyperCore');
+  if (!core) {
+    const cc = document.createElement('canvas');
+    cc.width = 128; cc.height = 128;
+    const cctx = cc.getContext('2d');
+    const rg = cctx.createRadialGradient(64, 64, 4, 64, 64, 64);
+    rg.addColorStop(0, 'rgba(235,248,255,1)');
+    rg.addColorStop(0.35, 'rgba(170,215,255,0.75)');
+    rg.addColorStop(1, 'rgba(140,190,255,0)');
+    cctx.fillStyle = rg;
+    cctx.fillRect(0, 0, 128, 128);
+    const ct = new THREE.CanvasTexture(cc);
+    core = new THREE.Mesh(new THREE.PlaneGeometry(70, 70),
+      new THREE.MeshBasicMaterial({ map: ct, toneMapped: false, fog: false, transparent: true, opacity: 0, depthWrite: false }));
+    core.name = 'hyperCore';
+    core.position.set(cx0, 4, cz0 - 255);
+    g.add(core);
+  }
   // the planet: a small green marble far out — it GROWS on descent but is
   // capped well outside the glass (it must never enter the room)
   let pl = g.getObjectByName('arrivalPlanet');
@@ -329,10 +351,35 @@ export function startArrival(fast = false) {
     g.add(haze);
   }
   const stars = g.getObjectByName('bridgeStars');
+  // the city skyline band: rises into the windows at the end of the descent
+  let skyline = g.getObjectByName('arrivalSkyline');
+  if (!skyline) {
+    const kc = document.createElement('canvas');
+    kc.width = 1024; kc.height = 128;
+    const kctx = kc.getContext('2d');
+    kctx.clearRect(0, 0, 1024, 128);
+    for (let i = 0; i < 90; i++) { // Dagobah-city silhouettes in the haze
+      const bw = 10 + Math.random() * 26, bh = 14 + Math.random() * Math.random() * 90;
+      kctx.fillStyle = ['#6f6f60', '#5d6048', '#7c745a', '#565c48'][i % 4];
+      kctx.fillRect(Math.random() * 1024, 128 - bh, bw, bh);
+      if (Math.random() < 0.4) {
+        kctx.fillStyle = 'rgba(255,242,200,0.8)';
+        kctx.fillRect(Math.random() * 1024, 128 - bh + 4 + Math.random() * (bh * 0.6), 3, 2);
+      }
+    }
+    const kt = new THREE.CanvasTexture(kc);
+    kt.wrapS = THREE.RepeatWrapping;
+    kt.colorSpace = THREE.SRGBColorSpace;
+    skyline = new THREE.Mesh(new THREE.CylinderGeometry(35.5, 35.5, 15, 24, 1, true),
+      new THREE.MeshBasicMaterial({ map: kt, toneMapped: false, fog: false, side: THREE.BackSide, transparent: true, depthWrite: false }));
+    skyline.name = 'arrivalSkyline';
+    skyline.position.set(cx0, -26, cz0); // waiting below the windows
+    g.add(skyline);
+  }
   // no dogfight in hyperspace — the ambient war stays behind at the hulk
   const war = (G.floors.get(0)?.warShips) || [];
   for (const f of war) f.visible = false;
-  A = { phase: 'spool', t: 0, tun, tun2, pl, haze, stars, war, plZ0: cz0 - 34, fast: !!fast };
+  A = { phase: 'spool', t: 0, tun, tun2, core, pl, haze, stars, war, skyline, plZ0: cz0 - 34, fast: !!fast };
   sfx.rumble();
   G.shake = Math.max(G.shake || 0, 0.35);
   addMsg('All hands: TRANSLATION in 3… 2… 1…', 'gold');
@@ -358,10 +405,12 @@ export function updateArrival(dt) {
     for (const tn of [A.tun, A.tun2]) tn.visible = true;
     A.tun.material.opacity = Math.min(A.tun.userData.maxOp, A.tun.material.opacity + dt * 1.6);
     A.tun2.material.opacity = Math.min(A.tun2.userData.maxOp, A.tun2.material.opacity + dt * 1.6);
-    A.tun.rotateY(dt * (7 + Math.sin(A.t * 0.7) * 2)); // spin on the tunnel's OWN axis
-    A.tun2.rotateY(-dt * 4.5);
-    A.tun.material.map.offset.x -= dt * 2.2;
-    A.tun2.material.map.offset.x += dt * 1.4;
+    A.tun.rotateY(dt * 0.7);  // lazy barrel roll
+    A.tun2.rotateY(-dt * 0.45);
+    A.tun.material.map.offset.y -= dt * 4.6;  // the lines FLY past, Star Wars style
+    A.tun2.material.map.offset.y -= dt * 3.0;
+    A.core.visible = true;
+    A.core.material.opacity = Math.min(1, A.tun.material.opacity) * (0.85 + Math.sin(A.t * 6) * 0.15);
     if (A.stars) A.stars.material.opacity = Math.max(0.15, 1 - A.t * 0.5);
     if (Math.random() < dt * 2.2) G.shake = Math.max(G.shake || 0, 0.1);
     if (A.t > 12 * F) {
@@ -378,7 +427,8 @@ export function updateArrival(dt) {
     // the tunnel collapses; the planet hangs small and far in the glass
     A.tun.material.opacity = Math.max(0, A.tun.material.opacity - dt * 2.5);
     A.tun2.material.opacity = Math.max(0, A.tun2.material.opacity - dt * 2.5);
-    if (A.tun.material.opacity <= 0) { A.tun.visible = false; A.tun2.visible = false; }
+    A.core.material.opacity = A.tun.material.opacity;
+    if (A.tun.material.opacity <= 0) { A.tun.visible = false; A.tun2.visible = false; A.core.visible = false; }
     A.pl.scale.setScalar(Math.min(0.45, A.pl.scale.x + dt * 0.02));
     A.pl.position.z = A.plZ0;
     if (A.t > 5 * F) {
@@ -398,13 +448,21 @@ export function updateArrival(dt) {
     if (A.stars) A.stars.material.opacity = Math.max(0, 1 - ease * 1.2);
     A.haze.material.opacity = Math.min(0.85, ease * 1.0);
     if (k > 0.55) A.pl.material.opacity = 1; // (kept: the haze covers the final swell)
-    if (k > 0.75 && !A.buffet) { A.buffet = true; sfx.rumble(); addMsg('Atmospheric interface — buffeting.', 'gold'); }
+    // the last leg: the CITY rises to meet you — you ride all the way down
+    if (k > 0.3) {
+      const kr = Math.min(1, (k - 0.3) / 0.5);
+      A.skyline.position.y = -26 + kr * kr * 24.6; // settles at the horizon line
+      A.skyline.rotation.y += dt * 0.05;           // drifting past below
+    }
+    if (k > 0.75 && !A.buffet) { A.buffet = true; sfx.rumble(); addMsg('Atmospheric interface — buffeting. The city is coming up.', 'gold'); }
     if (Math.random() < dt * (1 + k * 3)) G.shake = Math.max(G.shake || 0, 0.08 + k * 0.14);
     if (A.t > 10 * F + 1.2) {
       A.phase = 'done';
-      A.pl.visible = false; // below the cloud deck — outside is bright haze now
+      A.pl.visible = false; // down in the sky of the world now
       if (A.stars) A.stars.material.opacity = 0;
       A.haze.material.opacity = 0.75;
+      A.skyline.position.y = -1.4; // the city holds outside the glass — the
+      // SAME world the docking bay hangs over, one deck below
       say('Altitude is stable. Docking bay portal is open.');
       addMsg('"Altitude is stable. Docking bay portal is open." — take the breach portal down.', 'gold');
       landfallPortalReady();
