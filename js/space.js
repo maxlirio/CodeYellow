@@ -190,8 +190,20 @@ export function buildCarrier(aperture = null) {
   // launch room behind it. You take off out of it and the tractor sets you
   // back down inside it.
   const bay = new THREE.Group();
-  const frame = new THREE.Mesh(new THREE.BoxGeometry(26, 15, 1.8), teal);
-  bay.add(frame);
+  // a real MOUTH: thin glowing border around a dark opening you can see into
+  // (the old solid slab read as a floating blue square from across the dome)
+  const fmk = (sx, sy, x, y) => {
+    const m = new THREE.Mesh(new THREE.BoxGeometry(sx, sy, 1.4), teal);
+    m.position.set(x, y, 0.4); bay.add(m);
+  };
+  fmk(26, 1, 0, 7);      // header
+  fmk(26, 1, 0, -7);     // sill
+  fmk(1, 15, -12.5, 0);  // posts
+  fmk(1, 15, 12.5, 0);
+  const field = new THREE.Mesh(new THREE.PlaneGeometry(24, 13),
+    new THREE.MeshBasicMaterial({ color: 0x59e8ff, transparent: true, opacity: 0.14, toneMapped: false, side: THREE.DoubleSide, depthWrite: false }));
+  field.position.z = 0.2;
+  bay.add(field);
   // the opening (dark) + interior room: floor, walls, roof, back wall, pad lights
   const roomD = 16;
   const irM = new THREE.MeshStandardMaterial({ color: 0x39414c, metalness: 0.3, roughness: 0.8 });
@@ -372,6 +384,7 @@ export function deckAtPlanet() {
   const g = G.floors.get(G.floor)?.grid;
   return !!(g && (g.landfall || (g.spaceZone && G.shipLoc === 'planet')));
 }
+export function _S() { return S; } // probe/debug handle, like landfall's _L
 let landfallHook = null;
 export function setLandfallHook(fn) { landfallHook = fn; }
 const shipUp = (id) => (G.run?.shipUps?.[id] || 0);
@@ -760,6 +773,7 @@ function endSpaceFlight(result) {
   }
   if (result === 'DOCKED') { addMsg('Docked clean. Drill complete.', 'gold'); sfx.levelup(); }
   else if (result === 'CLEARED') { addMsg(`Docked. Patrol LV${G.run.patrolLvl} clear — +${credits} credits.`, 'gold'); sfx.victory(); }
+  else if (result === 'WITHDREW') addMsg('Docked under fire — the patrol is still out there. No reward.', 'bad');
   else if (!lost) addMsg('Fighter recovered by tether.', 'bad');
   refreshHud();
   if (lost) hooks.onCarrierLost?.();
@@ -1064,7 +1078,7 @@ export function updateSpace(dt) {
     G.camera.quaternion.copy(S.ship.quaternion);
     const whT = document.getElementById('waveHud');
     if (whT) whT.textContent = 'TRACTOR LOCK — the bay has you';
-    if (k >= 1) endSpaceFlight('CLEARED');
+    if (k >= 1) endSpaceFlight(S.trBail ? 'WITHDREW' : 'CLEARED');
     return;
   }
 
@@ -1354,13 +1368,17 @@ export function updateSpace(dt) {
   } else hideLockWidgets();
 
   if (!S.leftBay && S.ship.position.distanceTo(DOCK) > 70) S.leftBay = true;
-  if (S.phase === 'dock' && S.leftBay) {
+  // the bay is ALWAYS open — it's your ship. Dock mid-fight and you simply
+  // come home without the commendation; a deliberate run at the mouth only.
+  if ((S.phase === 'dock' || S.phase === 'fight') && S.leftBay) {
     const approach = DOCK.clone().add(new THREE.Vector3(0, 0, 22));
-    if (S.ship.position.distanceTo(approach) < 20) {
+    const near = S.ship.position.distanceTo(approach) < (S.phase === 'dock' ? 20 : 15);
+    if (near && (S.phase === 'dock' || S.vel.z < 0)) {
+      S.trBail = S.phase === 'fight';
       S.phase = 'tractor';
       S.trT = 0;
       S.trFrom = S.ship.position.clone();
-      addMsg('TRACTOR LOCK — the bay is bringing you in.', 'gold');
+      addMsg(S.trBail ? 'TRACTOR LOCK — coming home early. No commendation for an unfinished patrol.' : 'TRACTOR LOCK — the bay is bringing you in.', 'gold');
       sfx.stairs();
       return;
     }
