@@ -13,7 +13,7 @@ import { saveReport } from './bridge.js';
 import { netSend, myId } from './net.js';
 import { CELL } from './config.js';
 
-const ORIGIN = new THREE.Vector3(0, 800, 0);
+const ORIGIN = new THREE.Vector3(0, 0, 0); // one world: battle in deck coordinates
 const FIELD_R = 380;
 const CAP = new THREE.Vector3(0, -70, -150);   // the carrier, group-local
 const DOCK = new THREE.Vector3(30, -64, -119);   // bay mouth, mid-hull flank (+z face)
@@ -478,7 +478,7 @@ export function flashScreen() {
 }
 
 function launchHandoff(sealedHold = false) {
-  const { drill, boardAt, speed, ud, bs, pre } = SB;
+  const { drill, boardAt, speed, ud, bs } = SB;
   // LANDFALL deck: no scene swap at all — the flight continues in the same
   // world the deck lives in, from the exact spot you crossed the mouth
   if (deckAtPlanet() && landfallHook) {
@@ -497,6 +497,9 @@ function launchHandoff(sealedHold = false) {
     landfallHook(from);
     return;
   }
+  // capture the exact launch state FIRST — the flight continues from it
+  const launchPos = bs.position.clone().add(new THREE.Vector3(0, 1.85, 0));
+  const launchQuat = new THREE.Quaternion().setFromEuler(new THREE.Euler(0, ud.yaw + Math.PI, 0));
   // put the fighter back on its pad, canopy sealed, for your return
   bs.position.set(ud.x, 0, ud.z);
   ud.open = false;
@@ -505,8 +508,9 @@ function launchHandoff(sealedHold = false) {
   bs.visible = false;                               // …but GONE — you're flying it
   boardAt.bsId = ud.id;
   SB = null;
-  // no flash: the sky was prebuilt during the spool — the cut is invisible
-  startSpaceFlight(null, false, drill, boardAt, { pre, ...(sealedHold ? {} : { carrySpeed: Math.max(26, speed) }) });
+  // no cut at all: same world, same coordinates, same speed
+  startSpaceFlight(null, false, drill, boardAt,
+    sealedHold ? {} : { carrySpeed: Math.max(26, speed), pos: launchPos, quat: launchQuat });
 }
 
 function updateBoarding(dt) {
@@ -556,14 +560,9 @@ function updateBoarding(dt) {
       sfx.rumble();
       G.shake = Math.max(G.shake || 0, 0.3);
       addMsg('Canopy sealed. Reactor spooling… systems green.', 'gold');
-      // build the ENTIRE space scene NOW, while the reactor spools — the
-      // launch handoff is then instant (this is what killed the black gap).
-      // A LANDFALL deck skips this: its world is ALREADY out the mouth.
-      if (!deckAtPlanet()) {
-        const lvl = (G.run.patrolLvl || 0) + 1;
-        const comp = SB.drill ? { name: 'DOCKING DRILL', list: [], bombers: 0 } : compositionFor(lvl);
-        SB.pre = { lvl, comp, drill: SB.drill, scene: buildSpaceScene(lvl, comp) };
-      }
+      // ONE WORLD: the battle spawns in the deck's own coordinates at
+      // handoff — there is no second scene to prebuild. The sky outside
+      // the mouth IS the battlefield.
     }
   } else if (SB.phase === 'power') {
     if (t >= 1.4) {
@@ -606,22 +605,16 @@ function updateBoarding(dt) {
   }
 }
 
-// everything in the sky, built once — either during the reactor spool
-// (instant handoff) or on demand (?fly=1 direct links)
-function buildSpaceScene(lvl, comp) {
+// the raid, built in DECK coordinates around battle-center B — the fight
+// happens in the very sky the hangar mouth opens onto (ONE WORLD). The sun,
+// stars and the colossal hull are already there: they wrap the deck itself.
+function buildSpaceWar(lvl, comp, B, C) {
   const group = new THREE.Group();
-  group.position.copy(ORIGIN);
-  group.add(starSphere());
-  group.add(buildCarrier());
-  // THE FORCE FIELD: the dome the raiders punched through — you defend inside it
-  const field = new THREE.Mesh(
-    new THREE.SphereGeometry(FIELD_R, 32, 20),
-    new THREE.MeshBasicMaterial({ color: 0x4fe8e0, transparent: true, opacity: 0.05, side: THREE.BackSide, depthWrite: false, toneMapped: false }));
-  field.name = 'field';
-  group.add(field);
-  const sun = new THREE.DirectionalLight(0xfff2dd, 2.2);
-  sun.position.set(300, 200, 100);
-  group.add(sun, new THREE.AmbientLight(0x445066, 1.4));
+  group.name = 'spaceWar';
+  const sun = new THREE.DirectionalLight(0xfff2dd, 1.6);
+  sun.position.set(B.x + 500, B.y + 400, B.z + 200);
+  sun.target.position.copy(B);
+  group.add(sun, sun.target, new THREE.AmbientLight(0x445066, 0.9));
 
   const ship = buildFighter(false);
   ship.userData.vis.visible = false; // pure window cockpit
@@ -629,9 +622,6 @@ function buildSpaceScene(lvl, comp) {
   kit.position.set(0, 0.78, -0.35);
   ship.add(kit);
   ship.userData.monitor = kit.userData.monitor;
-  // you launch FROM the bay room, nose out (+z)
-  ship.position.copy(BAYIN);
-  ship.quaternion.setFromEuler(new THREE.Euler(0, Math.PI, 0)); // nose -z flipped => flying +z
   group.add(ship);
 
   // the intruders
@@ -639,7 +629,7 @@ function buildSpaceScene(lvl, comp) {
   let idx = 0;
   const place = (f, r) => {
     const a = Math.random() * Math.PI * 2;
-    f.position.set(Math.cos(a) * r, (Math.random() - 0.5) * 80, Math.sin(a) * r - 40);
+    f.position.set(B.x + Math.cos(a) * r, B.y + (Math.random() - 0.5) * 130, B.z + Math.sin(a) * r * 0.7 + 40);
     f.quaternion.setFromEuler(new THREE.Euler(0, a + Math.PI / 2, 0));
   };
   for (const [tierId, n] of comp.list) {
@@ -647,7 +637,7 @@ function buildSpaceScene(lvl, comp) {
     for (let i = 0; i < n; i++) {
       const f = buildFighter(true, false, tier);
       f.scale.setScalar(1.8); // space ships match the ones on the deck
-      place(f, 150);
+      place(f, 180 + Math.random() * 140);
       f.userData = {
         ...f.userData, i: idx++, type: 'fighter', tier: tierId, hp: tier.hp,
         state: 'lineup', stateT: 0, fireT: 1, burstLeft: 0,
@@ -660,7 +650,7 @@ function buildSpaceScene(lvl, comp) {
     const f = buildBomber(true);
     f.scale.setScalar(1.7);
     place(f, 260);
-    f.userData = { ...f.userData, i: idx++, type: 'bomber', hp: 8, state: 'attack', stateT: 0, fireT: 2, speed: 13, aim: CAP.clone().add(new THREE.Vector3((Math.random() - 0.5) * 80, (Math.random() - 0.5) * 16, (Math.random() - 0.5) * 30)) };
+    f.userData = { ...f.userData, i: idx++, type: 'bomber', hp: 8, state: 'attack', stateT: 0, fireT: 2, speed: 13, aim: C.clone().add(new THREE.Vector3((Math.random() - 0.5) * 900, (Math.random() - 0.5) * 100, 27 * 6 + 8 + Math.random() * 12)) };
     group.add(f); foes.push(f);
   }
   // YOUR SIDE flies too: allied darts working their own corners of the fight
@@ -670,7 +660,7 @@ function buildSpaceScene(lvl, comp) {
     for (let i = 0; i < 3; i++) {
       const a = buildFighter(false, true);
       a.scale.setScalar(1.8);
-      place(a, 120);
+      place(a, 130);
       a.userData = { ...a.userData, type: 'ally', aiT: Math.random() * 2, fireT: 1 + Math.random() * 2, target: null, speed: 30 + Math.random() * 8 };
       group.add(a); allies.push(a);
     }
@@ -681,31 +671,43 @@ function buildSpaceScene(lvl, comp) {
 export function startSpaceFlight(level = null, fromNet = false, drill = false, boardAt = null, opts = null) {
   if (S) return;
   if (fromNet && G.mode !== 'playing') { addMsg('The patrol launched without you.'); return; }
-  const pre = opts?.pre;
-  const lvl = pre?.lvl ?? level ?? (G.run.patrolLvl || 0) + 1;
-  const comp = pre?.comp ?? (drill ? { name: 'DOCKING DRILL', list: [], bombers: 0 } : compositionFor(lvl));
-  // prebuilt during the reactor spool (instant, no black gap) or built now
-  const { group, ship, foes, allies } = pre?.scene ?? buildSpaceScene(lvl, comp);
-  G.scene.add(group);
+  const fs = G.floors.get(G.floor);
+  const g = fs?.grid;
+  if (!g?.mouth?.length) { addMsg('No launch mouth on this deck.', 'bad'); return; }
+  const lvl = level ?? (G.run.patrolLvl || 0) + 1;
+  const comp = drill ? { name: 'DOCKING DRILL', list: [], bombers: 0 } : compositionFor(lvl);
+  // ONE WORLD: everything is measured in the deck's own coordinates. The
+  // colossal hull that wraps this deck IS the carrier you defend.
+  const xs = g.mouth.map((m) => m.cx * 4);
+  const mouth = { x0: Math.min(...xs) - 2, x1: Math.max(...xs) + 2, z: (g.mouth[0].cy + 0.5) * 4 };
+  const S6 = 6;
+  const C = new THREE.Vector3((g.w * 4) / 2 + 120, 20, mouth.z + 8 - 27 * S6);
+  const B = new THREE.Vector3((mouth.x0 + mouth.x1) / 2, 40, mouth.z + 330);
+  const { group, ship, foes, allies } = buildSpaceWar(lvl, comp, B, C);
+  fs.meshGroup.add(group);
 
   S = {
-    group, ship, foes, allies: allies || [], bolts: [], fx: [], remote: new Map(),
+    group, fs, ship, foes, allies: allies || [], bolts: [], fx: [], remote: new Map(),
+    C, B, mouth, DOCK: new THREE.Vector3((mouth.x0 + mouth.x1) / 2, 3, mouth.z),
+    hullBoxes: HULL_LOCAL_BOXES.map((b) => ({
+      x: C.x + b.x * S6, y: C.y + b.y * S6, z: C.z + b.z * S6,
+      hx: b.hx * S6, hy: b.hy * S6, hz: b.hz * S6,
+    })),
     speed: 0, vel: new THREE.Vector3(0, 0, 0), bank: 0, weapon: 0, lock: null,
     hull: 100 + 25 * shipUp('hull'), maxHull: 100 + 25 * shipUp('hull'),
     maxSpeed: 70 + 8 * shipUp('engine'),
     carrierHp: 100, kills: 0, t: 0, fireCd: 0, level: lvl, comp,
-    phase: 'launch', afterLaunch: drill ? 'dock' : 'fight', drill, boardAt, netT: 0, foeT: 0, scrapeT: 0,
+    phase: drill ? 'dock' : 'fight', drill, boardAt, netT: 0, foeT: 0, scrapeT: 0,
     time0: G.time || 0, prevFog: G.scene.fog.density, prevBg: G.scene.background.getHex(), prevFar: G.camera.far,
     isHost: G.net.role !== 'guest',
   };
-  // the deck you launched from is not scenery in the void — hide the floor
-  // (it read as a moon with an unreachable battle below the dome)
-  const fsHide = G.floors.get(G.floor);
-  S.hidFs = fsHide || null;
-  if (fsHide) for (const grp2 of [fsHide.meshGroup, fsHide.enemyGroup, fsHide.lootGroup]) {
-    if (grp2) grp2.visible = false;
-  }
-  G.camera.far = 2400;
+  // pick up EXACTLY where the hangar takeoff left you — same world, no cut
+  if (opts?.pos) S.ship.position.copy(opts.pos);
+  else S.ship.position.set(S.DOCK.x, 3, mouth.z + 14);
+  if (opts?.quat) S.ship.quaternion.copy(opts.quat);
+  else S.ship.quaternion.setFromEuler(new THREE.Euler(0, Math.PI, 0));
+  S.speed = opts?.carrySpeed ?? 24;
+  G.camera.far = 4200;
   G.camera.updateProjectionMatrix();
   G.scene.fog.density = 0.00012;
   G.scene.background.setHex(0x020409);
@@ -714,15 +716,8 @@ export function startSpaceFlight(level = null, fromNet = false, drill = false, b
   document.getElementById('waveHud')?.classList.remove('hidden');
   const tr = document.getElementById('topright');
   if (tr) tr.style.display = 'none'; // the radar lives on the dash monitor now
-  if (opts?.carrySpeed) {
-    // you already flew out of a hangar mouth under your own power — pick up
-    // just outside the carrier bay at the speed you left with
-    S.ship.position.set(DOCK.x, DOCK.y, DOCK.z + 16);
-    S.speed = opts.carrySpeed;
-    S.phase = S.afterLaunch;
-    addMsg(drill ? 'You punch out into open space. Fly the pattern, then come home to the beacon.'
-      : 'You punch out into open space — hostiles in the dome. Good hunting.', 'gold');
-  }
+  addMsg(drill ? 'You punch out into open space. Fly the pattern, then come home through the mouth.'
+    : 'You punch out into open space — hostiles off the bow. Good hunting.', 'gold');
   if (drill) {
     addMsg('DOCKING DRILL — empty sky. ARROWS steer, W/S throttle. Follow the light pillar to the bay and fly in.', 'gold');
   } else {
@@ -741,15 +736,12 @@ function endSpaceFlight(result) {
   if (result === 'CLEARED') G.run.patrolLvl = Math.max(G.run.patrolLvl || 0, S.level);
   saveReport({ section: `VOID PATROL LV${S.level}`, result, kills: S.kills, credits, time: Math.round((G.time || 0) - S.time0) });
   if (G.net.role !== 'solo') netSend({ t: 'sleave' });
-  if (S.hidFs) for (const grp2 of [S.hidFs.meshGroup, S.hidFs.enemyGroup, S.hidFs.lootGroup]) {
-    if (grp2) grp2.visible = true;
-  }
   // your bird comes home with you
-  if (S.boardAt?.bsId && S.hidFs?.boardShips) {
-    const bsBack = S.hidFs.boardShips.find((b) => b.userData.boardShip.id === S.boardAt.bsId);
+  if (S.boardAt?.bsId && S.fs?.boardShips) {
+    const bsBack = S.fs.boardShips.find((b) => b.userData.boardShip.id === S.boardAt.bsId);
     if (bsBack) bsBack.visible = true;
   }
-  G.scene.remove(S.group);
+  if (S.fs?.meshGroup) S.fs.meshGroup.remove(S.group);
   G.scene.fog.density = S.prevFog;
   G.scene.background.setHex(S.prevBg);
   G.camera.far = S.prevFar;
@@ -819,12 +811,12 @@ function hurtPlayer(n) {
 
 function hurtCarrier(n, at) {
   S.carrierHp -= n;
-  explode(at || CAP.clone().add(new THREE.Vector3(0, 20, 0)), true);
+  explode(at || S.C.clone().add(new THREE.Vector3(0, 140, 0)), true);
   addMsg(`The CARRIER is hit! Integrity ${Math.max(0, Math.round(S.carrierHp))}%`, 'bad');
   if (S.carrierHp <= 0) {
     // she goes up — and the campaign goes with her
     for (let i = 0; i < 6; i++) {
-      explode(CAP.clone().add(new THREE.Vector3((Math.random() - 0.5) * 220, (Math.random() - 0.5) * 40, (Math.random() - 0.5) * 50)), true);
+      explode(S.C.clone().add(new THREE.Vector3((Math.random() - 0.5) * 1300, (Math.random() - 0.5) * 240, (Math.random() - 0.5) * 300)), true);
     }
     if (S.isHost && G.net.role !== 'solo') netSend({ t: 'slost' });
     endSpaceFlight('CARRIER LOST');
@@ -1039,7 +1031,7 @@ export function updateSpace(dt) {
   if (!S) return;
   S.t += dt;
   S.fireCd -= dt;
-  if (G.keys['Escape'] && S.phase !== 'tractor') { endSpaceFlight('RECOVERED'); return; }
+  if (G.keys['Escape'] && S.phase !== 'landing') { endSpaceFlight('RECOVERED'); return; }
 
   // LAUNCH: sitting in the bay — HOLD W and punch out through the mouth
   if (S.phase === 'launch') {
@@ -1053,32 +1045,36 @@ export function updateSpace(dt) {
     G.camera.quaternion.copy(S.ship.quaternion);
     const wh0 = document.getElementById('waveHud');
     if (wh0) wh0.textContent = S.speed < 2 ? 'HOLD W TO LAUNCH' : 'LAUNCHING…';
-    if (S.ship.position.z > DOCK.z + 10) {
-      S.phase = S.afterLaunch;
+    if (S.ship.position.z > S.DOCK.z + 10) {
+      S.phase = S.drill ? 'dock' : 'fight';
       S.speed = Math.max(S.speed, 26);
-      addMsg(S.drill ? 'Clear of the bay. Fly the pattern, then come home to the beacon.' : 'Clear of the bay — hostiles in the dome. Good hunting.', 'gold');
     }
     return;
   }
 
-  // TRACTOR: the bay has you — hands off, it sets you down inside
-  if (S.phase === 'tractor') {
+  // SETTING DOWN: the deck crew flies you down the curve your own momentum
+  // started — the same smooth glide as the planet deck. No snap.
+  if (S.phase === 'landing') {
     S.trT += dt;
-    const k = Math.min(1, S.trT / 3.4);
-    const ease = k * k * (3 - 2 * k);
-    const mid = DOCK.clone().add(new THREE.Vector3(0, 0, 14));
-    const p1 = new THREE.Vector3().lerpVectors(S.trFrom, mid, ease);
-    const p2 = new THREE.Vector3().lerpVectors(mid, BAYIN, ease);
-    S.ship.position.lerpVectors(p1, p2, ease);
-    const tq = new THREE.Quaternion().setFromEuler(new THREE.Euler(0, Math.PI, 0)); // nose inward
-    S.ship.quaternion.slerp(tq, Math.min(1, dt * 2.5));
+    const T = 3.2;
+    const kN = Math.min(1, S.trT / T);
+    const ease = kN * kN * (3 - 2 * kN);
+    if (!S.landMid) {
+      S.landMid = S.landFrom.clone().addScaledVector(S.landV0, 0.26 * T).lerp(S.landAt, 0.3);
+      S.landMid.y = Math.max(S.landAt.y + 1.8, (S.landFrom.y + S.landAt.y) / 2);
+    }
+    const _pa = S.landFrom.clone().lerp(S.landMid, ease);
+    const _pb = S.landMid.clone().lerp(S.landAt, ease);
+    S.ship.position.copy(_pa.lerp(_pb, ease));
+    const sT = Math.max(0, (kN - 0.5) / 0.5), eT = sT * sT * (3 - 2 * sT);
+    S.ship.quaternion.copy(S.landQ0).slerp(S.landQ, eT);
     const fwdT = new THREE.Vector3(0, 0, -1).applyQuaternion(S.ship.quaternion);
     const upT = new THREE.Vector3(0, 1, 0).applyQuaternion(S.ship.quaternion);
-    G.camera.position.copy(S.ship.position).addScaledVector(upT, 0.78).addScaledVector(fwdT, 0.35).add(ORIGIN);
+    G.camera.position.copy(S.ship.position).addScaledVector(upT, 0.78).addScaledVector(fwdT, 0.35);
     G.camera.quaternion.copy(S.ship.quaternion);
     const whT = document.getElementById('waveHud');
-    if (whT) whT.textContent = 'TRACTOR LOCK — the bay has you';
-    if (k >= 1) endSpaceFlight(S.trBail ? 'WITHDREW' : 'CLEARED');
+    if (whT) whT.textContent = 'DECK CREW HAS YOU — setting down';
+    if (S.trT > T + 0.25) endSpaceFlight(S.trBail ? 'WITHDREW' : 'CLEARED');
     return;
   }
 
@@ -1098,17 +1094,15 @@ export function updateSpace(dt) {
   S.ship.position.addScaledVector(S.vel, dt);
   S.bank = S.bank + ((yawIn * 0.4) - S.bank) * Math.min(1, dt * 5);
 
-  // the force field is the wall — and you can SEE it complain
-  if (S.ship.position.length() > FIELD_R - 4) {
-    const n = S.ship.position.clone().normalize();
+  // the ship's field is the wall — a soft sphere around the whole hull
+  const rC = S.ship.position.distanceTo(S.C);
+  if (rC > 2300) {
+    const n = S.ship.position.clone().sub(S.C).normalize();
     const out = S.vel.dot(n);
     if (out > 0) S.vel.addScaledVector(n, -out);
-    S.ship.position.setLength(FIELD_R - 4);
-    const field = S.group.getObjectByName('field');
-    if (field) field.material.opacity = 0.16;
+    S.ship.position.copy(S.C).addScaledVector(n, 2300);
+    if (S.t > (S.rangeT || 0)) { S.rangeT = S.t + 4; addMsg('Edge of the field — coming about.', 'bad'); }
   }
-  const fieldM = S.group.getObjectByName('field');
-  if (fieldM && fieldM.material.opacity > 0.05) fieldM.material.opacity = Math.max(0.05, fieldM.material.opacity - dt * 0.3);
 
   // cockpit camera
   const camPos = S.ship.position.clone().addScaledVector(up, 0.78).addScaledVector(fwd, 0.35).add(ORIGIN);
@@ -1119,10 +1113,11 @@ export function updateSpace(dt) {
   // the carrier is SOLID — per-SEGMENT boxes that hug the hull, not one slab.
   // During the dock phase the bay tractor owns the last 40m: no collision there,
   // or the approach corridor would bounce you off the deck you're landing on.
-  const docking = (S.phase === 'dock' || S.phase === 'tractor') && S.ship.position.distanceTo(DOCK) < 55;
-  if (!docking) {
+  const _hpX = S.ship.position;
+  const inMouthC = _hpX.x > S.mouth.x0 + 2 && _hpX.x < S.mouth.x1 - 2 && _hpX.y > -2 && _hpX.y < 10 && _hpX.z > S.mouth.z - 90;
+  if (!inMouthC) {
     const hp2 = S.ship.position;
-    for (const HB of CARRIER_BOXES) {
+    for (const HB of S.hullBoxes) {
       if (Math.abs(hp2.x - HB.x) >= HB.hx || Math.abs(hp2.y - HB.y) >= HB.hy || Math.abs(hp2.z - HB.z) >= HB.hz) continue;
       const dx = HB.hx - Math.abs(hp2.x - HB.x), dy = HB.hy - Math.abs(hp2.y - HB.y), dz = HB.hz - Math.abs(hp2.z - HB.z);
       const sgn = (v) => (v >= 0 ? 1 : -1);
@@ -1276,8 +1271,8 @@ export function updateSpace(dt) {
     } else {
       a.position.addScaledVector(noseA, au.speed * 0.6 * dt);
     }
-    if (a.position.length() > FIELD_R - 20) { // stay inside the dome
-      const inward = a.position.clone().negate().normalize();
+    if (a.position.distanceTo(S.B) > 780) { // stay with the battle
+      const inward = S.B.clone().sub(a.position).normalize();
       const tqA = new THREE.Quaternion().setFromUnitVectors(new THREE.Vector3(0, 0, -1), inward);
       a.quaternion.rotateTowards(tqA, 1.2 * dt);
     }
@@ -1342,16 +1337,9 @@ export function updateSpace(dt) {
   const torps = S.bolts.some(b => b.userData.torp);
   if (S.phase === 'fight' && alive === 0 && !torps) {
     S.phase = 'dock';
-    addMsg('PATROL CLEAR — return to the DOCKING BAY (the glowing mouth on the carrier).', 'gold');
+    addMsg('PATROL CLEAR — fly home through the hangar mouth. R marks it.', 'gold');
     sfx.levelup();
   }
-  const beacon = S.group.getObjectByName('dockBeacon');
-  if (beacon) {
-    beacon.visible = S.phase === 'dock';
-    if (beacon.visible) beacon.scale.setScalar(1 + 0.5 * Math.sin(S.t * 6));
-  }
-  const pillar = S.group.getObjectByName('dockPillar');
-  if (pillar) pillar.visible = S.phase === 'dock';
   // target lock: track it, drop it when it dies, reacquire the next threat
   if (S.lock && S.lock.userData.hp <= 0) {
     S.lock = null;
@@ -1359,35 +1347,58 @@ export function updateSpace(dt) {
     if (alive.length) spaceCycleLock();
   }
   if (S.homeLock) {
-    const dHome = S.ship.position.distanceTo(DOCK);
-    drawLockAt(DOCK.clone().add(ORIGIN), `DOCK ${Math.round(dHome)}m`, '#ffd166');
+    const dHome = S.ship.position.distanceTo(S.DOCK);
+    drawLockAt(S.DOCK.clone(), `DOCK ${Math.round(dHome)}m`, '#ffd166');
   } else if (S.lock && S.lock.userData.hp > 0) {
     S.lock.getWorldPosition(_lp);
     const d = S.lock.position.distanceTo(S.ship.position);
     drawLockAt(_lp.clone(), `${Math.round(d)}m`);
   } else hideLockWidgets();
 
-  if (!S.leftBay && S.ship.position.distanceTo(DOCK) > 70) S.leftBay = true;
-  // the bay is ALWAYS open — it's your ship. Dock mid-fight and you simply
-  // come home without the commendation; a deliberate run at the mouth only.
-  if ((S.phase === 'dock' || S.phase === 'fight') && S.leftBay) {
-    const approach = DOCK.clone().add(new THREE.Vector3(0, 0, 22));
-    const near = S.ship.position.distanceTo(approach) < (S.phase === 'dock' ? 20 : 15);
-    if (near && (S.phase === 'dock' || S.vel.z < 0)) {
-      S.trBail = S.phase === 'fight';
-      S.phase = 'tractor';
-      S.trT = 0;
-      S.trFrom = S.ship.position.clone();
-      addMsg(S.trBail ? 'TRACTOR LOCK — coming home early. No commendation for an unfinished patrol.' : 'TRACTOR LOCK — the bay is bringing you in.', 'gold');
-      sfx.stairs();
-      return;
+  if (!S.leftBay && S.ship.position.distanceTo(S.DOCK) > 90) S.leftBay = true;
+  // ASSISTED DOCKING at the REAL mouth — the same rules as the planet deck:
+  // your color's lane, under 34, deck height. The bay is ALWAYS open, but an
+  // unfinished patrol pays nothing.
+  S.approach = false;
+  if (S.leftBay && (S.phase === 'dock' || S.phase === 'fight')) {
+    const p = S.ship.position;
+    const laneX = Math.min(S.mouth.x1 - 7, Math.max(S.mouth.x0 + 7, S.boardAt?.x ?? S.DOCK.x));
+    const inApp = p.z > S.mouth.z + 2 && p.z < S.mouth.z + 150
+      && Math.abs(p.x - S.DOCK.x) < 90 && p.y > -18 && p.y < 46 && S.vel.z < -2;
+    if (inApp) {
+      S.approach = true;
+      const want = new THREE.Vector3((laneX - p.x) * 0.9, (3.2 - p.y) * 0.7, -70).normalize();
+      const tq2 = new THREE.Quaternion().setFromUnitVectors(new THREE.Vector3(0, 0, -1), want);
+      S.ship.quaternion.rotateTowards(tq2, 0.5 * dt);
+    }
+    const inMx = p.x > S.mouth.x0 + 4 && p.x < S.mouth.x1 - 4;
+    if (p.z <= S.mouth.z + 2 && p.z > S.mouth.z - 10 && S.vel.z < 0 && inMx && p.y > 0.3 && p.y < 8.5) {
+      if (S.speed <= 34 && Math.abs(p.x - laneX) < 13) {
+        S.trBail = S.phase === 'fight';
+        S.phase = 'landing';
+        S.trT = 0;
+        S.landFrom = p.clone();
+        S.landV0 = S.vel.clone();
+        S.landQ0 = S.ship.quaternion.clone();
+        S.landMid = null;
+        S.landAt = new THREE.Vector3(S.boardAt?.x ?? S.DOCK.x, 1.4, (S.boardAt?.z ?? S.mouth.z - 20) + 6);
+        S.landQ = new THREE.Quaternion().setFromEuler(new THREE.Euler(0, (S.boardAt?.yaw || 0) + Math.PI, 0));
+        addMsg(S.trBail ? 'Threshold clean — home early. No commendation for an unfinished patrol.' : 'Threshold clean — deck crew waving you to the pad.', 'gold');
+        sfx.stairs();
+        return;
+      }
+      S.ship.position.z = S.mouth.z + 40;
+      S.vel.set(0, 2, 30);
+      S.speed = Math.min(S.speed, 24);
+      addMsg('WAVE OFF — under 30, on your lane, deck height. Go around.', 'bad');
+      G.shake = Math.max(G.shake || 0, 0.3);
     }
   }
   const wh = document.getElementById('waveHud');
   if (wh) {
     const cap = S.comp.bombers ? ` · CARRIER ${Math.max(0, Math.round(S.carrierHp))}%` : '';
     wh.textContent = S.phase === 'dock'
-      ? `RETURN TO DOCK — range ${Math.round(S.ship.position.distanceTo(DOCK.clone().add(new THREE.Vector3(0, 0, 22))))}m`
+      ? `RETURN TO DOCK — range ${Math.round(S.ship.position.distanceTo(S.DOCK))}m${S.approach ? ' · ON APPROACH' : ''}`
       : `PATROL LV${S.level} — [${S.weapon + 1}] ${WEAPONS[S.weapon].name} · HOSTILES ${alive}${cap} · VEL ${Math.round(S.vel.length())} m/s`;
   }
   // the health bar is your SHIP now
@@ -1411,7 +1422,7 @@ function drawDomeRadar(alive) {
   ctx.clearRect(0, 0, W, H);
   ctx.fillStyle = 'rgba(4, 12, 16, 0.85)';
   ctx.fillRect(0, 0, W, H);
-  const R = FIELD_R;
+  const R = 760; // radar range — the battle sphere off the bow
   const cx = W / 2, cy = H / 2 + 6;
   const sc = (W / 2 - 10) / (2 * R * 0.72);
   const P = (x, y, z) => { // clamp into the cube, then isometric-project
@@ -1451,10 +1462,10 @@ function drawDomeRadar(alive) {
     ctx.globalAlpha = 0.55; ctx.fill(); ctx.globalAlpha = 1;
   };
   // the carrier: a slab, relative to you like everything else
-  const cb = P(CAP.x - S.ship.position.x, CAP.y - S.ship.position.y, CAP.z - S.ship.position.z);
+  const cb = P(S.C.x - S.ship.position.x, S.C.y - S.ship.position.y, S.C.z - S.ship.position.z);
   ctx.fillStyle = 'rgba(170, 185, 200, 0.9)';
   ctx.fillRect(cb[0] - 12, cb[1] - 2, 24, 4);
-  if (S.phase === 'dock') blip(DOCK, '#7fffee', 3.5);
+  if (S.phase === 'dock') blip(S.DOCK, '#7fffee', 3.5);
   for (const f of S.foes) {
     if (f.userData.hp <= 0) continue;
     const c = f.userData.type === 'bomber' ? '#88ff55' : ({ raider: '#ff8855', interceptor: '#ff66ee', gunship: '#bb66ff' })[f.userData.tier] || '#ff8855';
