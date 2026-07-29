@@ -18,6 +18,7 @@ import { dropItemLoot } from './loot.js';
 import { minionTargetsOnFloor, damageMinion } from './minions.js';
 import { wallAt, damageWall } from './walls.js';
 import { buildDragonModel, animateDragon, dragonMuzzle } from './dragon.js';
+import { saveReport } from './bridge.js';
 import { nearestBuildPiece, weakestBuildPieceNear, damageBuild } from './builds.js';
 import { horde } from './horde.js';
 
@@ -33,11 +34,39 @@ export function spawnEnemiesForFloor(fs) {
 
 const DUMMY_ANIM = { update() {}, play() { return null; }, has() { return false; }, current: null };
 
+// a HIVE NEST: not a creature — a grown structure. Pods, membrane, spines.
+function buildNestModel() {
+  const g = new THREE.Group();
+  const chitin = new THREE.MeshStandardMaterial({ color: 0x233a2e, metalness: 0.1, roughness: 0.85 });
+  const glow = new THREE.MeshStandardMaterial({ color: 0x123a36, emissive: 0x2fd6c8, emissiveIntensity: 0.85, roughness: 0.6 });
+  const pod = (r, x, y, z, sy = 1.35) => {
+    const m = new THREE.Mesh(new THREE.IcosahedronGeometry(r, 1), chitin);
+    m.position.set(x, y, z); m.scale.y = sy; g.add(m); return m;
+  };
+  pod(1.5, 0, 1.5, 0);
+  pod(0.9, 1.4, 0.9, 0.6);
+  pod(0.8, -1.3, 0.8, -0.4);
+  const heart = new THREE.Mesh(new THREE.IcosahedronGeometry(0.75, 1), glow);
+  heart.position.set(0, 2.6, 0);
+  heart.name = 'nestHeart';
+  g.add(heart);
+  for (let i = 0; i < 5; i++) {
+    const a = (i / 5) * Math.PI * 2;
+    const spine = new THREE.Mesh(new THREE.ConeGeometry(0.16, 1.6 + (i % 2) * 0.7, 5), chitin);
+    spine.position.set(Math.cos(a) * 1.3, 2.2, Math.sin(a) * 1.3);
+    spine.rotation.set(Math.sin(a) * 0.6, 0, -Math.cos(a) * 0.6);
+    g.add(spine);
+  }
+  return g;
+}
+
 export function spawnEnemy(fs, type, x, z, { y = 0, elite = false, id = null } = {}) {
   const cfg = ENEMIES[type];
   const { obj, anim } = cfg.procDragon
     ? { obj: buildDragonModel(), anim: DUMMY_ANIM }
-    : makeCharacter('enemy', cfg.model, cfg.show || []); // rigs with baked arsenals show ONE weapon
+    : cfg.procNest
+      ? { obj: buildNestModel(), anim: DUMMY_ANIM }
+      : makeCharacter('enemy', cfg.model, cfg.show || []); // rigs with baked arsenals show ONE weapon
   obj.position.set(x, y, z);
   const scale = cfg.scale * (elite ? 1.28 : 1);
   obj.scale.setScalar(scale);
@@ -1357,6 +1386,25 @@ export function killEnemy(e, source = 'local', fromNet = false) {
   if (e.cfg.dragon && onMyFloor(e)) {
     G.shake = Math.max(G.shake || 0, 1.2);
     if (G.net.role === 'solo') G.slowmo = 2.2;
+  }
+  // a nest dies wet: teal burst, and its unborn litter with it
+  if (e.cfg.nest && onMyFloor(e)) {
+    spawnBurst(e.obj.position.clone().setY(e.obj.position.y + 2), 0x2fd6c8, 30, 6, 0.18, 0.9);
+    addMsg('Hive nest burned.', 'gold');
+  }
+  // THE BROODMIND FALLS — Act III: liberation
+  if (e.cfg.broodmind && onMyFloor(e)) {
+    G.shake = Math.max(G.shake || 0, 1.3);
+    if (G.net.role === 'solo') G.slowmo = 2.4;
+    G.run.liberated = true;
+    sfx.victory();
+    // the lights come back on: the haze itself brightens around you
+    G.scene.fog.density *= 0.45;
+    addMsg('THE BROODMIND IS DEAD. The hive-song stops mid-note.', 'gold');
+    setTimeout(() => { addMsg('District by district, the city lights are coming back on.', 'gold'); }, 2600);
+    setTimeout(() => { addMsg('OPERATION LANDFALL — VICTORY. +500 credits. Extraction is open: go home, pilot.', 'gold'); sfx.levelup(); }, 5400);
+    G.run.gold += 500;
+    saveReport({ section: 'OPERATION LANDFALL', result: 'VICTORY', kills: G.run.kills, credits: 500, time: Math.round(G.time || 0) });
   }
   // slimes split apart when killed
   if (e.cfg.splitInto && isAuthority() && !fromNet && source !== 'none') {

@@ -14,6 +14,7 @@
 import * as THREE from 'three';
 import { makeRng } from './rng.js';
 import { CELL, ENEMIES } from './config.js';
+import { buildMergedStatic } from './assets.js';
 
 const SOLID = 0, FLOOR = 1, STAIRS = 3;
 
@@ -49,6 +50,13 @@ export const SECTOR_THEMES = {
     hemi: 0xfff0d0, amb: 0xbcae92, torch: 0xffc35c, accent: 0xffa028, boost: 1.85,
     tiles: [], props: [], banners: [], bias: [],
     pal: { floor: 0x474540, wall: 0x5c5a52, frame: 0x38362f, boxes: [0x6e6458] },
+  },
+  district: {
+    id: 'district', name: 'THE OCCUPIED DISTRICT', fog: 0x9aa588, density: 0.0035,
+    hemi: 0xe8ecd2, amb: 0xb9c0a0, torch: 0x7fe8d8, accent: 0x2fd6c8, boost: 1.5, sun: true,
+    tiles: [], props: [], banners: [], bias: [],
+    pal: { floor: 0x3c3f42, wall: 0x8a8578, frame: 0x5c5850, boxes: [0xa8502e, 0x2e6ea8, 0xc9a23e] },
+    neon: [0xff4fa0, 0x4fe8e0, 0xffce2e, 0x8aff5c, 0xbb66ff],
   },
 };
 
@@ -127,6 +135,8 @@ function meshKit(pal, accent) {
       color: 0x111111, emissive: new THREE.Color(accent), emissiveIntensity: 1.6, toneMapped: false, roughness: 1,
     }),
     panel: new THREE.MeshStandardMaterial({ color: 0x222222, emissive: 0xd9ecf6, emissiveIntensity: 1.2, roughness: 1 }),
+    hive: new THREE.MeshStandardMaterial({ color: 0x233a2e, metalness: 0.1, roughness: 0.85 }),
+    hiveglow: new THREE.MeshStandardMaterial({ color: 0x123a36, emissive: 0x2fd6c8, emissiveIntensity: 0.9, roughness: 0.7 }),
   };
   for (const [i, c] of (pal.boxes || []).entries()) {
     mats['box' + i] = new THREE.MeshStandardMaterial({ color: c, metalness: 0.2, roughness: 0.8 });
@@ -955,10 +965,145 @@ function buildWeapons(fs) {
 }
 
 // ==================================================================
+// 6. DISTRICT — THE OCCUPIED CITY BLOCK (LANDFALL Act II: the purge)
+// Daylight streets under the same Dagobah haze the fighters bombed, four
+// avenues meeting at a plaza the Broodmind has grown its throne-nest on.
+// Burn every hive nest, kill the Broodmind, and the city is FREE.
+// ==================================================================
+function genDistrict(seed, diff = 0) {
+  const rng = makeRng(seed + ':purge');
+  const off = [0, 6, 12][diff];
+  const W = 44 + off, H = 44 + off;
+  const theme = SECTOR_THEMES.district;
+  const grid = baseGrid(W, H, 'district');
+  const fs = baseFs(grid, theme, 'district');
+  grid.noCeil = true;
+  const set = (x, y, v) => { if (x >= 0 && y >= 0 && x < W && y < H) grid.cells[y * W + x] = v; };
+  const cx0 = Math.floor(W / 2), cy0 = Math.floor(H / 2);
+
+  // the PLAZA: a big open square at the crossing
+  for (let y = cy0 - 7; y <= cy0 + 7; y++) for (let x = cx0 - 7; x <= cx0 + 7; x++) set(x, y, FLOOR);
+  // four AVENUES out to the map edge (5 wide)
+  for (let x = 2; x < W - 2; x++) for (let y = cy0 - 2; y <= cy0 + 2; y++) set(x, y, FLOOR);
+  for (let y = 2; y < H - 2; y++) for (let x = cx0 - 2; x <= cx0 + 2; x++) set(x, y, FLOOR);
+  // a RING alley connecting the quarters
+  for (let x = 6; x < W - 6; x++) for (const y of [6, 7, H - 8, H - 7]) set(x, y, FLOOR);
+  for (let y = 6; y < H - 6; y++) for (const x of [6, 7, W - 8, W - 7]) set(x, y, FLOOR);
+
+  // NEST POCKETS carved into the quarters, one per corner region + two deep
+  grid.nests = [];
+  const pocket = (px, py, ndx, ndy) => {
+    for (let y = py - 2; y <= py + 2; y++) for (let x = px - 2; x <= px + 2; x++) set(x, y, FLOOR);
+    // a throat connecting the pocket to the nearest lane
+    for (let i = 1; i <= 4; i++) { set(px + ndx * (2 + i), py + ndy * (2 + i), FLOOR); set(px + ndx * (2 + i) + Math.abs(ndy), py + ndy * (2 + i) + Math.abs(ndx), FLOOR); }
+    grid.nests.push({ x: px, y: py });
+    fs.enemySpawns.push({ type: 'nest', x: px * CELL, z: py * CELL, y: 0 });
+    fs.enemySpawns.push({ type: 'broodguard', x: (px + ndx) * CELL, z: (py + ndy) * CELL, y: 0 });
+  };
+  const q = Math.floor(W / 4);
+  pocket(q, q, 1, 0);
+  pocket(W - q, q, 0, 1);
+  pocket(q, H - q, 0, -1);
+  pocket(W - q, H - q, -1, 0);
+  pocket(cx0 - 11, cy0 + 9, 1, 0);
+  pocket(cx0 + 11, cy0 - 9, -1, 0);
+
+  // raised WATCH DECKS on the plaza corners for spitters
+  for (const [dx2, dy2] of [[-6, -6], [6, 6]]) {
+    const px = (cx0 + dx2) * CELL, pz = (cy0 + dy2) * CELL;
+    deck(grid, px, pz, 2.2, 2.2, 3.8);
+    stairs(grid, px - 2.2 - 0.2, pz, 1, 0, 3.8);
+    fs.enemySpawns.push({ type: 'spitter', x: px, z: pz, y: 3.8 });
+  }
+
+  // street packs
+  const lane = (x, y) => fs.enemySpawns.push({ type: rng.pick(['skitter', 'skitter', 'spitter']), x: x * CELL, z: y * CELL, y: 0 });
+  for (let i = 0; i < 10 + off; i++) {
+    const along = rng.chance(0.5);
+    lane(along ? rng.int(4, W - 4) : cx0 + rng.int(-2, 2), along ? cy0 + rng.int(-2, 2) : rng.int(4, H - 4));
+  }
+  for (let i = 0; i < 4; i++) lane(cx0 + rng.int(-6, 6), cy0 + rng.int(-6, 6));
+
+  // THE BROODMIND on its plaza throne
+  fs.enemySpawns.push({ type: 'broodmind', x: cx0 * CELL, z: (cy0 - 3) * CELL, y: 0 });
+
+  extraFoes(fs, grid, rng, [0, 6, 12][diff], ['skitter', 'spitter', 'broodguard']);
+
+  // in from the south avenue; extraction at the north end
+  grid.spawn = { x: cx0 * CELL, z: (H - 4) * CELL };
+  grid.spawnYaw = Math.PI;
+  grid.cells[3 * W + cx0] = STAIRS;
+  grid.stairs = { x: cx0 * CELL, z: 3 * CELL, cx: cx0, cy: 3 };
+  grid.portal = { dx: 0, dy: -1, yaw: 0 };
+  return fs;
+}
+
+function buildDistrict(fs) {
+  const g = fs.grid, theme = fs.theme;
+  const group = new THREE.Group();
+  const kit = meshKit(theme.pal, theme.accent);
+  const W = g.w, H = g.h;
+  const at = (x, y) => (x < 0 || y < 0 || x >= W || y >= H) ? SOLID : g.cells[y * W + x];
+  // asphalt + lane strips
+  for (let cy = 0; cy < H; cy++) for (let cx = 0; cx < W; cx++) {
+    if (at(cx, cy) === SOLID) continue;
+    kit.box('floor', cx * CELL, -0.11, cy * CELL, CELL, 0.22, CELL);
+    if ((cx + cy) % 6 === 0) kit.box('frame', cx * CELL, 0.005, cy * CELL, 0.4, 0.012, CELL * 0.7);
+  }
+  // BUILDINGS: every solid 3x3 chunk grows a tower with a window band — the
+  // same city the bombing run flew over, now at street level
+  const rng2 = makeRng(fs.layoutId + ':bld');
+  for (let by = 0; by < H - 2; by += 3) for (let bx = 0; bx < W - 2; bx += 3) {
+    let solid = true;
+    for (let y = by; y < by + 3 && solid; y++) for (let x = bx; x < bx + 3; x++) if (at(x, y) !== SOLID) { solid = false; break; }
+    if (!solid) continue;
+    // only chunks that FACE a street get full facades; interior mass is cheap
+    let facing = false;
+    for (let y = by - 1; y <= by + 3 && !facing; y++) for (let x = bx - 1; x <= bx + 3; x++) if (at(x, y) !== SOLID) { facing = true; break; }
+    const hgt = facing ? 8 + rng2.int(0, 9) : 6;
+    const wx = (bx + 1) * CELL, wz = (by + 1) * CELL;
+    const tone = rng2.pick(['wall', 'wall', 'box0', 'box1', 'box2']);
+    kit.box(tone, wx, hgt / 2, wz, 3 * CELL - 0.3, hgt, 3 * CELL - 0.3);
+    if (facing) {
+      for (let fy = 2.2; fy < hgt - 1; fy += 2.6) kit.box('panel', wx, fy, wz, 3 * CELL - 0.1, 0.55, 3 * CELL - 0.1);
+      kit.box('frame', wx, hgt + 0.2, wz, 3 * CELL + 0.2, 0.4, 3 * CELL + 0.2);
+      if (rng2.chance(0.3)) kit.box('accent', wx, hgt + 0.5, wz, 1.8, 0.6, 0.2);
+    }
+  }
+  // hive growth: pods and webbing climb the walls near every nest
+  for (const n of g.nests || []) {
+    const nx = n.x * CELL, nz = n.y * CELL;
+    for (let i = 0; i < 7; i++) {
+      const a = (i / 7) * Math.PI * 2;
+      kit.box('hive', nx + Math.cos(a) * (3.4 + (i % 3)), 0.5 + (i % 3) * 1.3, nz + Math.sin(a) * (3.4 + (i % 2) * 2), 1.1, 1.4, 1.1);
+    }
+    kit.box('hiveglow', nx, 0.06, nz, 7.5, 0.05, 7.5);
+  }
+  // the plaza throne: a grown dais under the Broodmind
+  const cx0 = Math.floor(W / 2) * CELL, cy0 = Math.floor(H / 2) * CELL;
+  kit.box('hive', cx0, 0.5, cy0 - 3 * CELL, 7, 1.0, 7);
+  kit.box('hiveglow', cx0, 1.05, cy0 - 3 * CELL, 5.6, 0.06, 5.6);
+  drawStructural(kit, g);
+  extractionPad(kit, g.stairs.x, g.stairs.z, 0);
+  kit.finish(group);
+  // city furniture from the REAL kit: streetlights + benches down the avenues
+  try {
+    const props = [];
+    const M = new THREE.Matrix4(), Q = new THREE.Quaternion(), V = new THREE.Vector3(), SC = new THREE.Vector3(2.2, 2.2, 2.2);
+    const put = (piece, x, z, ry) => props.push({ piece, matrix: M.clone().compose(V.set(x, 0, z), Q.setFromEuler(new THREE.Euler(0, ry, 0)), SC) });
+    for (let x = 8; x < (W - 4) * CELL; x += 26) { put('city_streetlight', x, (Math.floor(H / 2) - 2) * CELL - 1.2, 0); put('city_streetlight', x, (Math.floor(H / 2) + 2) * CELL + 1.2, Math.PI); }
+    for (let z = 8; z < (H - 4) * CELL; z += 30) put('city_bench', Math.floor(W / 2) * CELL + 7, z, Math.PI / 2);
+    const merged = buildMergedStatic(props);
+    if (merged) group.add(merged);
+  } catch { /* kit pieces not loaded — the street still stands */ }
+  return group;
+}
+
+// ==================================================================
 // registry
 // ==================================================================
-const GENS = { cargo: genCargo, security: genSecurity, hab: genHab, engine: genEngine, weapons: genWeapons };
-const BUILDERS = { cargo: buildCargo, security: buildSecurity, hab: buildHab, engine: buildEngine, weapons: buildWeapons };
+const GENS = { cargo: genCargo, security: genSecurity, hab: genHab, engine: genEngine, weapons: genWeapons, district: genDistrict };
+const BUILDERS = { cargo: buildCargo, security: buildSecurity, hab: buildHab, engine: buildEngine, weapons: buildWeapons, district: buildDistrict };
 
 export function hasSector(id) { return !!GENS[id]; }
 export function generateSector(id, seed, diff = 0) { return GENS[id](seed, diff); }

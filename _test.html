@@ -283,6 +283,16 @@ try {
     }
     const e1 = generateSector('engine', 'seedT', 0), e2 = generateSector('engine', 'seedT', 2);
     assert(e1.grid.w === e2.grid.w && e1.grid.h === e2.grid.h, 'sector engine: exactly ONE engine room (no scaling)');
+    // LANDFALL Act II: the occupied district — nests, brood, the Broodmind
+    const dst = generateSector('district', 'seedT', 0);
+    const kinds = dst.enemySpawns.reduce((m, e2b) => (m[e2b.type] = (m[e2b.type] || 0) + 1, m), {});
+    assert((kinds.nest || 0) >= 6 && (kinds.broodmind || 0) === 1 && (kinds.skitter || 0) + (kinds.spitter || 0) >= 8,
+      `district: purge populated (nests ${kinds.nest}, broodmind ${kinds.broodmind}, brood ${(kinds.skitter || 0) + (kinds.spitter || 0)})`);
+    assert(dst.grid.stairs && dst.grid.spawn && dst.grid.nests.length >= 6, 'district: spawn/extraction/nest pockets wired');
+    const dl = generateSector('district', 'seedT', 2);
+    assert(dl.enemySpawns.length > dst.enemySpawns.length, `district: PURGE variant scales up (${dst.enemySpawns.length} -> ${dl.enemySpawns.length})`);
+    const { ENEMIES } = await import('./js/config.js');
+    for (const t of ['skitter', 'spitter', 'broodguard', 'nest', 'broodmind']) assert(!!ENEMIES[t], `enemy type ${t} defined`);
   }
 
   document.title = out.some(l => l.startsWith('FAIL') || l.startsWith('ERROR')) ? 'FAILED' : 'PASSED';

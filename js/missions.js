@@ -35,6 +35,8 @@ export const SECTIONS = [
   { id: 'landfall', name: 'OPERATION LANDFALL', floorN: 9, threat: 4, theme: 'engineering',
     roles: [], special: 'landfall',
     desc: 'The carrier has arrived. A civilization below, taken. Bomb the shield grid open, then land.' },
+  { id: 'district', name: 'THE PURGE', floorN: 10, threat: 5, theme: 'hab',
+    roles: [], special: null },
 ];
 
 // sortie state: null, or { id, name, floorN, seed, n, active, entered }
@@ -241,15 +243,16 @@ function renderMap() {
   const cleared = G.run?.clearedSections || [];
   list.innerHTML = '';
   for (const sec of SECTIONS) {
-    const locked = sec.id === 'landfall' && !cleared.includes('weapons');
+    const locked = (sec.id === 'landfall' && !cleared.includes('weapons'))
+      || (sec.id === 'district' && !cleared.includes('landfall'));
     const b = document.createElement('button');
     b.className = 'mm-sec' + (selectedSec === sec.id ? ' sel' : '') + (locked ? ' locked' : '');
-    b.style.left = ({ cargo: '8%', spaceport: '24%', security: '38%', hab: '50%', engine: '64%', weapons: '77%', landfall: '90%' })[sec.id];
-    b.style.top = ({ cargo: '58%', spaceport: '30%', security: '62%', hab: '34%', engine: '60%', weapons: '32%', landfall: '46%' })[sec.id];
+    b.style.left = ({ cargo: '8%', spaceport: '24%', security: '38%', hab: '50%', engine: '64%', weapons: '77%', landfall: '88%', district: '88%' })[sec.id];
+    b.style.top = ({ cargo: '58%', spaceport: '30%', security: '62%', hab: '34%', engine: '60%', weapons: '32%', landfall: '38%', district: '58%' })[sec.id];
     b.textContent = sec.name;
     b.dataset.threat = 'THREAT ' + '▮'.repeat(sec.threat);
     b.onclick = () => {
-      if (locked) { detail.innerHTML = '<p class="mm-locked">DESTINATION LOCKED — clear the WEAPONS FACILITY first.</p>'; return; }
+      if (locked) { detail.innerHTML = sec.id === 'district' ? '<p class="mm-locked">GROUNDSIDE LOCKED — win OPERATION LANDFALL first.</p>' : '<p class="mm-locked">DESTINATION LOCKED — clear the WEAPONS FACILITY first.</p>'; return; }
       selectedSec = sec.id;
       renderMap();
     };
