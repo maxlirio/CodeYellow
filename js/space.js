@@ -927,7 +927,7 @@ export function spaceSetWeapon(i) {
   sfx.key();
 }
 
-function mkBolt(pos, dir, { color = 0x4fe8e0, vel = 230, life = 1.1, dmg = 1, seek = null, wide = false } = {}) {
+function mkBolt(pos, dir, { color = 0x4fe8e0, vel = 230, life = 3.2, dmg = 1, seek = null, wide = false } = {}) {
   const b = wide
     ? new THREE.Mesh(new THREE.CylinderGeometry(0.22, 0.22, 1.8, 6), new THREE.MeshBasicMaterial({ color, toneMapped: false }))
     : new THREE.Mesh(new THREE.BoxGeometry(0.14, 0.14, 2.6), new THREE.MeshBasicMaterial({ color, toneMapped: false }));
@@ -971,7 +971,7 @@ export function spaceFire() {
       if (ang < best) { best = ang; target = f; }
     }
     mkBolt(S.ship.position.clone().addScaledVector(dir, 2).add(new THREE.Vector3(0, -0.6, 0)),
-      dir, { color: 0xff8855, vel: 85, life: 4.5, dmg: 3, seek: target, wide: true });
+      dir, { color: 0xff8855, vel: 85, life: 8.5, dmg: 3, seek: target, wide: true });
     addMsg(target ? `Seeker away — locked on the ${target.userData.type === 'bomber' ? 'bomber' : target.userData.tier}.` : 'Seeker away — no lock, flying straight.');
   }
   sfx.bolt();
@@ -1002,7 +1002,7 @@ export function onSpaceNet(m, pid) {
     const b = new THREE.Mesh(new THREE.BoxGeometry(0.14, 0.14, kind === 2 ? 1.8 : 2.6),
       new THREE.MeshBasicMaterial({ color: kind === 1 ? 0xffe08a : kind === 2 ? 0xffaa77 : 0x7fd8ff, toneMapped: false }));
     b.position.fromArray(m.p);
-    b.userData = { dir: new THREE.Vector3().fromArray(m.d), vel: kind === 2 ? 85 : 230, life: kind === 2 ? 4.5 : 1.1, mine: false, cosmetic: true };
+    b.userData = { dir: new THREE.Vector3().fromArray(m.d), vel: kind === 2 ? 85 : 230, life: kind === 2 ? 8.5 : 3.2, mine: false, cosmetic: true };
     b.lookAt(b.position.clone().add(b.userData.dir));
     S.group.add(b);
     S.bolts.push(b);

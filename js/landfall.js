@@ -753,7 +753,7 @@ function fireGuns() {
     b.position.copy(L.ship.position).add(off);
     const bd2 = aim.clone().sub(b.position).normalize();
     b.lookAt(b.position.clone().add(bd2));
-    b.userData = { dir: bd2, vel: 240, life: 1.6, mine: true };
+    b.userData = { dir: bd2, vel: 240, life: 4.5, mine: true };
     L.fs.meshGroup.add(b);
     L.bolts.push(b);
   }
