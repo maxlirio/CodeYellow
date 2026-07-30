@@ -53,6 +53,11 @@ export function spawnMinion(kindId, owner, floor, x, z, id = null, broadcast = t
       const held = makeWeaponModel(kind.held);
       held.rotation.set(0, Math.PI / 2, 0);
       hand.add(held);
+      // RobotExpressive bones carry a ~x100 internal scale — without this the
+      // blade is a 50-unit glowing slab flailing around (KayKit bones are ~1)
+      hand.updateWorldMatrix(true, false);
+      const ws = hand.getWorldScale(new THREE.Vector3()).x || 1;
+      held.scale.setScalar(1 / ws); // authored world size, whatever the rig does
     }
   }
   // Spawn ON the surface, not at y=0. Summoning while you stand on a platform or
