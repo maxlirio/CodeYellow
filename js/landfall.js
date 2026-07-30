@@ -754,6 +754,7 @@ function fireGuns() {
     const bd2 = aim.clone().sub(b.position).normalize();
     b.lookAt(b.position.clone().add(bd2));
     b.userData = { dir: bd2, vel: 240, life: 4.5, mine: true };
+    if (G.net.role !== 'solo') netSend({ t: 'lfshot', p: [+b.position.x.toFixed(1), +b.position.y.toFixed(1), +b.position.z.toFixed(1)], d: [+bd2.x.toFixed(3), +bd2.y.toFixed(3), +bd2.z.toFixed(3)] });
     L.fs.meshGroup.add(b);
     L.bolts.push(b);
   }
@@ -892,7 +893,31 @@ function impactPoint(out) {
 }
 
 // ---------------- co-op sync ----------------
+// squadmates' fire seen from the DECK (or from your own cockpit): cosmetic
+// tracers in the same shared coordinates
+const LF_AMB = { bolts: [] };
+export function updateLandfallAmbient(dt) {
+  for (let i = LF_AMB.bolts.length - 1; i >= 0; i--) {
+    const b = LF_AMB.bolts[i];
+    b.userData.life -= dt;
+    b.position.addScaledVector(b.userData.dir, 240 * dt);
+    if (b.userData.life <= 0) { b.parent?.remove(b); LF_AMB.bolts.splice(i, 1); }
+  }
+}
+
 export function onLandfallNet(m, pid) {
+  if (m.t === 'lfshot') {
+    const fs = L?.fs || G.floors.get(G.floor);
+    if (!fs?.grid?.landfall && !L) return;
+    const b = new THREE.Mesh(new THREE.BoxGeometry(0.22, 0.22, 3.4),
+      new THREE.MeshBasicMaterial({ color: 0x9fffe8, toneMapped: false }));
+    b.position.fromArray(m.p);
+    b.userData = { dir: new THREE.Vector3().fromArray(m.d), life: 4.0 };
+    b.lookAt(b.position.clone().add(b.userData.dir));
+    fs.meshGroup.add(b);
+    LF_AMB.bolts.push(b);
+    return;
+  }
   if (m.t === 'lfhit' && LW) {
     const t = LW.targets[m.i];
     if (t && t.hp > m.hp) {
@@ -996,6 +1021,7 @@ export function updateLandfall(dt) {
   L.fireCd -= dt;
   L.strikeCd = (L.strikeCd || 0) - dt;
   L.waveCd = (L.waveCd || 0) - dt;
+  updateLandfallAmbient(dt); // squadmates' tracers tick in-flight too
   if (G.keys['Space'] && L.weapon === 0 && L.phase === 'run') fireGuns();
   if (G.keys['Escape'] && L.phase === 'run') { endFlight('RECOVERED'); return; }
 

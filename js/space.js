@@ -500,6 +500,7 @@ function tickWar(dt) {
 // runs every frame you're NOT flying — from the bridge, the corridors, the
 // deck, the boarding seat: the battle is simply out there, going on
 export function updateAmbientWar(dt) {
+  tickFlyers(dt); // teammates' fighters, seen through the mouth
   if (S) return; // the flight owns it now
   if (G.shipLoc === 'planet') { destroyWar(); return; }
   ensureWar();
@@ -537,6 +538,12 @@ export function startBoarding(npc, drill = false) {
     return;
   }
   const ud = bs.userData.boardShip;
+  if (G.net.role !== 'solo' && G.player) {
+    // freeze my avatar for the others in a neutral stand as I climb in —
+    // they'd otherwise watch me jog in place beside the pad forever
+    const p = G.player;
+    netSend({ t: 'pos', f: G.floor, x: +p.obj.position.x.toFixed(2), y: +p.obj.position.y.toFixed(2), z: +p.obj.position.z.toFixed(2), yaw: +p.yaw.toFixed(2), anim: 'Idle', hp: p.hp, mhp: p.maxHp, dead: false, ln: 0 });
+  }
   if (ud.slot !== undefined && ud.slot !== mySlot()) {
     addMsg(`That's the ${SHIP_SLOTS[ud.slot]?.name || '?'} bird — yours is the ${SHIP_SLOTS[mySlot()].name} one.`, 'bad');
     return;
@@ -870,6 +877,7 @@ export function startSpaceFlight(level = null, fromNet = false, drill = false, b
   if (tr) tr.style.display = 'none'; // the radar lives on the dash monitor now
   addMsg(drill ? 'You punch out into open space. Fly the pattern, then come home through the mouth.'
     : 'You punch out into open space — hostiles off the bow. Good hunting.', 'gold');
+  if (!fromNet && G.net.role !== 'solo') netSend({ t: 'spatrol', lvl });
   if (drill) {
     addMsg('DOCKING DRILL — empty sky. ARROWS steer, W/S throttle. Follow the light pillar to the bay and fly in.', 'gold');
   } else {
@@ -877,7 +885,6 @@ export function startSpaceFlight(level = null, fromNet = false, drill = false, b
     if (comp.bombers) addMsg('BOMBERS INBOUND — they are here for the CARRIER. Lose her and the campaign is over.', 'bad');
   }
   sfx.stairs();
-  if (!fromNet && G.net.role !== 'solo') netSend({ t: 'spatrol', lvl });
 }
 
 function endSpaceFlight(result) {
@@ -1126,10 +1133,80 @@ export function spaceFire() {
 }
 
 // wingmates, remote fire, host foe sync — every s* message lands here
+// teammates who are OUT FLYING while I'm on my feet: their avatar is in a
+// cockpit (hidden), their bird has left its pad, and if I'm on the flight
+// deck I can watch their fighter through the mouth — one world.
+const FLYERS = new Map(); // pid -> { grp, tp, tq, bsId, fs }
+const FLY_BOLTS = []; // their tracers, visible from the deck
+function remoteFlyStart(pid) {
+  if (FLYERS.has(pid)) return;
+  const rec = { grp: null, tp: new THREE.Vector3(), tq: new THREE.Quaternion(), bsId: null, fs: null };
+  FLYERS.set(pid, rec);
+  const r = G.remotes.get(pid);
+  if (r?.obj) r.obj.visible = false;
+  const fs = G.floors.get(G.floor);
+  const slot = slotOf(pid);
+  const bs = fs?.boardShips?.find((b) => b.userData.boardShip.slot === slot);
+  if (bs) { bs.visible = false; rec.bsId = bs.userData.boardShip.id; rec.fs = fs; }
+}
+function remoteFlyEnd(pid) {
+  const rec = FLYERS.get(pid);
+  if (!rec) return;
+  if (rec.grp) rec.grp.parent?.remove(rec.grp);
+  if (rec.bsId != null && rec.fs?.boardShips) {
+    const bs = rec.fs.boardShips.find((b) => b.userData.boardShip.id === rec.bsId);
+    if (bs) bs.visible = true;
+  }
+  const r = G.remotes.get(pid);
+  if (r?.obj) r.obj.visible = true;
+  FLYERS.delete(pid);
+}
+function tickFlyers(dt) {
+  const fs = G.floors.get(G.floor);
+  for (let i = FLY_BOLTS.length - 1; i >= 0; i--) {
+    const b = FLY_BOLTS[i];
+    b.userData.life -= dt;
+    b.position.addScaledVector(b.userData.d, 230 * dt);
+    if (b.userData.life <= 0) { b.parent?.remove(b); FLY_BOLTS.splice(i, 1); }
+  }
+  for (const [pid, rec] of FLYERS) {
+    if (!rec.grp) continue;
+    if (rec.grp.parent !== fs?.meshGroup) { rec.grp.parent?.remove(rec.grp); if (fs?.grid?.mouth?.length) fs.meshGroup.add(rec.grp); else continue; }
+    rec.grp.position.lerp(rec.tp, Math.min(1, dt * 8));
+    rec.grp.quaternion.slerp(rec.tq, Math.min(1, dt * 8));
+  }
+}
+
 export function onSpaceNet(m, pid) {
-  if (m.t === 'spatrol') { startSpaceFlight(m.lvl, true); return; }
-  if (!S) return;
   const who = m.pid || pid;
+  if (m.t === 'spatrol') { remoteFlyStart(who); return; } // nobody gets yanked into space
+  if (!S) {
+    // I'm on my feet — track the flyer through the glass
+    if (m.t === 'sp') {
+      remoteFlyStart(who);
+      const rec = FLYERS.get(who);
+      rec.tp.fromArray(m.p);
+      rec.tq.fromArray(m.q);
+      if (!rec.grp && G.floors.get(G.floor)?.grid?.mouth?.length) {
+        rec.grp = buildFighter(false, true, null, SHIP_SLOTS[slotOf(who)]);
+        rec.grp.scale.setScalar(1.8);
+        rec.grp.position.copy(rec.tp);
+        G.floors.get(G.floor).meshGroup.add(rec.grp);
+      }
+    } else if (m.t === 'sbolt') {
+      // their guns, seen from the deck — the fight is real from every window
+      const fs = G.floors.get(G.floor);
+      if (fs?.grid?.mouth?.length) {
+        const b = new THREE.Mesh(_warBoltGeo, _warBoltAlly);
+        b.position.fromArray(m.p);
+        b.userData = { d: new THREE.Vector3().fromArray(m.d), life: 2.4 };
+        b.lookAt(b.position.clone().add(b.userData.d));
+        fs.meshGroup.add(b);
+        FLY_BOLTS.push(b);
+      }
+    } else if (m.t === 'sleave') remoteFlyEnd(who);
+    return;
+  }
   if (m.t === 'sp') {
     let r = S.remote.get(who);
     if (!r) {
@@ -1174,6 +1251,7 @@ export function onSpaceNet(m, pid) {
   } else if (m.t === 'sleave') {
     const r = S.remote.get(who);
     if (r) { S.group.remove(r.grp); S.remote.delete(who); }
+    remoteFlyEnd(who);
   }
 }
 

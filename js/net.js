@@ -232,6 +232,7 @@ function handleAsHost(conn, m) {
       H?.space.onSpaceNet(m, pid);
       if (m.t !== 'sdmg') relay(conn, { ...m, pid });
       break;
+    case 'lfshot':
     case 'lfp':
     case 'lfhit':
     case 'lfleave':
@@ -354,6 +355,7 @@ function handleAsGuest(m) {
     case 'sleave':
       H?.space.onSpaceNet(m, m.pid);
       break;
+    case 'lfshot':
     case 'lfp':
     case 'lfhit':
     case 'lfleave':
