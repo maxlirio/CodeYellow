@@ -995,6 +995,7 @@ export function updateLandfall(dt) {
   L.dropCd -= dt;
   L.fireCd -= dt;
   L.strikeCd = (L.strikeCd || 0) - dt;
+  L.waveCd = (L.waveCd || 0) - dt;
   if (G.keys['Space'] && L.weapon === 0 && L.phase === 'run') fireGuns();
   if (G.keys['Escape'] && L.phase === 'run') { endFlight('RECOVERED'); return; }
 
@@ -1040,7 +1041,7 @@ export function updateLandfall(dt) {
   L.ship.quaternion.multiply(qd);
   const fwd = new THREE.Vector3(0, 0, -1).applyQuaternion(L.ship.quaternion);
   const up = new THREE.Vector3(0, 1, 0).applyQuaternion(L.ship.quaternion);
-  L.vel.lerp(fwd.clone().multiplyScalar(L.speed), Math.min(1, dt * 2.6));
+  if (L.waveCd <= 1.4) L.vel.lerp(fwd.clone().multiplyScalar(L.speed), Math.min(1, dt * 2.6)); // the shove owns the first beat
   L.ship.position.addScaledVector(L.vel, dt);
   L.bank = L.bank + ((yawIn * 0.35) - L.bank) * Math.min(1, dt * 5);
 
@@ -1074,7 +1075,7 @@ export function updateLandfall(dt) {
     const laneX = Math.min(D.mouthX1 - 7, Math.max(D.mouthX0 + 7, L.boardAt?.x ?? xC));
     const inApproach = p.z > D.mouthZ + 2 && p.z < D.mouthZ + 130
       && Math.abs(p.x - xC) < halfW + 50 && p.y > -16 && p.y < 40 && L.vel.z < -2;
-    if (inApproach) {
+    if (inApproach && L.waveCd <= 0) {
       L.approach = true;
       const want = new THREE.Vector3((laneX - p.x) * 0.9, (3.2 - p.y) * 0.7, -70).normalize();
       const tq = new THREE.Quaternion().setFromUnitVectors(new THREE.Vector3(0, 0, -1), want);
@@ -1098,11 +1099,10 @@ export function updateLandfall(dt) {
         sfx.stairs();
         return;
       }
-      // WAVE OFF
-      L.ship.position.z = D.mouthZ + 30;
-      L.vel.set(0, 2, 26);
-      L.speed = Math.min(L.speed, 24);
-      if (L.speed > 30) { hurtBomber(8); if (!L) return; }
+      // WAVE OFF — a SHOVE back out, continuous, never a teleport
+      L.waveCd = 2.4;
+      L.vel.set(0, 3, 34);
+      L.speed = Math.min(L.speed, 22);
       addMsg('WAVE OFF — under 30, on your lane, deck height. Go around.', 'bad');
       G.shake = Math.max(G.shake || 0, 0.3);
     }

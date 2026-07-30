@@ -22,7 +22,7 @@ import {
   onRemoteMission, onRemoteMissionEnd, beginSortie,
 } from './missions.js';
 import { openTrainRoom, setSkillHooks } from './skills.js';
-import { updateSpace, spaceMouse, spaceFire, inSpace, startSpaceFlight, setSpaceHooks, spaceSetWeapon, startBoarding, spaceCycleLock, spaceHomeLock } from './space.js';
+import { updateSpace, spaceMouse, spaceFire, inSpace, startSpaceFlight, setSpaceHooks, spaceSetWeapon, startBoarding, spaceCycleLock, spaceHomeLock , updateAmbientWar } from './space.js';
 import { startArrival, updateArrival, updateLandfall, inLandfall, landfallCycleLock, landfallTrigger, landfallSetWeapon, landfallHomeLock, landfallSyncFloor } from './landfall.js';
 import { initViewmodel, updateViewmodel } from './viewmodel.js';
 import { updateWalls, clearWalls } from './walls.js';
@@ -1267,6 +1267,7 @@ function loop(t) {
     updateDeath(dt);
     setCrosshairAiming(!!G.player?.aiming);
     updateArrival(dt); // the carrier jumping/descending outside the bridge glass
+    updateAmbientWar(dt); // the raid outside the glass — already going on
   } else if (G.player && simActive) {
     G.player.anim.update(dt);
   }

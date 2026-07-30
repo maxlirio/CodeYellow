@@ -385,6 +385,142 @@ export function deckAtPlanet() {
   return !!(g && (g.landfall || (g.spaceZone && G.shipLoc === 'planet')));
 }
 export function _S() { return S; } // probe/debug handle, like landfall's _L
+export function _War() { return WAR; } // probe handle for the ambient battle
+
+// ================= THE BATTLE OUTSIDE =================
+// ONE WORLD: the patrol raid is a fact about the sky, not an event that
+// starts when you launch. It rages in HULL-LOCAL coordinates and renders
+// through whichever glass you're near — the bridge, the spaceport mouth —
+// and launching simply carries you TO it: the flight adopts these exact
+// craft at these exact positions.
+let WAR = null;
+const _warBoltGeo = new THREE.BoxGeometry(0.22, 0.22, 3.2);
+const _warFlashGeo = new THREE.SphereGeometry(1, 8, 6);
+const _warFlashMat = new THREE.MeshBasicMaterial({ color: 0xffcc66, transparent: true, toneMapped: false, depthWrite: false });
+const _warBoltHost = new THREE.MeshBasicMaterial({ color: 0xff5533, toneMapped: false });
+const _warBoltAlly = new THREE.MeshBasicMaterial({ color: 0x4fe8e0, toneMapped: false });
+
+// where the colossal hull sits in this floor's own coordinates
+function hullTransformFor(fs) {
+  const g = fs?.grid;
+  if (!g || !fs.meshGroup) return null;
+  if (g.bridge) {
+    // full deck scale, framed off the east glass — at the tower's honest 1.7x
+    // the fight is sub-pixel; this way the same battle READS: moving craft,
+    // tracer streaks, kill flashes. Nearest craft stays ~70m off the rim.
+    const cx0 = (g.w / 2 - 0.5) * CELL, cz0 = (g.h / 2 - 0.5) * CELL;
+    return { pos: new THREE.Vector3(cx0 - 130, 6, cz0 - 140), rotY: Math.PI / 2, scale: 6 };
+  }
+  if (g.spaceZone && g.mouth?.length) {
+    const mouthZ = (g.mouth[0].cy + 0.5) * CELL;
+    return { pos: new THREE.Vector3((g.w * CELL) / 2 + 120, 20, mouthZ + 8 - 27 * 6), rotY: 0, scale: 6 };
+  }
+  return null;
+}
+
+function ensureWar() {
+  if (WAR || G.shipLoc === 'planet') return;
+  const lvl = (G.run.patrolLvl || 0) + 1;
+  const comp = compositionFor(lvl);
+  const view = new THREE.Group();
+  view.name = 'ambientWar';
+  const craft = [];
+  const mk = (m, hostile, kind, tier) => {
+    m.scale.setScalar(kind === 'bomber' ? 0.285 : 0.3); // 1.8 deck units at S=6
+    view.add(m);
+    craft.push({ m, hostile, kind, tier, a: Math.random() * Math.PI * 2, r: 16 + Math.random() * 38, h: -12 + Math.random() * 32, w: (0.16 + Math.random() * 0.22) * (Math.random() < 0.5 ? -1 : 1), wob: Math.random() * 9 });
+  };
+  for (const [tierId, n] of comp.list) for (let i = 0; i < n; i++) mk(buildFighter(true, false, TIERS[tierId]), true, 'fighter', tierId);
+  for (let i = 0; i < comp.bombers; i++) mk(buildBomber(true), true, 'bomber', null);
+  for (let i = 0; i < 3; i++) mk(buildFighter(false, true), false, 'ally', null);
+  // hull-local anchor chosen so it maps onto the flight's battle center B
+  WAR = { lvl, comp, view, craft, bolts: [], flashes: [], shotT: 0.4, flashT: 2.2, anchor: new THREE.Vector3(-20, 0, 80), viewFs: null };
+}
+
+function destroyWar() {
+  if (!WAR) return;
+  WAR.view.parent?.remove(WAR.view);
+  WAR = null;
+}
+
+function tickWar(dt) {
+  const A = WAR.anchor;
+  for (const c of WAR.craft) {
+    c.a += c.w * dt * (c.kind === 'bomber' ? 0.45 : 1);
+    const px = A.x + Math.cos(c.a) * c.r;
+    const pz = A.z + Math.sin(c.a) * c.r * 0.8;
+    const py = A.y + c.h + Math.sin(c.a * 2.3 + c.wob) * 5;
+    const dxa = -Math.sin(c.a) * c.w, dza = Math.cos(c.a) * 0.8 * c.w;
+    c.m.position.set(px, py, pz);
+    c.m.rotation.set(0, Math.atan2(dxa, dza) + Math.PI, Math.max(-0.9, Math.min(0.9, -c.w * 2.2)));
+  }
+  WAR.shotT -= dt;
+  if (WAR.shotT <= 0 && WAR.craft.length > 3) {
+    WAR.shotT = 0.22 + Math.random() * 0.5;
+    const from = WAR.craft[(Math.random() * WAR.craft.length) | 0];
+    const tgs = WAR.craft.filter((c) => c.hostile !== from.hostile);
+    const to = tgs[(Math.random() * tgs.length) | 0];
+    if (from && to) {
+      const d = to.m.position.clone().sub(from.m.position).normalize();
+      const b = new THREE.Mesh(_warBoltGeo, from.hostile ? _warBoltHost : _warBoltAlly);
+      b.position.copy(from.m.position);
+      b.quaternion.setFromUnitVectors(new THREE.Vector3(0, 0, 1), d);
+      b.userData = { d, life: 0.55 };
+      WAR.view.add(b);
+      WAR.bolts.push(b);
+    }
+  }
+  for (let i = WAR.bolts.length - 1; i >= 0; i--) {
+    const b = WAR.bolts[i];
+    b.userData.life -= dt;
+    b.position.addScaledVector(b.userData.d, 60 * dt);
+    if (b.userData.life <= 0) { WAR.view.remove(b); WAR.bolts.splice(i, 1); }
+  }
+  // kill flashes — somebody just lost an argument out there
+  WAR.flashT -= dt;
+  if (WAR.flashT <= 0) {
+    WAR.flashT = 1.6 + Math.random() * 2.6;
+    const at = WAR.craft[(Math.random() * WAR.craft.length) | 0];
+    const f = new THREE.Mesh(_warFlashGeo, _warFlashMat.clone());
+    f.position.copy(at.m.position).add(new THREE.Vector3((Math.random() - 0.5) * 8, (Math.random() - 0.5) * 6, (Math.random() - 0.5) * 8));
+    f.userData = { life: 0.5 };
+    WAR.view.add(f);
+    WAR.flashes.push(f);
+  }
+  for (let i = WAR.flashes.length - 1; i >= 0; i--) {
+    const f = WAR.flashes[i];
+    f.userData.life -= dt;
+    const k = 1 - f.userData.life / 0.5;
+    f.scale.setScalar(0.6 + k * 2.6);
+    f.material.opacity = 1 - k;
+    if (f.userData.life <= 0) { WAR.view.remove(f); WAR.flashes.splice(i, 1); }
+  }
+}
+
+// runs every frame you're NOT flying — from the bridge, the corridors, the
+// deck, the boarding seat: the battle is simply out there, going on
+export function updateAmbientWar(dt) {
+  if (S) return; // the flight owns it now
+  if (G.shipLoc === 'planet') { destroyWar(); return; }
+  ensureWar();
+  if (!WAR) return;
+  const fs = G.floors.get(G.floor);
+  const tf = hullTransformFor(fs);
+  if (tf) {
+    if (WAR.viewFs !== fs) {
+      WAR.view.parent?.remove(WAR.view);
+      WAR.view.position.copy(tf.pos);
+      WAR.view.rotation.set(0, tf.rotY, 0);
+      WAR.view.scale.setScalar(tf.scale);
+      fs.meshGroup.add(WAR.view);
+      WAR.viewFs = fs;
+    }
+  } else if (WAR.viewFs) {
+    WAR.view.parent?.remove(WAR.view);
+    WAR.viewFs = null;
+  }
+  tickWar(dt);
+}
 let landfallHook = null;
 export function setLandfallHook(fn) { landfallHook = fn; }
 const shipUp = (id) => (G.run?.shipUps?.[id] || 0);
@@ -674,7 +810,7 @@ export function startSpaceFlight(level = null, fromNet = false, drill = false, b
   const fs = G.floors.get(G.floor);
   const g = fs?.grid;
   if (!g?.mouth?.length) { addMsg('No launch mouth on this deck.', 'bad'); return; }
-  const lvl = level ?? (G.run.patrolLvl || 0) + 1;
+  const lvl = level ?? (!drill && WAR ? WAR.lvl : (G.run.patrolLvl || 0) + 1);
   const comp = drill ? { name: 'DOCKING DRILL', list: [], bombers: 0 } : compositionFor(lvl);
   // ONE WORLD: everything is measured in the deck's own coordinates. The
   // colossal hull that wraps this deck IS the carrier you defend.
@@ -701,16 +837,32 @@ export function startSpaceFlight(level = null, fromNet = false, drill = false, b
     time0: G.time || 0, prevFog: G.scene.fog.density, prevBg: G.scene.background.getHex(), prevFar: G.camera.far,
     isHost: G.net.role !== 'guest',
   };
+  // the battle was ALREADY out there — the flight adopts those exact craft
+  // at those exact positions. You are flying out TO it, not starting it.
+  if (!drill && WAR) {
+    const S6 = 6;
+    const toDeck = (m, f) => {
+      f.position.copy(m.position).multiplyScalar(S6).add(C);
+      f.rotation.set(0, m.rotation.y, m.rotation.z);
+    };
+    const hostiles = WAR.craft.filter((c) => c.hostile);
+    S.foes.forEach((f, i) => { if (hostiles[i]) toDeck(hostiles[i].m, f); });
+    const friends = WAR.craft.filter((c) => !c.hostile);
+    S.allies.forEach((a, i) => { if (friends[i]) toDeck(friends[i].m, a); });
+  }
+  destroyWar();
   // pick up EXACTLY where the hangar takeoff left you — same world, no cut
   if (opts?.pos) S.ship.position.copy(opts.pos);
   else S.ship.position.set(S.DOCK.x, 3, mouth.z + 14);
   if (opts?.quat) S.ship.quaternion.copy(opts.quat);
   else S.ship.quaternion.setFromEuler(new THREE.Euler(0, Math.PI, 0));
   S.speed = opts?.carrySpeed ?? 24;
-  G.camera.far = 4200;
+  // the deck already shows this exact sky (applyThemeAtmosphere) — keep it
+  // IDENTICAL so the handoff has zero visual pop
+  G.camera.far = 3600;
   G.camera.updateProjectionMatrix();
-  G.scene.fog.density = 0.00012;
-  G.scene.background.setHex(0x020409);
+  G.scene.fog.density = 0.0005;
+  G.scene.background.setHex(0x04060b);
   G.mode = 'space';
   for (const c of G.camera.children) c.visible = false;
   document.getElementById('waveHud')?.classList.remove('hidden');
@@ -1027,7 +1179,7 @@ export function onSpaceNet(m, pid) {
 
 export function updateSpace(dt) {
   window.__sph = SB ? 'sb:' + SB.phase : (S ? S.phase : null); // probe hook
-  if (SB) { updateBoarding(dt); return; }
+  if (SB) { if (!S) updateAmbientWar(dt); updateBoarding(dt); return; }
   if (!S) return;
   S.t += dt;
   S.fireCd -= dt;
@@ -1090,7 +1242,7 @@ export function updateSpace(dt) {
   S.ship.quaternion.multiply(qd);
   const fwd = new THREE.Vector3(0, 0, -1).applyQuaternion(S.ship.quaternion);
   const up = new THREE.Vector3(0, 1, 0).applyQuaternion(S.ship.quaternion);
-  S.vel.lerp(fwd.clone().multiplyScalar(S.speed), Math.min(1, dt * 4));
+  if (S.t > (S.waveT || 0) - 1.5) S.vel.lerp(fwd.clone().multiplyScalar(S.speed), Math.min(1, dt * 4)); // the shove owns the first beat
   S.ship.position.addScaledVector(S.vel, dt);
   S.bank = S.bank + ((yawIn * 0.4) - S.bank) * Math.min(1, dt * 5);
 
@@ -1365,7 +1517,7 @@ export function updateSpace(dt) {
     const laneX = Math.min(S.mouth.x1 - 7, Math.max(S.mouth.x0 + 7, S.boardAt?.x ?? S.DOCK.x));
     const inApp = p.z > S.mouth.z + 2 && p.z < S.mouth.z + 150
       && Math.abs(p.x - S.DOCK.x) < 90 && p.y > -18 && p.y < 46 && S.vel.z < -2;
-    if (inApp) {
+    if (inApp && S.t > (S.waveT || 0)) {
       S.approach = true;
       const want = new THREE.Vector3((laneX - p.x) * 0.9, (3.2 - p.y) * 0.7, -70).normalize();
       const tq2 = new THREE.Quaternion().setFromUnitVectors(new THREE.Vector3(0, 0, -1), want);
@@ -1387,9 +1539,11 @@ export function updateSpace(dt) {
         sfx.stairs();
         return;
       }
-      S.ship.position.z = S.mouth.z + 40;
-      S.vel.set(0, 2, 30);
-      S.speed = Math.min(S.speed, 24);
+      // the deck barrier SHOVES you back out — continuous, no teleport;
+      // the assist stands down while you're being pushed
+      S.waveT = S.t + 2.4;
+      S.vel.set(0, 3, 38);
+      S.speed = Math.min(S.speed, 22);
       addMsg('WAVE OFF — under 30, on your lane, deck height. Go around.', 'bad');
       G.shake = Math.max(G.shake || 0, 0.3);
     }
