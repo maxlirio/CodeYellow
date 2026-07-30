@@ -770,6 +770,8 @@ export function castSpell(slot, effectiveDamage) {
       const from = origin.clone().setY(origin.y + 1.5);
       // aiming at the vault overhead: gravity fully inverts
       if (dir.y > 0.55) {
+        const gg = G.floors.get(G.floor)?.grid;
+        if (!gg || gg.noCeil) { addMsg('Open sky — nothing overhead to stand on.', 'bad'); p.mana += sp.mana; cooldowns[spellId] = 0.4; break; }
         sfx.dodge(); sfx.bolt();
         p.lash = { up: true, g: { x: 0, z: 0 }, vel: 0, grounded: false };
         p.vy = 0;

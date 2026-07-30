@@ -545,8 +545,10 @@ export function updatePlayer(dt) {
         if (p.lash.up) {
           // falling UPWARD to the vault of the room
           pos.y += step;
-          if (pos.y >= LASH_CEIL) {
-            pos.y = LASH_CEIL;
+          const cv = lashCeilAt(pos);
+          if (cv == null) { releaseLash(p); addMsg('Open sky — nothing up there catches you.', 'bad'); }
+          else if (pos.y >= cv) {
+            pos.y = cv;
             p.lash.grounded = true;
             p.lash.vel = 0;
             sfx.hit();
@@ -581,7 +583,9 @@ export function updatePlayer(dt) {
           moveWithCollision(pos, mv.x * sp * dt, mv.z * sp * dt, 0.55, { y: pos.y });
           p.bobT += dt * sp * 1.35;
         }
-        pos.y = LASH_CEIL;
+        const cv2 = lashCeilAt(pos);
+        if (cv2 == null) { p.lash.grounded = false; p.lash.vel = 3; addMsg('The vault ends — you fall onward.'); }
+        else pos.y += (cv2 - pos.y) * Math.min(1, dt * 10); // ride height changes, no snap
       } else {
         // walking the wall face: camera-look projected onto the surface plane
         const mv = lashMoveDir(p);
@@ -877,8 +881,13 @@ function doAttackHit() {
     }
     const spread = p.aiming ? 0 : 0.035;
     const sx = (Math.random() - 0.5) * spread, sy = (Math.random() - 0.5) * spread, sz = (Math.random() - 0.5) * spread;
+    // while gravity is turned, the eye is nowhere near feet+1.45 — fire from
+    // the actual camera so shots leave from where YOU are
+    const _mo = p.lash ? G.camera.position : null;
     const b = {
-      x: p.obj.position.x + dir.x * 0.7, z: p.obj.position.z + dir.z * 0.7, y: p.obj.position.y + 1.45,
+      x: (_mo ? _mo.x : p.obj.position.x) + dir.x * 0.7,
+      z: (_mo ? _mo.z : p.obj.position.z) + dir.z * 0.7,
+      y: _mo ? _mo.y + dir.y * 0.7 : p.obj.position.y + 1.45,
       dirX: dir.x + sx, dirY: dir.y + sy, dirZ: dir.z + sz,
       speed: w?.ranged ? 40 : 30, dmg: boltDmg, size: boltSize, owner: 'player', basic: true, // lasers are QUICK
       color: w?.boltColor || p.cls.boltColor || 0x8cf2ff,
@@ -1067,7 +1076,15 @@ const _lashUp = new THREE.Vector3();
 const _lashRight = new THREE.Vector3();
 const _lashMove = new THREE.Vector3();
 
-const LASH_CEIL = 8; // the height of the unseen vault you can stand on
+// the vault you lash onto is the ROOM'S OWN ceiling, not a fixed height —
+// deck rooms cap at 7, cathedral halls at 12, sector grids carry g.ceil
+export function lashCeilAt(pos) {
+  const g = G.floors.get(G.floor)?.grid;
+  if (!g || g.noCeil) return null; // open sky — nothing up there to stand on
+  const cx = Math.round(pos.x / 4), cy = Math.round(pos.z / 4);
+  const tall = g.tall?.[cy * (g.w || 0) + cx];
+  return tall ? 12 : (g.ceil ?? 7);
+}
 
 // WASD mapped into the plane PERPENDICULAR to the lash gravity — the same basis
 // whether you're walking the surface or still falling toward it. Returns null
