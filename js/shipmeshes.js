@@ -153,51 +153,52 @@ function buildBoardship(d, mats) {
   grp.add(inner);
   // skids
   for (const sx of [-0.85, 0.85]) B('frame', 0.4, 0.85, 4.4, sx, 0.42, 0.9);
-  // cockpit tub: seat + headrest you can see through the open canopy
-  B('dark', 0.85, 0.3, 0.85, 0, 1.6, 2.25);
-  B('dark', 0.85, 1.0, 0.2, 0, 2.1, 1.75);
-  B('accent', 0.5, 0.1, 0.16, 0, 2.62, 1.75);
+  // cockpit tub: seat + headrest — everything stays BELOW the glass line
+  B('dark', 0.66, 0.3, 0.85, 0, 1.6, 2.25);
+  B('dark', 0.66, 0.5, 0.2, 0, 1.9, 1.75);
+  B('accent', 0.5, 0.08, 0.16, 0, 2.16, 1.75);
   // the pilot's console — the SAME kit the flight ship mounts, tucked INTO
   // the tub (no view-framing pillars; scaled to fit inside the canopy line)
   const kit = cockpitKit({ pillars: false });
-  kit.position.set(0, 2.18, 2.6);
+  kit.position.set(0, 2.08, 2.35);
   kit.rotation.y = Math.PI;
-  kit.scale.setScalar(0.72);
+  kit.scale.setScalar(0.45); // narrow enough to live INSIDE the tapered glass
   grp.add(kit);
   grp.userData.kit = kit;
   grp.userData.seatEye = new THREE.Vector3(0, 2.3, 2.6);
   // THE CANOPY: glass shell + frame rails; slides AFT-and-up along the spine
   const can = new THREE.Group();
+  // SMOKED GLASS, one piece, nothing bolted on. A tapered hex pod — narrow
+  // raked nose, wider aft — whose lower facets sink into the fuselage.
+  // No separate frame bars: bars can't misalign with the glass if the
+  // canopy IS just the glass.
   const glassM = new THREE.MeshBasicMaterial({
-    color: 0xb8e4ff, transparent: true, opacity: 0.34, toneMapped: false,
+    color: 0x1a3d52, transparent: true, opacity: 0.48, toneMapped: false,
     side: THREE.DoubleSide, depthWrite: false,
   });
-  // a real canopy BUBBLE: a low faceted glass pod whose lower facets sink
-  // into the fuselage — closed means sealed. (The old box-in-hoops read as
-  // a greenhouse cage with gaps.)
-  const shellGeo = new THREE.CylinderGeometry(0.78, 0.78, 3.1, 6, 1);
-  shellGeo.rotateX(Math.PI / 2);
-  shellGeo.rotateZ(Math.PI / 6); // flat facet DOWN, ridge UP
+  const shellGeo = new THREE.CylinderGeometry(0.46, 0.8, 3.0, 6, 1); // nose end narrow
+  shellGeo.rotateX(Math.PI / 2);   // bore along z, narrow end forward (+z)
+  shellGeo.rotateZ(Math.PI / 6);   // flat facet down, ridge up
   const shell = new THREE.Mesh(shellGeo, glassM);
-  shell.scale.set(0.85, 0.55, 1);
-  shell.position.y = 0.18;
+  shell.scale.set(0.97, 0.75, 1); // tall+wide enough to CONTAIN the tub
+  shell.position.y = 0.14;
   can.add(shell);
-  const railM = mats.frame;
-  const bar = (sx, sy, sz, x, y, z, rx = 0) => {
-    const m = new THREE.Mesh(new THREE.BoxGeometry(sx, sy, sz), railM);
-    m.position.set(x, y, z);
-    m.rotation.x = rx;
-    can.add(m);
-  };
-  bar(0.09, 0.09, 3.0, 0, 0.6, 0);                 // spine rail along the ridge
-  bar(0.09, 0.5, 0.09, 0, 0.34, 1.52, 0.45);       // windscreen post, raked
-  bar(0.09, 0.5, 0.09, 0, 0.34, -1.52, -0.45);     // aft post
-  for (const sx of [-0.62, 0.62]) bar(0.08, 0.08, 2.9, sx, 0.16, 0); // sill rails
-  can.position.set(0, 1.95, 2.55);
+  // a single teal sill line where glass meets hull — drawn from the SAME
+  // profile so it always sits exactly at the canopy base
+  const sill = new THREE.Mesh(new THREE.CylinderGeometry(0.47, 0.81, 3.02, 6, 1, true),
+    new THREE.MeshBasicMaterial({ color: 0x59e8ff, transparent: true, opacity: 0.5, toneMapped: false, side: THREE.DoubleSide, depthWrite: false }));
+  sill.geometry.rotateX(Math.PI / 2);
+  sill.geometry.rotateZ(Math.PI / 6);
+  sill.scale.set(0.98, 0.06, 1); // squashed flat: just the base outline
+  sill.position.y = 0.02;
+  can.add(sill);
+  // the pod sits DOWN into the hull: its base is below the deck line, so
+  // the seat/console live inside the glass, not exposed under its rim
+  can.position.set(0, 1.5, 2.55);
   grp.add(can);
   grp.userData.canopyGroup = can;
-  grp.userData.canClosed = new THREE.Vector3(0, 1.95, 2.55);
-  grp.userData.canOpen = new THREE.Vector3(0, 2.45, -0.4);
+  grp.userData.canClosed = new THREE.Vector3(0, 1.5, 2.55);
+  grp.userData.canOpen = new THREE.Vector3(0, 2.15, -0.5);
   if (d.bomber) { // the bomber sits taller and further forward
     kit.position.set(0, 2.75, 2.3);
     grp.userData.seatEye = new THREE.Vector3(0, 2.75, 2.3);
