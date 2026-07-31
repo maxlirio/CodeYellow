@@ -3,11 +3,11 @@
 // HTMLAudio streams (no decode-ahead cost) and start after the first user
 // gesture, per browser autoplay rules.
 const TRACKS = {
-  town: 'assets/music/town.m4a',      // Woodland Fantasy — Matthew Pablo (CC-BY 3.0)
-  dungeon: 'assets/music/dungeon.m4a',// Dark Descent — Matthew Pablo (CC-BY 3.0)
-  cave: 'assets/music/cave.m4a',      // Crystal Cave — cynicmusic (CC0)
-  boss: 'assets/music/boss.m4a',      // Heroic Demise — Matthew Pablo (CC-BY 3.0)
-  battle: 'assets/music/battle.m4a',  // Battle Theme A — cynicmusic (CC0)
+  town: 'assets/music/bridge.mp3',    // Floating Cities — Kevin MacLeod (CC-BY 3.0)
+  dungeon: 'assets/music/decks.mp3',  // Static Motion — Kevin MacLeod (CC-BY 3.0)
+  cave: 'assets/music/quiet.mp3',     // Space 1990 — Kevin MacLeod (CC-BY 3.0)
+  boss: 'assets/music/boss2.mp3',     // Phantom from Space — Kevin MacLeod (CC-BY 3.0)
+  battle: 'assets/music/battle2.mp3', // Space Fighter Loop — Kevin MacLeod (CC-BY 3.0)
 };
 const VOL = { town: 0.34, dungeon: 0.32, cave: 0.42, boss: 0.36, battle: 0.34 };
 const FADE = 1.6; // seconds

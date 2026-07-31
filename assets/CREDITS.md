@@ -17,3 +17,9 @@ All sound effects are procedurally generated at runtime with the Web Audio API �
 Enemy_Small / Enemy_Large / Enemy_Flying / Enemy_ExtraSmall by Quaternius
 (https://quaternius.com, CC0). Draco-compressed GLBs via the
 trebeljahr/quaternius-showcase mirror.
+
+## assets/music/ — soundtrack
+"Floating Cities", "Static Motion", "Space 1990", "Phantom from Space",
+"Space Fighter Loop" — Kevin MacLeod (incompetech.com),
+Licensed under Creative Commons: By Attribution 3.0
+http://creativecommons.org/licenses/by/3.0/
