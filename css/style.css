@@ -146,6 +146,17 @@ button.orange-btn:hover { filter: brightness(1.15); }
 #crosshair.aiming .ch-lf { width: 6px; left: 6px; }
 #crosshair.aiming .ch-rt { width: 6px; right: 6px; }
 #crosshair.hostile .ch-l, #crosshair.hostile .ch-dot { background: #ff8c4a; }
+/* TOUCH SCREEN under the crosshair: the reticle becomes a pointer ring */
+#crosshair.pointer .ch-l { opacity: 0; }
+#crosshair.pointer .ch-dot {
+  width: 10px; height: 10px; margin: -5px; background: transparent;
+  border: 2px solid #2fd6c8; box-shadow: 0 0 8px #2fd6c8aa;
+}
+#crosshair.pointer::after {
+  content: 'CLICK'; position: absolute; left: 50%; top: 14px; transform: translateX(-50%);
+  color: #2fd6c8; font: 700 10px 'Menlo', monospace; letter-spacing: 2px;
+  text-shadow: 0 0 6px #000;
+}
 #hitmark {
   position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%) scale(0.5);
   color: #ffdd66; font-size: 26px; font-weight: bold; opacity: 0; text-shadow: 0 0 4px #000;

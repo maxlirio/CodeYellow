@@ -64,6 +64,9 @@ export function setCrosshairHostile(h) {
 export function setCrosshairAiming(a) {
   $('crosshair').classList.toggle('aiming', a);
 }
+export function setCrosshairPointer(on) {
+  $('crosshair').classList.toggle('pointer', on);
+}
 export function hitmarker(crit) {
   const m = $('hitmark');
   m.classList.toggle('crit', !!crit);

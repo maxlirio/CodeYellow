@@ -47,7 +47,7 @@ import {
   show, hide, setHidden, addMsg, refreshHud, updateMinimap, updateDodgeCooldown,
   buildClassCards, renderShop, showTransition, runStatsHtml, hideBossBar,
   updateSpellBar, renderInventory, buildLookControls, setCrosshairAiming,
-  renderBoardList, renderStash,
+  renderBoardList, renderStash, setCrosshairPointer,
 } from './ui.js';
 import {
   setNetCallbacks, wireHandlers, hostGame, joinGame, hostStart, netSend, shutdownNet,
@@ -1112,6 +1112,7 @@ function lockPointer() {
 function setupInput() {
   const canvas = $('game');
   const stationRay = new THREE.Raycaster();
+  window.__touchStation = () => touchStation();
   const touchStation = () => {
     // TOUCH SCREENS: aim at a bridge screen (or the holo table) and click
     if (G.floor !== 0) return null;
@@ -1274,6 +1275,7 @@ function loop(t) {
     updateArrival(dt); // the carrier jumping/descending outside the bridge glass
     updateAmbientWar(dt); // the raid outside the glass — already going on
     updateLandfallAmbient(dt); // squadmates' tracers over the city
+    setCrosshairPointer(!!window.__touchStation?.()); // pointer over touch screens
   } else if (G.player && simActive) {
     G.player.anim.update(dt);
   }
