@@ -570,7 +570,8 @@ export function startBoarding(npc, drill = false) {
 // builder used by the flight fighter AND the parked deck fighter, so the
 // view when you climb in is EXACTLY the view when you fly — and it sits LOW
 // so it never crowds the windshield. Frame: eye at origin, forward -z.
-export function cockpitKit() {
+export function cockpitKit(opts = {}) {
+  const withPillars = opts.pillars !== false;
   const g = new THREE.Group();
   const dark = new THREE.MeshStandardMaterial({ color: 0x2b3038, metalness: 0.4, roughness: 0.7 });
   const scrM = new THREE.MeshBasicMaterial({ color: 0x1f6e66, toneMapped: false });
@@ -584,8 +585,12 @@ export function cockpitKit() {
   B(dark, 1.9, 0.3, 0.55, 0, -0.64, -1.15);                        // slim dash
   for (const wx of [-0.62, 0.62]) B(scrM, 0.34, 0.04, 0.18, wx, -0.47, -1.1, 0.35);
   for (const wx of [-0.3, 0, 0.3]) B(amberM, 0.1, 0.04, 0.07, wx, -0.5, -1.34);
-  for (const sx of [-1, 1]) B(dark, 0.08, 1.3, 0.08, sx * 0.95, 0.07, -1.0, 0, sx * 0.42); // A-pillars
-  B(dark, 1.7, 0.07, 0.07, 0, 0.74, -0.85);                        // top rail
+  if (withPillars) { // first-person view framing — SKIPPED on parked ships,
+    // where the sliding canopy already provides the frame (doubling them up
+    // read as black junk sticking out of the fuselage)
+    for (const sx of [-1, 1]) B(dark, 0.08, 1.3, 0.08, sx * 0.95, 0.07, -1.0, 0, sx * 0.42); // A-pillars
+    B(dark, 1.7, 0.07, 0.07, 0, 0.74, -0.85);                      // top rail
+  }
   // THE MONITOR: a real screen on the dash — the radar/bombsight render HERE,
   // in the cockpit, not in a corner of your visor
   const mc = document.createElement('canvas');

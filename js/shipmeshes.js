@@ -157,35 +157,42 @@ function buildBoardship(d, mats) {
   B('dark', 0.85, 0.3, 0.85, 0, 1.6, 2.25);
   B('dark', 0.85, 1.0, 0.2, 0, 2.1, 1.75);
   B('accent', 0.5, 0.1, 0.16, 0, 2.62, 1.75);
-  // the pilot's console — the SAME kit the flight ship mounts
-  const kit = cockpitKit();
-  kit.position.set(0, 2.3, 2.6);
+  // the pilot's console — the SAME kit the flight ship mounts, tucked INTO
+  // the tub (no view-framing pillars; scaled to fit inside the canopy line)
+  const kit = cockpitKit({ pillars: false });
+  kit.position.set(0, 2.18, 2.6);
   kit.rotation.y = Math.PI;
+  kit.scale.setScalar(0.72);
   grp.add(kit);
   grp.userData.kit = kit;
   grp.userData.seatEye = new THREE.Vector3(0, 2.3, 2.6);
   // THE CANOPY: glass shell + frame rails; slides AFT-and-up along the spine
   const can = new THREE.Group();
   const glassM = new THREE.MeshBasicMaterial({
-    color: 0x9fdcff, transparent: true, opacity: 0.14, toneMapped: false,
+    color: 0xb8e4ff, transparent: true, opacity: 0.34, toneMapped: false,
     side: THREE.DoubleSide, depthWrite: false,
   });
-  const shell = new THREE.Mesh(new THREE.BoxGeometry(1.15, 0.8, 2.9), glassM);
-  shell.position.y = 0.42;
+  // a real canopy BUBBLE: a low faceted glass pod whose lower facets sink
+  // into the fuselage — closed means sealed. (The old box-in-hoops read as
+  // a greenhouse cage with gaps.)
+  const shellGeo = new THREE.CylinderGeometry(0.78, 0.78, 3.1, 6, 1);
+  shellGeo.rotateX(Math.PI / 2);
+  shellGeo.rotateZ(Math.PI / 6); // flat facet DOWN, ridge UP
+  const shell = new THREE.Mesh(shellGeo, glassM);
+  shell.scale.set(0.85, 0.55, 1);
+  shell.position.y = 0.18;
   can.add(shell);
   const railM = mats.frame;
-  const bar = (sx, sy, sz, x, y, z) => {
+  const bar = (sx, sy, sz, x, y, z, rx = 0) => {
     const m = new THREE.Mesh(new THREE.BoxGeometry(sx, sy, sz), railM);
     m.position.set(x, y, z);
+    m.rotation.x = rx;
     can.add(m);
   };
-  for (const lz of [-1.45, 1.45]) { // OPEN hoops — frame bars, not plates
-    bar(0.08, 0.85, 0.1, -0.58, 0.42, lz);
-    bar(0.08, 0.85, 0.1, 0.58, 0.42, lz);
-    bar(1.24, 0.08, 0.1, 0, 0.85, lz);
-  }
-  for (const sx of [-0.58, 0.58]) bar(0.08, 0.08, 2.95, sx, 0.85, 0); // roof rails
-  bar(0.09, 0.09, 2.95, 0, 0.89, 0); // spine rail
+  bar(0.09, 0.09, 3.0, 0, 0.6, 0);                 // spine rail along the ridge
+  bar(0.09, 0.5, 0.09, 0, 0.34, 1.52, 0.45);       // windscreen post, raked
+  bar(0.09, 0.5, 0.09, 0, 0.34, -1.52, -0.45);     // aft post
+  for (const sx of [-0.62, 0.62]) bar(0.08, 0.08, 2.9, sx, 0.16, 0); // sill rails
   can.position.set(0, 1.95, 2.55);
   grp.add(can);
   grp.userData.canopyGroup = can;
