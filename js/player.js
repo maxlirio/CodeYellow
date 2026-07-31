@@ -753,7 +753,7 @@ export function sendPos(force = false) {
     t: 'pos', f: G.floor,
     x: +p.obj.position.x.toFixed(2), y: +p.obj.position.y.toFixed(2), z: +p.obj.position.z.toFixed(2),
     yaw: +p.yaw.toFixed(2),
-    anim: p.anim.currentName,
+    anim: p.anim.currentName, animSeq: p.attackIdx || 0,
     hp: p.hp, mhp: p.maxHp, dead: p.dead,
     ln: p.lash ? (p.lash.up ? [0, -1, 0] : [-p.lash.g.x, 0, -p.lash.g.z]) : 0,
   });
@@ -1363,10 +1363,15 @@ export function applyRemotePos(pid, m) {
   r.hp = m.hp; r.maxHp = m.mhp;
   if (m.dead && !r.dead) { r.dead = true; r.anim.play('Death_A', { once: true, clamp: true }); }
   if (!m.dead && r.dead) { r.dead = false; r.anim.play('Idle'); }
-  if (!r.dead && m.anim && m.anim !== r.lastAnim) {
-    r.lastAnim = m.anim;
-    const oneShot = m.anim.includes('Attack') || m.anim.includes('Dodge') || m.anim.includes('Use_Item') || m.anim.includes('Interact') || m.anim.includes('Spellcast') || m.anim.includes('Block');
-    r.anim.play(m.anim, oneShot ? { once: true } : {});
+  if (!r.dead && m.anim) {
+    const oneShot = m.anim.includes('Attack') || m.anim.includes('Shoot') || m.anim.includes('Dodge') || m.anim.includes('Use_Item') || m.anim.includes('Interact') || m.anim.includes('Spellcast') || m.anim.includes('Block');
+    // one-shots RE-TRIGGER on repeat — rapid fire is many shots, not one
+    // frozen pose (the old !== guard swallowed every shot after the first)
+    if (m.anim !== r.lastAnim || (oneShot && m.animSeq !== r.lastAnimSeq)) {
+      r.lastAnim = m.anim;
+      r.lastAnimSeq = m.animSeq;
+      r.anim.play(m.anim, oneShot ? { once: true, restart: true } : {});
+    }
   }
   updatePartyBar();
 }
