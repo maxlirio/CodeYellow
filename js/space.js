@@ -394,6 +394,7 @@ export function _War() { return WAR; } // probe handle for the ambient battle
 // and launching simply carries you TO it: the flight adopts these exact
 // craft at these exact positions.
 let WAR = null;
+const _hl = new THREE.Vector3();
 const _warBoltGeo = new THREE.BoxGeometry(0.22, 0.22, 3.2);
 const _warFlashGeo = new THREE.SphereGeometry(1, 8, 6);
 const _warFlashMat = new THREE.MeshBasicMaterial({ color: 0xffcc66, transparent: true, toneMapped: false, depthWrite: false });
@@ -1128,7 +1129,8 @@ export function spaceFire() {
   sfx.bolt();
   if (G.net.role !== 'solo') {
     const p = S.ship.position;
-    netSend({ t: 'sbolt', p: [+p.x.toFixed(1), +p.y.toFixed(1), +p.z.toFixed(1)], d: [+dir.x.toFixed(3), +dir.y.toFixed(3), +dir.z.toFixed(3)], k: w });
+    _hl.copy(p).sub(S.C).divideScalar(6);
+    netSend({ t: 'sbolt', p: [+p.x.toFixed(1), +p.y.toFixed(1), +p.z.toFixed(1)], d: [+dir.x.toFixed(3), +dir.y.toFixed(3), +dir.z.toFixed(3)], k: w, h: [+_hl.x.toFixed(2), +_hl.y.toFixed(2), +_hl.z.toFixed(2)] });
   }
 }
 
@@ -1162,16 +1164,15 @@ function remoteFlyEnd(pid) {
   FLYERS.delete(pid);
 }
 function tickFlyers(dt) {
-  const fs = G.floors.get(G.floor);
   for (let i = FLY_BOLTS.length - 1; i >= 0; i--) {
     const b = FLY_BOLTS[i];
     b.userData.life -= dt;
-    b.position.addScaledVector(b.userData.d, 230 * dt);
+    b.position.addScaledVector(b.userData.d, (b.userData.vel || 38) * dt);
     if (b.userData.life <= 0) { b.parent?.remove(b); FLY_BOLTS.splice(i, 1); }
   }
   for (const [pid, rec] of FLYERS) {
     if (!rec.grp) continue;
-    if (rec.grp.parent !== fs?.meshGroup) { rec.grp.parent?.remove(rec.grp); if (fs?.grid?.mouth?.length) fs.meshGroup.add(rec.grp); else continue; }
+    if (WAR && rec.grp.parent !== WAR.view) { rec.grp.parent?.remove(rec.grp); WAR.view.add(rec.grp); }
     rec.grp.position.lerp(rec.tp, Math.min(1, dt * 8));
     rec.grp.quaternion.slerp(rec.tq, Math.min(1, dt * 8));
   }
@@ -1181,27 +1182,26 @@ export function onSpaceNet(m, pid) {
   const who = m.pid || pid;
   if (m.t === 'spatrol') { remoteFlyStart(who); return; } // nobody gets yanked into space
   if (!S) {
-    // I'm on my feet — track the flyer through the glass
+    // I'm on my feet — the flyer renders inside the ambient-war view, which
+    // already frames the battle for EVERY window: the mouth, the bridge glass
     if (m.t === 'sp') {
       remoteFlyStart(who);
       const rec = FLYERS.get(who);
-      rec.tp.fromArray(m.p);
+      if (m.h) rec.tp.fromArray(m.h);
       rec.tq.fromArray(m.q);
-      if (!rec.grp && G.floors.get(G.floor)?.grid?.mouth?.length) {
+      if (!rec.grp && WAR && m.h) {
         rec.grp = buildFighter(false, true, null, SHIP_SLOTS[slotOf(who)]);
-        rec.grp.scale.setScalar(1.8);
+        rec.grp.scale.setScalar(0.3); // hull-local, like the ambient craft
         rec.grp.position.copy(rec.tp);
-        G.floors.get(G.floor).meshGroup.add(rec.grp);
+        WAR.view.add(rec.grp);
       }
     } else if (m.t === 'sbolt') {
-      // their guns, seen from the deck — the fight is real from every window
-      const fs = G.floors.get(G.floor);
-      if (fs?.grid?.mouth?.length) {
+      if (WAR && m.h) {
         const b = new THREE.Mesh(_warBoltGeo, _warBoltAlly);
-        b.position.fromArray(m.p);
-        b.userData = { d: new THREE.Vector3().fromArray(m.d), life: 2.4 };
+        b.position.fromArray(m.h);
+        b.userData = { d: new THREE.Vector3().fromArray(m.d), life: 2.4, vel: 38 };
         b.lookAt(b.position.clone().add(b.userData.d));
-        fs.meshGroup.add(b);
+        WAR.view.add(b);
         FLY_BOLTS.push(b);
       }
     } else if (m.t === 'sleave') remoteFlyEnd(who);
@@ -1462,7 +1462,8 @@ export function updateSpace(dt) {
     if (S.netT <= 0) {
       S.netT = 0.09;
       const p = S.ship.position, q = S.ship.quaternion;
-      netSend({ t: 'sp', p: [+p.x.toFixed(1), +p.y.toFixed(1), +p.z.toFixed(1)], q: [+q.x.toFixed(3), +q.y.toFixed(3), +q.z.toFixed(3), +q.w.toFixed(3)] });
+      _hl.copy(p).sub(S.C).divideScalar(6);
+      netSend({ t: 'sp', p: [+p.x.toFixed(1), +p.y.toFixed(1), +p.z.toFixed(1)], q: [+q.x.toFixed(3), +q.y.toFixed(3), +q.z.toFixed(3), +q.w.toFixed(3)], h: [+_hl.x.toFixed(2), +_hl.y.toFixed(2), +_hl.z.toFixed(2)] });
     }
   }
 

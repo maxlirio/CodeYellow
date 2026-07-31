@@ -124,6 +124,11 @@ async function boot() {
       }, 800);
     }
     // ?hangar=1 — spawn into a CLEARED hangar deck: walk to a dropship and board it
+    if (params.get('purge')) {
+      // straight into THE PURGE (the stage after the bombing run)
+      const diff = Math.max(0, Math.min(2, (+params.get('purge') || 1) - 1));
+      setTimeout(() => { beginSortie('district', null, null, false, diff); enterSortie(); }, 900);
+    }
     if (params.get('hangar')) {
       // boarding launches a LIVE patrol (add ?drill=1 for the empty-sky version)
       G.hangarDrill = !!params.get('drill');

@@ -567,9 +567,15 @@ function simulateEnemy(e, fs, players, dt, mine) {
         if (e.cfg.ranged && t?.minion) {
           damageMinion(t.minion, e.dmg); // arrows find mercenaries directly
         } else if (e.cfg.ranged && t) {
-          // squat rigs (the spider-walker) carry guns LOW — 1.6*scale put the
-          // muzzle a body-height above the model
-          const from = e.obj.position.clone().setY(e.obj.position.y + (e.cfg.muzzleY ?? 1.6 * e.scale));
+          // the round leaves the WEAPON, wherever the animation is holding it —
+          // a fixed body height put sniper shots at the chest ('out of their
+          // hands') whenever the aim pose raised or lowered the rifle
+          let from = null;
+          if (e.cfg.show?.length || e.cfg.heldModel) {
+            if (e.muzzleBone === undefined) e.muzzleBone = (e.cfg.show?.length && e.obj.getObjectByName(e.cfg.show[0])) || e.obj.getObjectByName('handslotr') || e.obj.getObjectByName('handslot.r') || null;
+            if (e.muzzleBone) from = e.muzzleBone.getWorldPosition(new THREE.Vector3());
+          }
+          if (!from) from = e.obj.position.clone().setY(e.obj.position.y + (e.cfg.muzzleY ?? 1.6 * e.scale));
           const to = new THREE.Vector3(t.pos.x, t.pos.y + 1.3, t.pos.z);
           const dir = to.sub(from).normalize();
           const bolt = {
