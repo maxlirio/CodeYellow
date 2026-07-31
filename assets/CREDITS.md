@@ -12,3 +12,8 @@ All sound effects are procedurally generated at runtime with the Web Audio API �
 
 - `city/` — [KayKit City Builder Bits 1.0](https://github.com/KayKit-Game-Assets/KayKit-City-Builder-Bits-1.0) — CC0 by Kay Lousberg
 - `monsters2/` — Quaternius Ultimate Monsters (CC0, public domain) — https://quaternius.com, mirrored via github.com/511action/descent-3d-assets
+
+## assets/aliens/ — Quaternius "Ultimate Space Pack" enemies (CC0)
+Enemy_Small / Enemy_Large / Enemy_Flying / Enemy_ExtraSmall by Quaternius
+(https://quaternius.com, CC0). Draco-compressed GLBs via the
+trebeljahr/quaternius-showcase mirror.

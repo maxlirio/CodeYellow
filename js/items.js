@@ -22,7 +22,7 @@ const pick = (arr) => arr[Math.floor(Math.random() * arr.length)];
 function itemName(rarity, noun) {
   const pre = pick(NAME_PREFIX[rarity.id]);
   const suf = rarity.mult >= 1.4 ? pick(NAME_SUFFIX.filter(Boolean)) : pick(NAME_SUFFIX);
-  return `${pre} ${noun}${suf ? ' ' + suf : ''}`;
+  return `${pre} ${noun}${suf}`; // designations carry their own spacing
 }
 
 export function rollWeapon(classId, floor, luck = 0) {
@@ -62,7 +62,7 @@ export function rollWeapon(classId, floor, luck = 0) {
   const sigChance = rIdx >= 4 ? 1 : rIdx === 3 ? 0.75 : rIdx === 2 ? 0.4 : 0;
   if (wt.sigPool && Math.random() < sigChance) {
     item.sig = pick(wt.sigPool);
-    item.name = `${item.name} of ${SIGNATURES[item.sig].name}`;
+    item.name = `${item.name} · ${SIGNATURES[item.sig].name.toUpperCase()}`;
   }
   return item;
 }

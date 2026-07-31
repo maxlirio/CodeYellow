@@ -386,7 +386,7 @@ export function renderBoardList(games, onJoin) {
   for (const g of games) {
     const div = document.createElement('div');
     div.className = 'board-game';
-    div.innerHTML = `<div><div class="bg-name">${escapeHtml(g.name || 'Adventurer')}'s party</div>
+    div.innerHTML = `<div><div class="bg-name">${escapeHtml(g.name || 'Operative')}'s crew</div>
       <div class="bg-meta">${g.mode === 'horde' ? 'Last Stand' : g.mode === 'duel' ? 'Duel (PvP)' : 'Campaign'} · code ${g.code}</div></div>`;
     const btn = document.createElement('button');
     btn.textContent = 'Join';

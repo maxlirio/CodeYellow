@@ -87,6 +87,20 @@ function buildVisual(b) {
       }
       return { obj, spin: 'pulse', trail: { color: 0xbb66ff, rate: 0.05, n: 2, s: 0.1 } };
     }
+    case 'bio': {
+      // a wet bio-plasma glob: pulsing sick-green core in a translucent sac
+      const obj = new THREE.Group();
+      obj.add(makeGlowSprite(0x8aff5c, 0.9 * size));
+      const core = new THREE.Mesh(
+        new THREE.IcosahedronGeometry(0.16 * size, 1),
+        new THREE.MeshStandardMaterial({ color: 0x2f5c1f, emissive: 0x8aff5c, emissiveIntensity: 1.6 }));
+      obj.add(core);
+      const sac = new THREE.Mesh(
+        new THREE.IcosahedronGeometry(0.24 * size, 1),
+        new THREE.MeshBasicMaterial({ color: 0x8aff5c, transparent: true, opacity: 0.28, toneMapped: false }));
+      obj.add(sac);
+      return { obj, spin: 'pulse', trail: { color: 0x6fdf3c, rate: 0.06, n: 2, s: 0.09 } };
+    }
     case 'fireball': {
       // faceted molten core in a counter-spinning shell, shedding real embers —
       // a smooth sphere behind a soft glow sprite read as a bead, not as fire

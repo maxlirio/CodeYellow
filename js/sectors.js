@@ -1050,24 +1050,28 @@ function buildDistrict(fs) {
     kit.box('floor', cx * CELL, -0.11, cy * CELL, CELL, 0.22, CELL);
     if ((cx + cy) % 6 === 0) kit.box('frame', cx * CELL, 0.005, cy * CELL, 0.4, 0.012, CELL * 0.7);
   }
-  // BUILDINGS: every solid 3x3 chunk grows a tower with a window band — the
-  // same city the bombing run flew over, now at street level
+  // BUILDINGS: EVERY solid cell is built — the collision grid IS the city,
+  // so no invisible walls (the old aligned-3x3 pass left un-meshed solid
+  // cells you could bump into in thin air)
   const rng2 = makeRng(fs.layoutId + ':bld');
-  for (let by = 0; by < H - 2; by += 3) for (let bx = 0; bx < W - 2; bx += 3) {
-    let solid = true;
-    for (let y = by; y < by + 3 && solid; y++) for (let x = bx; x < bx + 3; x++) if (at(x, y) !== SOLID) { solid = false; break; }
-    if (!solid) continue;
-    // only chunks that FACE a street get full facades; interior mass is cheap
+  const cellHash = (x, y) => ((x * 73856093) ^ (y * 19349663)) >>> 0;
+  for (let cy2 = 0; cy2 < H; cy2++) for (let cx2 = 0; cx2 < W; cx2++) {
+    if (at(cx2, cy2) !== SOLID) continue;
     let facing = false;
-    for (let y = by - 1; y <= by + 3 && !facing; y++) for (let x = bx - 1; x <= bx + 3; x++) if (at(x, y) !== SOLID) { facing = true; break; }
-    const hgt = facing ? 8 + rng2.int(0, 9) : 6;
-    const wx = (bx + 1) * CELL, wz = (by + 1) * CELL;
-    const tone = rng2.pick(['wall', 'wall', 'box0', 'box1', 'box2']);
-    kit.box(tone, wx, hgt / 2, wz, 3 * CELL - 0.3, hgt, 3 * CELL - 0.3);
+    for (const [ddx, ddy] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) if (at(cx2 + ddx, cy2 + ddy) !== SOLID) { facing = true; break; }
+    const h2 = cellHash(cx2, cy2);
+    // neighbouring cells share a height on a coarse 3-grid so towers still
+    // read as BLOCKS, but every solid cell gets its mass
+    const gh = cellHash(Math.floor(cx2 / 3), Math.floor(cy2 / 3));
+    const hgt = facing ? 8 + (gh % 10) : 6;
+    const wx = cx2 * CELL, wz = cy2 * CELL;
+    const tones = ['wall', 'wall', 'box0', 'box1', 'box2'];
+    const tone = tones[gh % tones.length];
+    kit.box(tone, wx, hgt / 2, wz, CELL + 0.02, hgt, CELL + 0.02);
     if (facing) {
-      for (let fy = 2.2; fy < hgt - 1; fy += 2.6) kit.box('panel', wx, fy, wz, 3 * CELL - 0.1, 0.55, 3 * CELL - 0.1);
-      kit.box('frame', wx, hgt + 0.2, wz, 3 * CELL + 0.2, 0.4, 3 * CELL + 0.2);
-      if (rng2.chance(0.3)) kit.box('accent', wx, hgt + 0.5, wz, 1.8, 0.6, 0.2);
+      for (let fy = 2.2; fy < hgt - 1; fy += 2.6) kit.box('panel', wx, fy, wz, CELL + 0.06, 0.55, CELL + 0.06);
+      kit.box('frame', wx, hgt + 0.2, wz, CELL + 0.2, 0.4, CELL + 0.2);
+      if (h2 % 9 === 0) kit.box('accent', wx, hgt + 0.5, wz, 1.8, 0.6, 0.2);
     }
   }
   // hive growth: pods and webbing climb the walls near every nest

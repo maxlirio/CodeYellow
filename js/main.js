@@ -221,7 +221,7 @@ function rebuildPreview() {
 // ---------------- menu & lobby ----------------
 function playerName() {
   const v = $('nameInput').value.trim();
-  return v || 'Adventurer';
+  return v || 'Operative';
 }
 
 function setupMenu() {

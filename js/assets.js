@@ -64,15 +64,17 @@ export const CITY_PIECES = [
 ];
 // Quaternius Ultimate Monsters (CC0) — the occupation on the streets (and
 // the Act II ground war to come). Full animation rigs.
-export const ALIEN_MODELS = ['Orc', 'Demon', 'BlueDemon'];
+// REAL aliens (Quaternius Ultimate Space Pack, CC0): chitinous critters,
+// not medieval monsters. Same clip names as the husk/void anim maps.
+export const ALIEN_MODELS = ['Enemy_Large', 'Enemy_Small', 'Enemy_Flying'];
 
 export async function loadAll(onProgress) {
   const manager = new THREE.LoadingManager();
   manager.onProgress = (url, loaded, total) => onProgress?.(loaded / total, url);
   const loader = new GLTFLoader(manager);
-  const draco = new DRACOLoader(manager);
-  draco.setDecoderPath('https://cdn.jsdelivr.net/npm/three@0.165.0/examples/jsm/libs/draco/');
-  loader.setDRACOLoader(draco); // the Ultimate Space Kit rigs are Draco-compressed
+  const draco = new DRACOLoader();
+  draco.setDecoderPath('https://cdn.jsdelivr.net/npm/three@0.165.0/examples/jsm/libs/draco/gltf/');
+  loader.setDRACOLoader(draco); // the alien pack ships draco-compressed
   const load = (url) => new Promise((res, rej) => loader.load(url, res, undefined, rej));
 
   const jobs = [];
@@ -92,7 +94,7 @@ export async function loadAll(onProgress) {
   for (const w of SCIFI_GUNS) jobs.push(load(`assets/scifi/guns/${w}.glb`).then(g => assets.weapon[w] = g));
   for (const p2 of SCIFI_PROPS) jobs.push(load(`assets/scifi/props/${p2}.glb`).then(g => assets.piece[p2] = g));
   for (const c of CITY_PIECES) jobs.push(load(`assets/city/${c}.gltf`).then(g => assets.piece['city_' + c] = g));
-  for (const m of ALIEN_MODELS) jobs.push(load(`assets/monsters2/${m}.gltf`).then(g => { assets.enemy[m] = g; assets.char[m] = g; }));
+  for (const m of ALIEN_MODELS) jobs.push(load(`assets/aliens/${m}.glb`).then(g => { assets.enemy[m] = g; assets.char[m] = g; }));
   for (const w of WEAPON2_MODELS) {
     const ext = w.startsWith('Skeleton_') ? 'gltf' : 'glb';
     jobs.push(load(`assets/weapons2/${w}.${ext}`).then(g => assets.weapon[w] = g));
@@ -239,10 +241,12 @@ export function tintCharacter(obj, color, { ghost = false, emissive = 0, only = 
 
 // appearance customization: capes / helmets / hats + cape color
 export function applyLook(obj, look) {
+  let capes = 0;
   obj.traverse((n) => {
     if (!n.isMesh && !n.isSkinnedMesh) return;
     if (/Cape|Hood$/.test(n.name)) {
       n.visible = !!look.cape;
+      capes++;
       if (look.cape) {
         n.material = n.material.clone();
         n.material.color = new THREE.Color(CAPE_COLORS[look.capeColor % CAPE_COLORS.length].hex);
@@ -250,6 +254,23 @@ export function applyLook(obj, look) {
     }
     if (/Helmet|Hat/.test(n.name)) n.visible = !!look.helmet;
   });
+  if (!capes) {
+    // sci-fi rigs have no capes — the chosen color paints the SUIT instead
+    // (Character_Main is the KayKit outfit material), so the picker always
+    // does something visible
+    const hex = CAPE_COLORS[look.capeColor % CAPE_COLORS.length].hex;
+    obj.traverse((n) => {
+      if (!n.isMesh && !n.isSkinnedMesh) return;
+      const list = Array.isArray(n.material) ? n.material : [n.material];
+      list.forEach((m, i) => {
+        if (!m || !/^(Character_)?Main$/.test(m.name || '')) return;
+        const c2 = m.clone();
+        c2.color = new THREE.Color(hex).lerp(new THREE.Color(m.color.getHex()), 0.35);
+        c2.name = m.name;
+        if (Array.isArray(n.material)) n.material[i] = c2; else n.material = c2;
+      });
+    });
+  }
 }
 
 export class Animator {

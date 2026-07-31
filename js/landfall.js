@@ -200,7 +200,7 @@ export function buildWorldBelow(group, grid) {
     try {
       const c = makeCharacter('enemy', model);
       obj = c.obj; anim = c.anim;
-      const played = ['Walk', 'Walking', 'Run', 'Running_A', 'Idle'].find((n) => anim.has(n));
+      const played = ['Walk', 'Walking', 'Run', 'Running_A', 'Flying_Idle', 'Fast_Flying', 'Idle'].find((n) => anim.has(n));
       if (played) anim.play(played, { timeScale: 0.9 + rnd() * 0.3 });
       obj.scale.setScalar(alien ? 2.2 : 1.8);
     } catch { continue; }

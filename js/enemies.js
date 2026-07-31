@@ -73,6 +73,18 @@ export function spawnEnemy(fs, type, x, z, { y = 0, elite = false, id = null } =
   // models whose pose dips below their origin get lifted clear of the floor
   if (cfg.meshY) for (const c of [...obj.children]) c.position.y += cfg.meshY / scale; // meshY is world units
   if (cfg.tint) tintCharacter(obj, cfg.tint);
+  if (cfg.chitin) {
+    // ALIEN, not medieval: a wet chitin sheen — glossy dark shell with a
+    // faint bio-glow in the crevices
+    obj.traverse((n) => {
+      if (!n.isMesh && !n.isSkinnedMesh) return;
+      if (!n.material?.isMeshStandardMaterial) return;
+      n.material = n.material.clone();
+      n.material.metalness = 0.45;
+      n.material.roughness = 0.3;
+      if (n.material.emissive) { n.material.emissive.setHex(0x0d2f28); n.material.emissiveIntensity = 0.5; }
+    });
+  }
   if (cfg.paint) tintCharacter(obj, cfg.paint, { only: /^Main$/ }); // robot body panels only
   if (cfg.ghost) tintCharacter(obj, 0xcfe8ff, { ghost: true });
   if (elite) tintCharacter(obj, 0xffcc66, { emissive: 0x662200 });

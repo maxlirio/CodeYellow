@@ -197,14 +197,14 @@ export const OFFHAND_ROLLS = [
 ];
 
 export const NAME_PREFIX = {
-  common: ['Rusty', 'Salvaged', 'Surplus', 'Dented'],
-  fine: ['Tuned', 'Milspec', 'Keen', 'Balanced'],
-  rare: ['Cruel', 'Overclocked', 'Etched', 'Vicious'],
-  epic: ['Voidwrought', 'Cryoforged', 'Sinister', 'Hullbane'],
-  legendary: ['Wardenbane', 'Doomforged', 'Eternal', 'Tyrant’s'],
+  common: ['Surplus', 'Salvaged', 'Stock', 'Grey-Market'],
+  fine: ['Milspec', 'Vector', 'Calibrated', 'Tuned'],
+  rare: ['Overclocked', 'Prototype', 'Blacksite', 'Hotwired'],
+  epic: ['Phaselock', 'Singularity', 'Antimatter', 'Voidwrought'],
+  legendary: ['Omega', 'Apex', 'Zero-Day', 'Dreadnought'],
 };
-export const NAME_SUFFIX = ['', '', 'of Embers', 'of the Hold', 'of the Core', 'of the Deep Void', 'of Echoes', 'of the Fallen Fleet'];
-export const TRINKET_NAMES = ['Ring', 'Amulet', 'Charm', 'Talisman', 'Signet'];
+export const NAME_SUFFIX = ['', '', ' Mk II', ' Mk III', ' Mk V', ' Mk VII', ' X-9', ' [REDLINE]'];
+export const TRINKET_NAMES = ['Implant', 'Chip', 'Module', 'Coprocessor', 'Uplink'];
 export const TRINKET_STATS = [
   { stat: 'crit', min: 4, max: 12, label: '% crit chance', icon: '' },
   { stat: 'speed', min: 0.3, max: 0.9, label: ' move speed', icon: '' },
@@ -258,9 +258,9 @@ export const ENEMIES = {
   glub:     { name: 'Void Drifter', model: 'Cyber_Enemy_Flying_Gun', animMap: 'cyberfly', hp: 34, dmg: 11, speed: 4.6, range: 2.2, xp: 30, gold: [8, 14], attackTime: 1.0, aggro: 15, scale: 1.2, fly: true, tint: 0xbfd4ff },
   drake:    { name: 'Plasma Wraith', model: 'Cyber_Enemy_Flying_Gun', animMap: 'cyberfly', hp: 90, dmg: 18, speed: 6.0, range: 10, xp: 70, gold: [20, 35], attackTime: 1.4, aggro: 18, scale: 2.1, fly: true, ranged: true, tint: 0xffc0b0, boltVis: 'fireball', boltSpeed: 22, muzzleY: 0.5 },
   // ---- THE BROOD (Quaternius Ultimate Monsters): the occupation on the planet ----
-  skitter:  { name: 'Skitterling', model: 'Orc', animMap: 'husk', hp: 30, dmg: 9, speed: 6.8, range: 2.2, xp: 18, gold: [3, 8], attackTime: 0.75, aggro: 14, scale: 1.5, tint: 0x9adf70 },
-  spitter:  { name: 'Bile Spitter', model: 'BlueDemon', animMap: 'husk', hp: 44, dmg: 12, speed: 4.6, range: 13, xp: 34, gold: [7, 14], attackTime: 1.4, aggro: 15, scale: 1.7, ranged: true, boltVis: 'fireball', boltColor: 0x8aff5c, boltSpeed: 21, muzzleY: 1.2 },
-  broodguard:{ name: 'Broodguard', model: 'Demon', animMap: 'husk', hp: 120, dmg: 20, speed: 4.4, range: 2.8, xp: 60, gold: [14, 26], attackTime: 1.15, aggro: 13, scale: 2.3, kbHit: 8, stalwart: true },
+  skitter:  { name: 'Skitterling', model: 'Enemy_Small', animMap: 'void', hp: 30, dmg: 9, speed: 6.8, range: 2.2, xp: 18, gold: [3, 8], attackTime: 0.75, aggro: 14, scale: 1.6, fly: true, hoverY: 0.6, chitin: true },
+  spitter:  { name: 'Bile Spitter', model: 'Enemy_Flying', animMap: 'void', hp: 44, dmg: 12, speed: 4.6, range: 13, xp: 34, gold: [7, 14], attackTime: 1.4, aggro: 15, scale: 1.9, fly: true, ranged: true, boltVis: 'bio', boltColor: 0x8aff5c, boltSpeed: 21, muzzleY: 1.4, chitin: true },
+  broodguard:{ name: 'Broodguard', model: 'Enemy_Large', animMap: 'husk', hp: 120, dmg: 20, speed: 4.4, range: 2.8, xp: 60, gold: [14, 26], attackTime: 1.15, aggro: 13, scale: 2.0, kbHit: 8, stalwart: true, chitin: true },
   nest:     { name: 'Hive Nest', model: 'proc', procNest: true, hp: 95, dmg: 0, speed: 0, range: 0, xp: 80, gold: [20, 34], attackTime: 9, aggro: 15, scale: 1, ranged: true, stalwart: true, summons: true, summonEvery: 9, summonType: 'skitter', summonCount: 2, bodyR: 2.0, nest: true },
   // bosses (deck 3/6 rolls one archetype; deck 9 is still the old god below)
   boss:     { model: 'George', animMap: 'mech', hp: 380, dmg: 22, speed: 4.6, range: 3.4, xp: 170, gold: [60, 90], attackTime: 1.1, aggro: 30, scale: 0.62, boss: true, bossName: 'THE HULK WARDEN', stalwart: true },
@@ -271,7 +271,7 @@ export const ENEMIES = {
   // deck 9: the old god of the reactor — still the dragon, pending its own rebuild
   // solidR = her TORSO: you must walk around it. bodyR (4.5) is her whole reach,
   // wings and tail included — those you can duck under.
-  broodmind:{ name: 'The Broodmind', model: 'Demon', animMap: 'husk', hp: 950, dmg: 26, speed: 4.8, range: 4.0, xp: 620, gold: [220, 320], attackTime: 1.05, aggro: 26, scale: 4.6, boss: true, broodmind: true, stalwart: true, kbHit: 11, tint: 0xb08cff, summons: true, summonEvery: 7, summonType: 'skitter', summonCount: 2, bossName: 'THE BROODMIND', bossMsg: 'shrieks the hive awake' },
+  broodmind:{ name: 'The Broodmind', model: 'Enemy_Large', animMap: 'husk', hp: 950, dmg: 26, speed: 4.8, range: 4.0, xp: 620, gold: [220, 320], attackTime: 1.05, aggro: 26, scale: 4.2, boss: true, broodmind: true, stalwart: true, kbHit: 11, tint: 0xb08cff, summons: true, summonEvery: 7, summonType: 'skitter', summonCount: 2, bossName: 'THE BROODMIND', bossMsg: 'shrieks the hive awake', chitin: true },
   dragon:   { model: 'proc', hp: 2400, dmg: 24, speed: 5.5, range: 30, xp: 900, gold: [340, 480], attackTime: 1.2, aggro: 55, scale: 1.7, bodyR: 4.5, solidR: 2.2, procDragon: true, boss: true, dragon: true, stalwart: true, bossName: 'EMBERWING THE UNDYING' },
 };
 export const MIDBOSS_TYPES = ['boss', 'necrolord', 'reaper', 'mushking', 'boneking'];
