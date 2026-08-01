@@ -26,8 +26,8 @@ export function createPlayer(classId, name) {
   const cls = CLASSES[classId];
   const modelName = cls.model;
   const { obj, anim } = makeCharacter('char', modelName, cls.show);
-  applyLook(obj, G.look);
   applyClassFinish(obj, cls);
+  applyLook(obj, G.look); // LAST — the chosen color wins
   obj.scale.setScalar(cls.scale || 1); // sci-fi rigs are pack-scale, not KayKit-scale
   obj.visible = false; // first person: own body hidden until death cam
   G.scene.add(obj);
@@ -1263,8 +1263,8 @@ export function addRemotePlayer(pid, name, classId, look, equip) {
   const lk = look || { cape: true, helmet: true, capeColor: 0 };
   const modelName = cls.model;
   const { obj, anim } = makeCharacter('char', modelName, equip || cls.show);
-  applyLook(obj, lk);
   applyClassFinish(obj, cls);
+  applyLook(obj, lk); // LAST — their chosen color wins
   obj.scale.setScalar(cls.scale || 1);
   obj.add(makeBlobShadow(0.85 / (cls.scale || 1)));
   const c = document.createElement('canvas');

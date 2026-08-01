@@ -265,7 +265,7 @@ export function applyLook(obj, look) {
       list.forEach((m, i) => {
         if (!m || !/^(Character_)?Main$/.test(m.name || '')) return;
         const c2 = m.clone();
-        c2.color = new THREE.Color(hex).lerp(new THREE.Color(m.color.getHex()), 0.35);
+        c2.color = new THREE.Color(hex).lerp(new THREE.Color(m.color.getHex()), 0.15); // 85% your color
         c2.name = m.name;
         if (Array.isArray(n.material)) n.material[i] = c2; else n.material = c2;
       });

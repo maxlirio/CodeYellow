@@ -197,8 +197,8 @@ function setupPreview() {
   pvCam = new THREE.PerspectiveCamera(35, 150 / 170, 0.1, 20);
   pvCam.position.set(0, 1.5, 4.6);
   pvCam.lookAt(0, 1.0, 0);
-  pvScene.add(new THREE.HemisphereLight(0xbbaadd, 0x332619, 1.6));
-  const key = new THREE.PointLight(0xffb066, 30, 15);
+  pvScene.add(new THREE.HemisphereLight(0xe8eef6, 0x40444c, 1.7));
+  const key = new THREE.PointLight(0xffffff, 26, 15);
   key.position.set(2, 3, 3);
   pvScene.add(key);
   rebuildPreview();
@@ -210,8 +210,8 @@ function rebuildPreview() {
   const cls = CLASSES[classId];
   const modelName = cls.model;
   const { obj } = makeCharacter('char', modelName, cls.show);
-  applyLook(obj, G.look);
   applyClassFinish(obj, cls);
+  applyLook(obj, G.look); // LAST — your color wins over the class finish
   dressPreviewWeapon(obj, classId); // hold the ACTUAL starting weapon
   obj.scale.setScalar(cls.scale || 1);
   pvChar = obj;

@@ -639,7 +639,8 @@ function launchHandoff(sealedHold = false) {
     bs.position.set(ud.x, 0, ud.z);
     ud.open = false;
     if (bs.userData.canopyGroup) bs.userData.canopyGroup.position.copy(bs.userData.canClosed);
-    for (const ch of bs.children) ch.visible = true; // whole again for the return
+    for (const ch of bs.children) ch.visible = true;
+  if (bs.userData.kit) bs.userData.kit.visible = false; // the seat console sleeps until someone straps in // whole again for the return
     bs.visible = false;                               // the pad is EMPTY while you fly
     from.boardAt.bsId = ud.id;
     SB = null;
@@ -653,7 +654,8 @@ function launchHandoff(sealedHold = false) {
   bs.position.set(ud.x, 0, ud.z);
   ud.open = false;
   if (bs.userData.canopyGroup) bs.userData.canopyGroup.position.copy(bs.userData.canClosed);
-  for (const ch of bs.children) ch.visible = true; // whole again for the return
+  for (const ch of bs.children) ch.visible = true;
+  if (bs.userData.kit) bs.userData.kit.visible = false; // the seat console sleeps until someone straps in // whole again for the return
   bs.visible = false;                               // …but GONE — you're flying it
   boardAt.bsId = ud.id;
   SB = null;
@@ -672,7 +674,8 @@ function updateBoarding(dt) {
     for (const c of G.camera.children) c.visible = true;
     document.getElementById('waveHud')?.classList.add('hidden');
     ud.open = false; // canopy seals behind you
-    for (const ch of bs.children) ch.visible = true; // the parked ship is whole again
+    for (const ch of bs.children) ch.visible = true;
+  if (bs.userData.kit) bs.userData.kit.visible = false; // the seat console sleeps until someone straps in // the parked ship is whole again
     if (SB.pre) SB.pre.scene.group.traverse((n) => { if (n.isMesh) n.geometry.dispose(); });
     G.mode = 'playing';
     SB = null;

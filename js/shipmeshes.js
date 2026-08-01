@@ -157,12 +157,20 @@ function buildBoardship(d, mats) {
   B('dark', 0.66, 0.3, 0.85, 0, 1.6, 2.25);
   B('dark', 0.66, 0.5, 0.2, 0, 1.9, 1.75);
   B('accent', 0.5, 0.08, 0.16, 0, 2.16, 1.75);
-  // the pilot's console — the SAME kit the flight ship mounts, tucked INTO
-  // the tub (no view-framing pillars; scaled to fit inside the canopy line)
-  const kit = cockpitKit({ pillars: false });
-  kit.position.set(0, 2.08, 2.35);
+  // TWO consoles. The display kit: small, tucked under the glass — what you
+  // see looking at the parked ship from outside.
+  const showKit = cockpitKit({ pillars: false });
+  showKit.position.set(0, 2.08, 2.35);
+  showKit.rotation.y = Math.PI;
+  showKit.scale.setScalar(0.45);
+  grp.add(showKit);
+  // The SEAT kit: full-scale, mounted at the pilot's eye exactly like the
+  // flight view mounts its console — hidden until you strap in, so the
+  // dash monitor fills the same spot it does in space.
+  const kit = cockpitKit();
+  kit.position.set(0, 2.3, 2.6);
   kit.rotation.y = Math.PI;
-  kit.scale.setScalar(0.45); // narrow enough to live INSIDE the tapered glass
+  kit.visible = false;
   grp.add(kit);
   grp.userData.kit = kit;
   grp.userData.seatEye = new THREE.Vector3(0, 2.3, 2.6);
