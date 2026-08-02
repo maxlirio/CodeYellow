@@ -28,6 +28,7 @@ export function closeTrainRoom() {
   hooks.lock?.();
 }
 
+export function trainSkill(id) { buySkill(id); }
 function buySkill(id) {
   const sk = SKILLS.find(s => s.id === id);
   const r = skillRank(id);

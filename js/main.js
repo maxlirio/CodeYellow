@@ -21,7 +21,7 @@ import {
   setMissionHooks, updateMissions, openMissionMap, enterSortie, tryExtract,
   onRemoteMission, onRemoteMissionEnd, beginSortie,
 } from './missions.js';
-import { openTrainRoom, setSkillHooks } from './skills.js';
+import { openTrainRoom, setSkillHooks, trainSkill } from './skills.js';
 import { updateSpace, spaceMouse, spaceFire, inSpace, startSpaceFlight, setSpaceHooks, spaceSetWeapon, startBoarding, spaceCycleLock, spaceHomeLock , updateAmbientWar } from './space.js';
 import { startArrival, updateArrival, updateLandfall, inLandfall, landfallCycleLock, landfallTrigger, landfallSetWeapon, landfallHomeLock, landfallSyncFloor, updateLandfallAmbient } from './landfall.js';
 import { initViewmodel, updateViewmodel } from './viewmodel.js';
@@ -35,6 +35,7 @@ import { toggleMachineMode, cycleMachine, updateMachineGhost, placeCurrentMachin
 import { initCommander, openCommandMap, closeCommandMap, commander } from './commander.js';
 import { themeFor } from './dungeon.js';
 import { setMusicBase, setBossMusic, musicCtxFor, toggleMusic, updateMusic } from './music.js';
+import { registerTouchScreen, setTouchActions, updateTouchCursor, touchScreenClick, isTouchScreen, tickTouchScreens, clearTouchScreens } from './touchscreens.js';
 import { fetchPublicGames, publishGame, unpublishGame } from './board.js';
 import {
   createPlayer, resetPlayerForFloor, updatePlayer, updateRemotes, tryAttack, tryDodge, tryInteract,
@@ -335,6 +336,7 @@ function setupMenu() {
   $('btnCloseCmd').onclick = () => { closeCommandMap(); G.mode = 'playing'; lockPointer(); };
   initCommander();
   $('btnFloorCancel').onclick = () => { hide('floorSelect'); G.mode = 'playing'; lockPointer(); };
+  _bindSwitchMode();
   $('btnModeCampaign').onclick = () => switchMode('campaign');
   $('btnModeHorde').onclick = () => switchMode('horde');
   $('btnModeDuel').onclick = () => switchMode('duel');
@@ -535,6 +537,12 @@ function setLocalFloor(n) {
   initFloorTraps(fs);
   buildRopesForFloor(fs);
   landfallSyncFloor(fs); // decks with a view render WHERE THE SHIP IS
+  // diegetic touch screens: the station UI renders ON the wall screens
+  const TOUCH_KIND = { armory: 'armory', training: 'training', mode: 'sim', board: 'comms' };
+  for (const m2 of fs.stationMeshes || []) {
+    const kind = TOUCH_KIND[m2.userData.station];
+    if (kind) registerTouchScreen(m2, kind);
+  }
   if (fs.npcs) spawnTownNpcs(fs);
   fs.meshGroup.visible = true;
   fs.enemyGroup.visible = true;
@@ -897,6 +905,7 @@ function openModeDialog() {
   show('modeDialog');
 }
 
+function _bindSwitchMode() { switchModeRef = switchMode; }
 function switchMode(mode) {
   hide('modeDialog');
   if (mode === G.runMode) { G.mode = 'playing'; lockPointer(); return; }
@@ -944,6 +953,14 @@ function onShopOpened(type) {
   show('merchant');
 }
 
+setTouchActions({
+  buyItem: (id, price) => buyItem(id, price),
+  buySkill: (id) => trainSkill(id),
+  switchMode: (mode) => { if (G.net.role === 'guest') { addMsg('Only the host can change the venture.', 'bad'); return; } switchModeFromScreen(mode); },
+  openBoard: () => onShopOpened('board'),
+});
+function switchModeFromScreen(mode) { switchModeRef?.(mode); }
+let switchModeRef = null;
 function buyItem(id, price) {
   if (G.run.gold < price) return;
   const p = G.player;
@@ -1112,16 +1129,16 @@ function lockPointer() {
 function setupInput() {
   const canvas = $('game');
   const stationRay = new THREE.Raycaster();
-  window.__touchStation = () => touchStation();
-  const touchStation = () => {
-    // TOUCH SCREENS: aim at a bridge screen (or the holo table) and click
-    if (G.floor !== 0) return null;
-    const fs = G.floors.get(0);
+  window.__touchStationHit = () => touchStationHit();
+  const touchStationHit = () => {
+    // TOUCH SCREENS: aim at a station screen — full hit, with surface uv
+    if (G.mode !== 'playing') return null;
+    const fs = G.floors.get(G.floor);
     if (!fs?.stationMeshes?.length) return null;
     stationRay.setFromCamera({ x: 0, y: 0 }, G.camera);
     stationRay.far = 7.5;
     const hits = stationRay.intersectObjects(fs.stationMeshes, false);
-    return hits.length ? hits[0].object.userData.station : null;
+    return hits.length ? hits[0] : null;
   };
   canvas.addEventListener('click', () => {
     if (G.mode === 'space') {
@@ -1135,8 +1152,13 @@ function setupInput() {
       if (!document.pointerLockElement) { lockPointer(); return; }
       if (machineState.on) { placeCurrentMachine(); return; } // machine mode: click places
       if (buildState.on) { placeCurrentBuild(); return; }     // build mode: click places
-      const st = touchStation();
-      if (st) { sfx.key(); onShopOpened(st); return; }
+      const hit = touchStationHit();
+      if (hit) {
+        // a real touch screen consumes the click ON the glass; other
+        // stations (the holo table) still open their consoles
+        if (isTouchScreen(hit.object)) { touchScreenClick(hit.object, hit.uv); return; }
+        sfx.key(); onShopOpened(hit.object.userData.station); return;
+      }
       tryAttack();
     }
   });
@@ -1275,7 +1297,12 @@ function loop(t) {
     updateArrival(dt); // the carrier jumping/descending outside the bridge glass
     updateAmbientWar(dt); // the raid outside the glass — already going on
     updateLandfallAmbient(dt); // squadmates' tracers over the city
-    setCrosshairPointer(!!window.__touchStation?.()); // pointer over touch screens
+    { // the crosshair drives an ON-SCREEN cursor across any touch screen
+      const hit = window.__touchStationHit?.();
+      updateTouchCursor(hit?.object || null, hit?.uv || null);
+      tickTouchScreens(dt);
+      setCrosshairPointer(!!hit);
+    }
   } else if (G.player && simActive) {
     G.player.anim.update(dt);
   }
