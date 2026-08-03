@@ -34,7 +34,7 @@ import { toggleBuildMode, cycleBuildPiece, updateBuildGhost, placeCurrentBuild, 
 import { toggleMachineMode, cycleMachine, updateMachineGhost, placeCurrentMachine, machineState, updateMachines, clearMachines, refreshMachineVisibility } from './machines.js';
 import { initCommander, openCommandMap, closeCommandMap, commander } from './commander.js';
 import { themeFor } from './dungeon.js';
-import { setMusicBase, setBossMusic, musicCtxFor, toggleMusic, updateMusic } from './music.js';
+import { setMusicBase, setBossMusic, musicCtxFor, toggleMusic, updateMusic, musicEnabled } from './music.js';
 import { registerTouchScreen, setTouchActions, updateTouchCursor, touchScreenClick, isTouchScreen, tickTouchScreens, clearTouchScreens } from './touchscreens.js';
 import { fetchPublicGames, publishGame, unpublishGame } from './board.js';
 import {
@@ -551,6 +551,7 @@ function setLocalFloor(n) {
   setFloorAliases(fs);
   applyThemeAtmosphere(fs);
   setMusicBase(musicCtxFor(n, G.runMode, fs.theme?.id));
+  if (!musicEnabled() && !G._mutedNoted) { G._mutedNoted = true; addMsg('Music is muted — press M to turn it on.', 'gold'); }
   clearTransientFx();
   clearFireFx();
   clearProjectiles();
@@ -883,7 +884,7 @@ function openBestiary() {
   document.exitPointerLock?.();
   let html = `<div class="codex-note">Base numbers shown. Every floor deeper multiplies HP by +22% and damage by +13% of base
     (floor 3: HP ×${(1 + 0.22 * 2).toFixed(2)}, dmg ×${(1 + 0.13 * 2).toFixed(2)}).
-    Gold-glowing ELITES: ×2.4 HP, ×1.5 damage, ×2 gold. Bosses? “Some things you meet unspoiled.”</div>`;
+    Gold-glowing ELITES: ×2.4 HP, ×1.5 damage, ×2 credits. Bosses? “Some things you meet unspoiled.”</div>`;
   for (const [id, e] of Object.entries(ENEMIES)) {
     if (e.boss) continue;
     html += `<div class="codex-entry"><h3>${MONSTER_NAMES[id] || id}</h3><div class="codex-stats">`
@@ -970,7 +971,7 @@ function buyItem(id, price) {
     G.run.buys[id] = (G.run.buys[id] || 0) + 1;
     const item = rollTrinket(G.floor, 0.3);
     addToBag(item);
-    addMsg(`The merchant hands you <span style="color:${rarityOf(item).color}">${item.name}</span>`, 'gold');
+    addMsg(`The quartermaster hands you <span style="color:${rarityOf(item).color}">${item.name}</span>`, 'gold');
     sfx.chest();
     refreshHud();
     return;
@@ -1019,10 +1020,10 @@ function buyItem(id, price) {
     return;
   }
   if (id === 'arrows') {
-    if (G.run.gold < price) { addMsg('Not enough gold.', 'bad'); return; }
+    if (G.run.gold < price) { addMsg('Not enough credits.', 'bad'); return; }
     G.run.gold -= price;
     G.run.arrows = (G.run.arrows || 0) + 25;
-    addMsg('+25 arrows', 'gold');
+    addMsg('+25 cells', 'gold');
     sfx.coin();
     refreshHud();
     return;
@@ -1340,7 +1341,7 @@ function loop(t) {
       }
       const wh = document.getElementById('waveHud');
       wh.classList.remove('hidden');
-      wh.textContent = 'DUEL — B build · P arrows · last one standing';
+      wh.textContent = 'DUEL — B build · P cells · last one standing';
     }
     updateNet(dt);
     updateMusic(dt);

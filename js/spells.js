@@ -309,7 +309,7 @@ export function castSpell(slot, effectiveDamage) {
   if (!sp) return;
   if (cooldowns[spellId] > 0 && !(sp.type === 'lash' && p.lash)) return;
   if (p.mana < sp.mana) { addMsg('Not enough mana!', 'bad'); return; }
-  if (sp.arrows && (G.run.arrows || 0) < sp.arrows) { addMsg(`Needs ${sp.arrows} arrows!`, 'bad'); return; }
+  if (sp.arrows && (G.run.arrows || 0) < sp.arrows) { addMsg(`Needs ${sp.arrows} cells!`, 'bad'); return; }
   if (sp.arrows) { G.run.arrows -= sp.arrows; refreshHud(); }
   p.mana -= sp.mana;
   cooldowns[spellId] = sp.cd;

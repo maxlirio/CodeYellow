@@ -52,6 +52,7 @@ export function toggleMusic() {
   return !muted;
 }
 export function musicEnabled() { return !muted; }
+export function musicMutedAtBoot() { return muted; }
 
 // called every frame: fade the active track in, everything else out
 export function updateMusic(dt) {

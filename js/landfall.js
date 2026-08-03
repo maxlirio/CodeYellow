@@ -661,7 +661,6 @@ function endFlight(result) {
     G.run.gold += strafe;
     addMsg(`Strafing tally: +${strafe} credits.`, 'gold');
   }
-  for (const r of L.remote.values()) fs.meshGroup.remove(r.grp);
   if (G.net.role !== 'solo') netSend({ t: 'lfleave' });
   // your bomber is back on its pad
   if (L.boardAt?.bsId && fs.boardShips) {
@@ -895,8 +894,12 @@ function impactPoint(out) {
 // ---------------- co-op sync ----------------
 // squadmates' fire seen from the DECK (or from your own cockpit): cosmetic
 // tracers in the same shared coordinates
-const LF_AMB = { bolts: [] };
+const LF_AMB = { bolts: [], remote: new Map() };
 export function updateLandfallAmbient(dt) {
+  for (const r of LF_AMB.remote.values()) {
+    r.grp.position.lerp(r.tp, Math.min(1, dt * 8));
+    r.grp.quaternion.slerp(r.tq, Math.min(1, dt * 8));
+  }
   for (let i = LF_AMB.bolts.length - 1; i >= 0; i--) {
     const b = LF_AMB.bolts[i];
     b.userData.life -= dt;
@@ -932,20 +935,25 @@ export function onLandfallNet(m, pid) {
         }
       }
     }
-  } else if (m.t === 'lfp' && L) {
-    let r = L.remote.get(pid);
+  } else if (m.t === 'lfp') {
+    // render the flyer whether I'm in a cockpit OR standing on the deck —
+    // the flight happens in this floor's own coordinates either way
+    const fs = L?.fs || (G.floors.get(G.floor)?.grid?.landfall ? G.floors.get(G.floor) : null);
+    if (!fs?.meshGroup) return;
+    let r = LF_AMB.remote.get(pid);
     if (!r) {
       const grp = buildBomber(false, SHIP_SLOTS[slotOf(pid)]);
       grp.scale.setScalar(1);
-      L.fs.meshGroup.add(grp);
+      fs.meshGroup.add(grp);
       r = { grp, tp: new THREE.Vector3(), tq: new THREE.Quaternion() };
-      L.remote.set(pid, r);
+      LF_AMB.remote.set(pid, r);
     }
+    if (r.grp.parent !== fs.meshGroup) { r.grp.parent?.remove(r.grp); fs.meshGroup.add(r.grp); }
     r.tp.fromArray(m.p);
     r.tq.fromArray(m.q);
-  } else if (m.t === 'lfleave' && L) {
-    const r = L.remote.get(pid);
-    if (r) { L.fs.meshGroup.remove(r.grp); L.remote.delete(pid); }
+  } else if (m.t === 'lfleave') {
+    const r = LF_AMB.remote.get(pid);
+    if (r) { r.grp.parent?.remove(r.grp); LF_AMB.remote.delete(pid); }
   }
 }
 
@@ -1407,10 +1415,6 @@ export function updateLandfall(dt) {
       L.netT = 0.12;
       const p2 = L.ship.position, q2 = L.ship.quaternion;
       netSend({ t: 'lfp', p: [+p2.x.toFixed(1), +p2.y.toFixed(1), +p2.z.toFixed(1)], q: [+q2.x.toFixed(3), +q2.y.toFixed(3), +q2.z.toFixed(3), +q2.w.toFixed(3)] });
-    }
-    for (const r of L.remote.values()) {
-      r.grp.position.lerp(r.tp, Math.min(1, dt * 8));
-      r.grp.quaternion.slerp(r.tq, Math.min(1, dt * 8));
     }
   }
 

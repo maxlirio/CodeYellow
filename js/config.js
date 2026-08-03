@@ -70,7 +70,7 @@ export const SPELLS = {
   // ranger
   powershot:  { name: 'Power Shot', icon: '', mana: 21, cd: 5, type: 'proj', dmgMult: 2.0, speed: 34, color: 0xd8e6b0, pierce: true, vis: 'arrow', arrows: 1 },
   multishot:  { name: 'Multishot', icon: '', mana: 24, cd: 6, type: 'proj', dmgMult: 0.8, speed: 28, color: 0xd8e6b0, count: 3, spread: 0.35, vis: 'arrow', arrows: 3 },
-  rainarrows: { name: 'Rain of Arrows', icon: '', mana: 36, cd: 10, type: 'targetaoe', dmgMult: 1.4, radius: 4.5, range: 26, delay: 0.7, color: 0xd8e6b0, fall: 'arrowrain', arrows: 7 },
+  rainarrows: { name: 'Saturation Fire', icon: '', mana: 36, cd: 10, type: 'targetaoe', dmgMult: 1.4, radius: 4.5, range: 26, delay: 0.7, color: 0xd8e6b0, fall: 'arrowrain', arrows: 7 },
   // ---- physical power-up abilities (knight & barbarian) ----
   bullcharge:  { name: 'Charge', icon: '', mana: 24, cd: 9, type: 'charge', dist: 9, dmgMult: 1.2, phys: true },
   warbanner:   { name: 'War Banner', icon: '', mana: 30, cd: 18, type: 'banner', dur: 10, radius: 7, dmgAura: 1.25, phys: true },
