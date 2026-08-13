@@ -1023,9 +1023,9 @@ function updateInteractPrompt() {
   const s = G.grid.stairs;
   if (p.obj.position.y < 1 && Math.hypot(p.obj.position.x - s.x, p.obj.position.z - s.z) < 2.6) {
     if (G.grid.stairsLocked) {
-      showPrompt('Defeat the boss to descend');
+      showPrompt('Clear the section — the lift stays locked');
     } else {
-      showPrompt(G.grid.town ? '<b>E</b> — Enter the dungeon' : '<b>E</b> — The way onward');
+      showPrompt(G.grid.town ? '<b>E</b> — Call the grav lift' : '<b>E</b> — Call the grav lift');
       interactTarget = { kind: 'stairs' };
     }
     return;

@@ -1,135 +1,138 @@
-// THE GRAV LIFT — deck travel as a RIDE, not a screen fade. An enclosed car
-// builds itself around the camera, the shaft rushes past the window slits
-// while the destination deck streams in unseen behind the shell, and the
-// doors open on the far side. One ship, no cuts.
-import * as THREE from 'three';
+// THE GRAV LIFT, played straight: press the call button, the doors part,
+// you walk in on your own feet, they seal behind you, the deck numbers
+// tick past, and the doors open somewhere else. You walk out; they close.
+// No teleports — the floor swap happens while you stand in a sealed cab.
 import { G } from './state.js';
 import { sfx } from './audio.js';
+import { addMsg } from './ui.js';
 
-let ride = null;
+let ride = null; // { fs, lift, target, phase, t, commit, onDone }
+let setFloorFn = null;
+export function setLiftHooks({ setFloor }) { setFloorFn = setFloor; }
 
 export function liftBusy() { return !!ride; }
 
-export function liftRide(targetFloor, { swap, onDone, downward = true } = {}) {
+// E on the pad = pressing the CALL button
+export function summonLift(target, { commit = null, onDone = null } = {}) {
+  const fs = G.floors.get(G.floor);
+  const lift = fs?.lift;
+  if (!lift) { instantTravel(target, commit, onDone); return; } // no lobby (dev floors)
   if (ride) return;
-  const cam = G.camera;
-  const car = new THREE.Group();
-  car.position.copy(cam.position);
-  // deterministic frame: car axes = world axes, camera looks down -z at the
-  // doors. The car is sealed — exterior orientation is irrelevant.
-  cam.rotation.set(0, 0, 0);
+  ride = { fs, lift, target, phase: 'opening', t: 0, commit, onDone, dwell: 0 };
+  sfx.key();
+  addMsg('Lift called — step in.', 'gold');
+}
 
-  const wallM = new THREE.MeshBasicMaterial({ color: 0x11161d, side: THREE.DoubleSide, fog: false });
-  const panelM = new THREE.MeshBasicMaterial({ color: 0x1c2530, side: THREE.DoubleSide, fog: false });
-  const trimM = new THREE.MeshBasicMaterial({ color: 0x2fd6c8, toneMapped: false, fog: false });
-  const B = (sx, sy, sz, x, y, z, mat = wallM) => {
-    const m = new THREE.Mesh(new THREE.BoxGeometry(sx, sy, sz), mat);
-    m.position.set(x, y, z);
-    car.add(m); return m;
-  };
-  // the capsule: floor, roof, back, flanks with window slits, DOORS forward
-  B(3.2, 0.2, 3.2, 0, -1.7, 0, panelM);            // floor plate
-  B(3.2, 0.2, 3.2, 0, 1.5, 0, panelM);             // roof
-  B(3.2, 0.06, 3.2, 0, 1.42, 0, trimM);            // roof light panel
-  B(3.2, 3.2, 0.2, 0, -0.1, 1.6);                  // back wall
-  for (const sx of [-1, 1]) {                       // flanks: solid below/above a slit
-    B(0.2, 1.1, 3.2, sx * 1.6, -1.25, 0);
-    B(0.2, 1.4, 3.2, sx * 1.6, 0.9, 0);
-    B(0.16, 0.1, 3.2, sx * 1.62, -0.66, 0, trimM); // slit sills glow
-    B(0.16, 0.1, 3.2, sx * 1.62, 0.16, 0, trimM);
-  }
-  const doorM = new THREE.MeshBasicMaterial({ color: 0x27313e, side: THREE.DoubleSide, fog: false });
-  const doorL = B(0.9, 3.2, 0.16, -0.45, -0.1, -1.6, doorM);
-  const doorR = B(0.9, 3.2, 0.16, 0.45, -0.1, -1.6, doorM);
-  // the doors READ as doors: meeting-edge glow + a waist stripe on each leaf
-  const edgeL = B(0.05, 2.8, 0.18, -0.03, -0.1, -1.59, trimM);
-  const edgeR = B(0.05, 2.8, 0.18, 0.03, -0.1, -1.59, trimM);
-  const stripeL = B(0.8, 0.1, 0.18, -0.45, -0.3, -1.59, trimM);
-  const stripeR = B(0.8, 0.1, 0.18, 0.45, -0.3, -1.59, trimM);
-  B(0.7, 3.2, 0.2, -1.45, -0.1, -1.6);             // door frame posts
-  B(0.7, 3.2, 0.2, 1.45, -0.1, -1.6);
+// dev/probe path: ?auto flows can skip the ceremony
+export function instantTravel(target, commit, onDone) {
+  commit?.();
+  G.mode = 'transition';
+  setFloorFn?.(target);
+  G.mode = 'playing';
+  onDone?.();
+}
 
-  // the SHAFT beyond the slits: a big dark tube with light bands that scroll
-  const shaftM = new THREE.MeshBasicMaterial({ color: 0x05080c, side: THREE.BackSide, fog: false });
-  const shaft = new THREE.Mesh(new THREE.CylinderGeometry(6, 6, 60, 12, 1, true), shaftM);
-  car.add(shaft);
-  const bands = [];
-  const bandM = new THREE.MeshBasicMaterial({ color: 0x2fd6c8, toneMapped: false, transparent: true, opacity: 0.7, side: THREE.BackSide, fog: false });
-  for (let i = 0; i < 10; i++) {
-    const band = new THREE.Mesh(new THREE.CylinderGeometry(5.9, 5.9, 0.25, 12, 1, true), bandM);
-    band.position.y = -30 + i * 6;
-    car.add(band); bands.push(band);
-  }
-  // the car screen: deck ticker
-  const c = document.createElement('canvas');
-  c.width = 256; c.height = 96;
-  const tex = new THREE.CanvasTexture(c);
-  const screen = new THREE.Mesh(new THREE.PlaneGeometry(1.5, 0.55),
-    new THREE.MeshBasicMaterial({ map: tex, toneMapped: false, fog: false }));
-  screen.position.set(0, 0.95, -1.48);
-  car.add(screen);
-  const drawScreen = (label) => {
-    const x = c.getContext('2d');
-    x.fillStyle = '#04121a'; x.fillRect(0, 0, 256, 96);
-    x.strokeStyle = '#2fd6c8'; x.lineWidth = 4; x.strokeRect(4, 4, 248, 88);
-    x.fillStyle = '#2fd6c8'; x.font = 'bold 30px Menlo, monospace'; x.textAlign = 'center';
-    x.fillText(label, 128, 44);
-    x.font = '18px Menlo, monospace'; x.fillStyle = '#7fb8b2';
-    x.fillText('GRAV LIFT', 128, 74);
-    tex.needsUpdate = true;
-  };
-  drawScreen(`DECK ${G.floor}`);
-  G.scene.add(car);
+const drawTicker = (lift, label, sub) => {
+  const c = lift.ticker.canvas, x = c.getContext('2d');
+  x.fillStyle = '#04121a'; x.fillRect(0, 0, c.width, c.height);
+  x.strokeStyle = '#2fd6c8'; x.lineWidth = 3; x.strokeRect(3, 3, c.width - 6, c.height - 6);
+  x.fillStyle = '#2fd6c8'; x.textAlign = 'center';
+  x.font = 'bold 26px Menlo, monospace';
+  x.fillText(label, c.width / 2, 34);
+  if (sub) { x.font = '12px Menlo, monospace'; x.fillStyle = '#7fb8b2'; x.fillText(sub, c.width / 2, 52); }
+  lift.ticker.tex.needsUpdate = true;
+};
 
-  sfx.stairs();
-  sfx.rumble?.();
-  const DUR = 3.7, t0 = performance.now();
-  let swapped = false;
-  ride = { car };
-  const tick = () => {
-    if (!ride) return;
-    const t = (performance.now() - t0) / 1000;
-    const k = Math.min(1, t / DUR);
-    // doors: shut fast at the start, open at the end
-    const doorK = t < 0.5 ? 1 - t / 0.5 : k > 0.86 ? (k - 0.86) / 0.14 : 0;
-    doorL.position.x = -0.45 - doorK * 0.92;
-    doorR.position.x = 0.45 + doorK * 0.92;
-    edgeL.position.x = -0.03 - doorK * 0.92;
-    edgeR.position.x = 0.03 + doorK * 0.92;
-    stripeL.position.x = -0.45 - doorK * 0.92;
-    stripeR.position.x = 0.45 + doorK * 0.92;
-    // the shaft rushes past — ease in, ease out
-    const speed = Math.sin(Math.min(Math.PI, (t / DUR) * Math.PI)) * 26;
-    for (const band of bands) {
-      band.position.y += (downward ? 1 : -1) * speed * 0.016;
-      if (band.position.y > 30) band.position.y -= 60;
-      if (band.position.y < -30) band.position.y += 60;
+function setDoors(lift, k) { // 0 sealed .. 1 parted
+  lift.doorK = k;
+  lift.doorL.position.x = -0.66 - k * 1.18;
+  lift.doorR.position.x = 0.66 + k * 1.18;
+  lift.doorCol.off = k > 0.55; // passable once mostly open
+}
+
+function playerInCab(lift) {
+  const p = G.player;
+  if (!p) return false;
+  return Math.hypot(p.obj.position.x - lift.cab.x, p.obj.position.z - lift.cab.z) < 1.15;
+}
+
+export function updateLifts(dt) {
+  if (!ride) return;
+  const { lift } = ride;
+  ride.t += dt;
+  switch (ride.phase) {
+    case 'opening': {
+      setDoors(lift, Math.min(1, ride.t / 0.8));
+      drawTicker(lift, `DECK ${G.floor}`, 'BOARD');
+      if (ride.t >= 0.8) { ride.phase = 'open'; ride.t = 0; sfx.key(); }
+      break;
     }
-    if (t > 0.6 && t < DUR - 0.7) G.shake = Math.max(G.shake || 0, 0.05);
-    // mid-ride: the destination builds behind the shell, and the car quietly
-    // relocates to the destination spawn — the windows never let on
-    if (!swapped && t > DUR * 0.42) {
-      swapped = true;
-      swap?.();
-      const p = G.player;
-      if (p) {
-        car.position.set(p.obj.position.x, p.obj.position.y + 1.55, p.obj.position.z);
-        G.camera.position.copy(car.position);
-        G.camera.rotation.set(0, 0, 0);
-        // when the doors open, the first playing frame snaps to the player's
-        // camYaw — align the player to the car so there is no pop
-        p.camYaw = Math.PI; // world -z, straight out the doors
+    case 'open': {
+      if (playerInCab(lift)) { ride.phase = 'boarding'; ride.t = 0; break; }
+      if (ride.t > 10) { ride.phase = 'cancel'; ride.t = 0; addMsg('Lift released.', 'gold'); }
+      break;
+    }
+    case 'boarding': { // you're in — the doors seal behind you
+      setDoors(lift, Math.max(0, 1 - ride.t / 0.8));
+      if (ride.t >= 0.8) {
+        ride.phase = 'riding'; ride.t = 0;
+        G.mode = 'transition'; // the cab owns you for the ride
+        ride.commit?.();
+        sfx.stairs();
+        sfx.rumble?.();
       }
-      drawScreen(`DECK ${targetFloor}`);
-      sfx.key();
+      break;
     }
-    if (k >= 1) {
-      G.scene.remove(car);
-      ride = null;
-      onDone?.();
-      return;
+    case 'riding': {
+      G.shake = Math.max(G.shake || 0, 0.045);
+      if (ride.from === undefined) ride.from = G.floor;
+      const passing = Math.round(ride.from + (ride.target - ride.from) * Math.min(1, ride.t / 2.4));
+      drawTicker(ride.lift2 || lift, `DECK ${passing}`, ride.target > ride.from ? '▼ DESCENDING' : '▲ ASCENDING');
+      if (ride.t >= 1.3 && !ride.swapped) {
+        ride.swapped = true;
+        setFloorFn?.(ride.target); // the world changes while you're sealed in
+        const dest = G.floors.get(ride.target)?.lift;
+        const p = G.player;
+        if (dest && p) {
+          // you are STANDING IN the destination cab — same box, new deck
+          p.obj.position.set(dest.cab.x, 0, dest.cab.z);
+          p.camYaw = dest.outYaw;
+          p.camPitch = 0;
+          setDoors(dest, 0);
+          ride.lift2 = dest;
+        }
+      }
+      if (ride.t >= 2.6) { ride.phase = 'arrive'; ride.t = 0; G.mode = 'playing'; sfx.key(); }
+      break;
     }
-    requestAnimationFrame(tick);
-  };
-  tick();
+    case 'arrive': { // doors part on the new deck — walk out
+      const dest = ride.lift2 || lift;
+      setDoors(dest, Math.min(1, ride.t / 0.8));
+      drawTicker(dest, `DECK ${ride.target}`, 'ARRIVED');
+      if (ride.t >= 0.8) { ride.phase = 'exit'; ride.t = 0; }
+      break;
+    }
+    case 'exit': {
+      const dest = ride.lift2 || lift;
+      const gone = !playerInCab(dest);
+      if (gone) ride.dwell += dt; else ride.dwell = 0;
+      if (ride.dwell > 0.5 || ride.t > 15) { ride.phase = 'shut'; ride.t = 0; }
+      break;
+    }
+    case 'shut': { // and they close behind you
+      const dest = ride.lift2 || lift;
+      setDoors(dest, Math.max(0, 1 - ride.t / 0.8));
+      if (ride.t >= 0.8) {
+        const done = ride.onDone;
+        ride = null;
+        done?.();
+      }
+      break;
+    }
+    case 'cancel': {
+      setDoors(lift, Math.max(0, 1 - ride.t / 0.8));
+      if (ride.t >= 0.8) ride = null;
+      break;
+    }
+  }
 }

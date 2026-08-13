@@ -818,24 +818,40 @@ export function buildFloorMeshes(fs) {
       m.position.set(x, y, z);
       lob.add(m); return m;
     };
-    LB(wallM2, 0.5, 3.9, 1.1, -1.55, 1.95, 0.1);   // posts
-    LB(wallM2, 0.5, 3.9, 1.1, 1.55, 1.95, 0.1);
-    LB(wallM2, 3.6, 0.55, 1.1, 0, 3.62, 0.1);      // header
-    LB(wallM2, 3.6, 3.9, 0.3, 0, 1.95, 0.62);      // back of the shaft housing
-    LB(leafM, 1.32, 3.2, 0.14, -0.66, 1.6, -0.2);  // sealed door leaves
-    LB(leafM, 1.32, 3.2, 0.14, 0.66, 1.6, -0.2);
+    // a WALK-IN CAB behind the doors: floor, walls, roof, lamp — deep
+    // enough to stand in. The doors are the only way through.
+    LB(wallM2, 0.5, 3.9, 2.6, -1.55, 1.95, 0.85);  // posts / cab flanks
+    LB(wallM2, 0.5, 3.9, 2.6, 1.55, 1.95, 0.85);
+    LB(wallM2, 3.6, 0.55, 2.6, 0, 3.62, 0.85);     // header / cab roof
+    LB(wallM2, 3.6, 3.9, 0.3, 0, 1.95, 2.1);       // cab back wall
+    LB(wallM2, 2.6, 0.16, 2.2, 0, -0.02, 0.95);    // cab floor plate
+    const cabLampM = new THREE.MeshBasicMaterial({ color: 0xbfe8ff, toneMapped: false });
+    LB(cabLampM, 1.6, 0.05, 1.2, 0, 3.32, 0.95);   // cab ceiling lamp
+    const doorL = LB(leafM, 1.32, 3.2, 0.14, -0.66, 1.6, -0.2); // door leaves
+    const doorR = LB(leafM, 1.32, 3.2, 0.14, 0.66, 1.6, -0.2);
+    // the DECK ticker inside the cab (reads during the ride)
+    const tc = document.createElement('canvas');
+    tc.width = 128; tc.height = 64;
+    const ttex = new THREE.CanvasTexture(tc);
+    ttex.colorSpace = THREE.SRGBColorSpace;
+    const ticker = new THREE.Mesh(new THREE.PlaneGeometry(1.0, 0.5),
+      new THREE.MeshBasicMaterial({ map: ttex, toneMapped: false }));
+    ticker.position.set(0, 2.5, 1.92);
+    ticker.rotation.y = Math.PI;
+    lob.add(ticker);
     // glow kit: meeting-edge, waist stripes, sill, sign — wakes with the sortie
     const glowGrp = new THREE.Group();
     glowGrp.name = 'portalGlow';
-    const GB = (sx, sy, sz, x, y, z) => {
+    const GB = (sx, sy, sz, x, y, z, parent = glowGrp) => {
       const m = new THREE.Mesh(new THREE.BoxGeometry(sx, sy, sz), trimM2);
       m.position.set(x, y, z);
-      glowGrp.add(m); return m;
+      parent.add(m); return m;
     };
-    GB(0.07, 3.0, 0.16, -0.035, 1.6, -0.21);
-    GB(0.07, 3.0, 0.16, 0.035, 1.6, -0.21);
-    GB(1.2, 0.1, 0.16, -0.66, 1.25, -0.21);
-    GB(1.2, 0.1, 0.16, 0.66, 1.25, -0.21);
+    // door glow rides ON the leaves (leaf-local coords) so it slides with them
+    GB(0.07, 3.0, 0.16, 0.63, 0, -0.02, doorL);
+    GB(0.07, 3.0, 0.16, -0.63, 0, -0.02, doorR);
+    GB(1.2, 0.1, 0.16, 0, -0.35, -0.02, doorL);
+    GB(1.2, 0.1, 0.16, 0, -0.35, -0.02, doorR);
     GB(3.0, 0.07, 0.5, 0, 0.04, -0.5);             // sill line
     const sc = document.createElement('canvas');
     sc.width = 256; sc.height = 64;
@@ -856,14 +872,31 @@ export function buildFloorMeshes(fs) {
     plight.name = 'portalLight';
     group.add(plight);
     group.add(lob);
-    // the shaft is solid — no walking through the doors into the wall
+    // colliders: cab flanks + back are ALWAYS solid; the door plane toggles
+    // (lift.js flips doorCol.off as the leaves open and close)
     const along = portal.dx !== 0;
-    fs.grid.colliders.push({
-      x: lob.position.x, z: lob.position.z,
-      hx: along ? 0.55 : 1.85, hz: along ? 1.85 : 0.55,
-      y0: 0, h: 3.9, noMesh: true,
+    const W2L = (lx, lz) => ({ // lobby-local -> world (rotation is yaw-quantized)
+      x: lob.position.x + Math.cos(portal.yaw) * lx + Math.sin(portal.yaw) * lz,
+      z: lob.position.z - Math.sin(portal.yaw) * lx + Math.cos(portal.yaw) * lz,
     });
-    if (fs.grid.portalIdle) { glowGrp.visible = false; plight.visible = false; } // sleeps until confirmed
+    const side1 = W2L(-1.55, 0.85), side2 = W2L(1.55, 0.85), back = W2L(0, 2.1), doorW = W2L(0, -0.2);
+    const box = (p, hx, hz) => fs.grid.colliders.push({ x: p.x, z: p.z, hx: along ? hz : hx, hz: along ? hx : hz, y0: 0, h: 3.9, noMesh: true });
+    box(side1, 0.28, 1.35);
+    box(side2, 0.28, 1.35);
+    box(back, 1.85, 0.2);
+    const doorCol = { x: doorW.x, z: doorW.z, hx: along ? 0.14 : 1.5, hz: along ? 1.5 : 0.14, y0: 0, h: 3.9, noMesh: true, off: false };
+    fs.grid.colliders.push(doorCol);
+    // the lift record the controller drives
+    const cabW = W2L(0, 0.95);
+    fs.lift = {
+      lob, doorL, doorR, doorCol, glowGrp, plight,
+      ticker: { canvas: tc, tex: ttex },
+      cab: { x: cabW.x, z: cabW.z },
+      outYaw: Math.atan2(-portal.dx, portal.dy), // player camYaw facing OUT the doors
+      doorK: 0, state: 'closed',
+    };
+    fs.lift.trimM = trimM2;
+    if (fs.grid.portalIdle) { glowGrp.visible = false; plight.visible = false; trimM2.visible = false; } // sleeps until confirmed
   }
   group.visible = false;
   G.scene.add(group);

@@ -37,7 +37,7 @@ import { initCommander, openCommandMap, closeCommandMap, commander } from './com
 import { themeFor } from './dungeon.js';
 import { setMusicBase, setBossMusic, musicCtxFor, toggleMusic, updateMusic, musicEnabled } from './music.js';
 import { registerTouchScreen, setTouchActions, updateTouchCursor, touchScreenClick, isTouchScreen, tickTouchScreens, clearTouchScreens } from './touchscreens.js';
-import { liftRide, liftBusy } from './lift.js';
+import { summonLift, instantTravel, liftBusy, updateLifts, setLiftHooks } from './lift.js';
 import { fetchPublicGames, publishGame, unpublishGame } from './board.js';
 import {
   createPlayer, resetPlayerForFloor, updatePlayer, updateRemotes, tryAttack, tryDodge, tryInteract,
@@ -112,6 +112,7 @@ async function boot() {
   window.jumpFloor = (n) => descendTo(n);
   const params = new URLSearchParams(location.search);
   if (params.get('auto')) {
+    G.autoFlow = true; // probes/dev links skip travel ceremony
     initAudio();
     if (params.get('class')) getClass = () => (CLASSES[params.get('class')] ? params.get('class') : 'trooper'); // probe hook
     startRun(params.get('seed') || randomSeed(), params.get('mode') || 'campaign');
@@ -368,6 +369,7 @@ function setupMenu() {
     onMissionEnd: () => onRemoteMissionEnd(),
   });
   setMissionHooks({ goto: descendTo, place: setLocalFloor, victory: () => victory(), disposeFloor, lock: lockPointer, landfall: () => startArrival(!!G.fastArrival) });
+  setLiftHooks({ setFloor: setLocalFloor });
   setSkillHooks({ lock: lockPointer });
   setSpaceHooks({ onCarrierLost: () => {
     addMsg('THE CARRIER IS GONE. There is no ship to come home to.', 'bad');
@@ -1042,19 +1044,15 @@ function buyItem(id, price) {
   refreshHud();
 }
 
-// personal descent (or a trip home): a GRAV LIFT ride — the destination
-// deck streams in behind the car shell, the doors open on the far side.
-// One ship, no screen fades.
+// personal descent (or a trip home): CALL the grav lift — doors open, you
+// walk in, they seal, the deck swaps while you stand in the cab, and you
+// walk out the far side. ?auto dev flows skip the ceremony.
 function descendTo(n) {
   if (liftBusy()) return;
-  G.mode = 'transition';
   if (n > 0) G.run.deepest = Math.max(G.run.deepest || 1, n);
   ensureFloor(n);
-  liftRide(n, {
-    downward: n > G.floor,
-    swap: () => setLocalFloor(n),
-    onDone: () => { G.mode = 'playing'; lockPointer(); },
-  });
+  if (G.autoFlow) { instantTravel(n, null, () => lockPointer()); return; }
+  summonLift(n, { onDone: () => lockPointer() });
 }
 
 // ACT III EXIT: the parked fighter at the district LZ — the way home
@@ -1314,6 +1312,7 @@ function loop(t) {
     updateDeath(dt);
     setCrosshairAiming(!!G.player?.aiming);
     updateArrival(dt); // the carrier jumping/descending outside the bridge glass
+    updateLifts(dt); // door choreography while you're on your feet
     updateAmbientWar(dt); // the raid outside the glass — already going on
     updateLandfallAmbient(dt); // squadmates' tracers over the city
     { // the crosshair drives an ON-SCREEN cursor across any touch screen
@@ -1322,6 +1321,9 @@ function loop(t) {
       tickTouchScreens(dt);
       setCrosshairPointer(!!hit);
     }
+  } else if (G.mode === 'transition') {
+    updateLifts(dt); // the sealed-cab ride
+    if (G.player && simActive) G.player.anim.update(dt);
   } else if (G.player && simActive) {
     G.player.anim.update(dt);
   }

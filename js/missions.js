@@ -57,6 +57,7 @@ function portalSet(on) {
     const o = fs.meshGroup.getObjectByName(name);
     if (o) o.visible = on;
   }
+  if (fs.lift?.trimM) fs.lift.trimM.visible = on; // the door-leaf glow
 }
 
 // ---- start / sync ----
