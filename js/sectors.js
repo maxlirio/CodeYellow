@@ -187,10 +187,8 @@ function liftVisual(group, kit, gl) {
 
 // extraction pad: physical frame; dungeon.js adds the portal glow/light itself
 function extractionPad(kit, x, z, y = 0) {
-  kit.box('frame', x - 2.1, y + 3.2, z, 0.8, 6.4, 0.8);
-  kit.box('frame', x + 2.1, y + 3.2, z, 0.8, 6.4, 0.8);
-  kit.box('frame', x, y + 6.0, z, 5.0, 0.7, 0.8);
-  kit.box('accent', x, y + 5.6, z, 4.4, 0.14, 0.5);
+  // just the lift's floor sill — the ELEVATOR housing itself is built by
+  // the shared lobby in dungeon.js at this exact spot
   kit.box('accent', x, y + 0.02, z, 3.2, 0.03, 3.2);
 }
 

@@ -801,21 +801,70 @@ export function buildFloorMeshes(fs) {
     lawn.position.set((fs.grid.w * CELL) / 2 - 2, -0.03, (fs.grid.h * CELL) / 2 - 2);
     group.add(lawn);
   }
-  const { stairs, portal } = fs.grid;
-  const portalCol = fs.theme?.portal ?? 0xff7718;
-  const glow = new THREE.Mesh(
-    new THREE.PlaneGeometry(2.6, 3.4),
-    new THREE.MeshBasicMaterial({ color: portalCol, transparent: true, opacity: 0.75, side: THREE.DoubleSide })
-  );
-  glow.position.set(stairs.x + portal.dx * CELL / 2, 1.8, stairs.z + portal.dy * CELL / 2);
-  glow.rotation.y = portal.yaw;
-  glow.name = 'portalGlow';
-  group.add(glow);
-  const plight = new THREE.PointLight(portalCol, 18, 14, 1.6);
-  plight.position.set(stairs.x + portal.dx * (CELL / 2 - 0.6), 2.2, stairs.z + portal.dy * (CELL / 2 - 0.6));
-  plight.name = 'portalLight';
-  group.add(plight);
-  if (fs.grid.portalIdle) { glow.visible = false; plight.visible = false; } // sleeps until a sortie is confirmed
+  // THE GRAV LIFT LOBBY — a real elevator, not a glowing portal: housing,
+  // sealed doors in the ride car's livery, a GRAV LIFT sign. The glow parts
+  // ('portalGlow'/'portalLight') light up when a sortie is confirmed.
+  {
+    const { stairs, portal } = fs.grid;
+    const col = fs.theme?.portal ?? 0x2fd6c8;
+    const lob = new THREE.Group();
+    lob.position.set(stairs.x + portal.dx * (CELL / 2 - 0.55), 0, stairs.z + portal.dy * (CELL / 2 - 0.55));
+    lob.rotation.y = portal.yaw;
+    const wallM2 = new THREE.MeshStandardMaterial({ color: 0x232a33, metalness: 0.4, roughness: 0.7 });
+    const leafM = new THREE.MeshStandardMaterial({ color: 0x2c3642, metalness: 0.5, roughness: 0.5 });
+    const trimM2 = new THREE.MeshBasicMaterial({ color: col, toneMapped: false });
+    const LB = (mat, sx, sy, sz, x, y, z) => {
+      const m = new THREE.Mesh(new THREE.BoxGeometry(sx, sy, sz), mat);
+      m.position.set(x, y, z);
+      lob.add(m); return m;
+    };
+    LB(wallM2, 0.5, 3.9, 1.1, -1.55, 1.95, 0.1);   // posts
+    LB(wallM2, 0.5, 3.9, 1.1, 1.55, 1.95, 0.1);
+    LB(wallM2, 3.6, 0.55, 1.1, 0, 3.62, 0.1);      // header
+    LB(wallM2, 3.6, 3.9, 0.3, 0, 1.95, 0.62);      // back of the shaft housing
+    LB(leafM, 1.32, 3.2, 0.14, -0.66, 1.6, -0.2);  // sealed door leaves
+    LB(leafM, 1.32, 3.2, 0.14, 0.66, 1.6, -0.2);
+    // glow kit: meeting-edge, waist stripes, sill, sign — wakes with the sortie
+    const glowGrp = new THREE.Group();
+    glowGrp.name = 'portalGlow';
+    const GB = (sx, sy, sz, x, y, z) => {
+      const m = new THREE.Mesh(new THREE.BoxGeometry(sx, sy, sz), trimM2);
+      m.position.set(x, y, z);
+      glowGrp.add(m); return m;
+    };
+    GB(0.07, 3.0, 0.16, -0.035, 1.6, -0.21);
+    GB(0.07, 3.0, 0.16, 0.035, 1.6, -0.21);
+    GB(1.2, 0.1, 0.16, -0.66, 1.25, -0.21);
+    GB(1.2, 0.1, 0.16, 0.66, 1.25, -0.21);
+    GB(3.0, 0.07, 0.5, 0, 0.04, -0.5);             // sill line
+    const sc = document.createElement('canvas');
+    sc.width = 256; sc.height = 64;
+    const sx2 = sc.getContext('2d');
+    sx2.fillStyle = '#04121a'; sx2.fillRect(0, 0, 256, 64);
+    sx2.fillStyle = '#' + col.toString(16).padStart(6, '0');
+    sx2.font = 'bold 34px Menlo, monospace'; sx2.textAlign = 'center';
+    sx2.fillText('GRAV LIFT', 128, 44);
+    const stex = new THREE.CanvasTexture(sc);
+    stex.colorSpace = THREE.SRGBColorSpace;
+    const sign = new THREE.Mesh(new THREE.PlaneGeometry(2.4, 0.6),
+      new THREE.MeshBasicMaterial({ map: stex, toneMapped: false }));
+    sign.position.set(0, 3.62, -0.46);
+    glowGrp.add(sign);
+    lob.add(glowGrp);
+    const plight = new THREE.PointLight(col, 14, 10, 1.6);
+    plight.position.set(stairs.x + portal.dx * (CELL / 2 - 1.4), 2.4, stairs.z + portal.dy * (CELL / 2 - 1.4));
+    plight.name = 'portalLight';
+    group.add(plight);
+    group.add(lob);
+    // the shaft is solid — no walking through the doors into the wall
+    const along = portal.dx !== 0;
+    fs.grid.colliders.push({
+      x: lob.position.x, z: lob.position.z,
+      hx: along ? 0.55 : 1.85, hz: along ? 1.85 : 0.55,
+      y0: 0, h: 3.9, noMesh: true,
+    });
+    if (fs.grid.portalIdle) { glowGrp.visible = false; plight.visible = false; } // sleeps until confirmed
+  }
   group.visible = false;
   G.scene.add(group);
   fs.meshGroup = group;

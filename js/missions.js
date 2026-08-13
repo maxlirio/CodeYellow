@@ -90,7 +90,7 @@ export function beginSortie(secId, seed = null, n = null, fromNet = false, diff 
   if (G.floor !== sec.floorN) hooks.disposeFloor?.(sec.floorN);
   portalSet(true);
   alerted = true; // the alert is answered
-  addMsg(`Sortie confirmed: ${sec.name}. The breach portal is open.`, 'gold');
+  addMsg(`Sortie confirmed: ${sec.name}. The grav lift is ready.`, 'gold');
   sfx.stairs();
   if (!fromNet) netSend({ t: 'mission', sec: sec.id, seed: G.sortie.seed, n: sortieCount, diff });
 }
@@ -128,7 +128,7 @@ export function campaignVictory() { hooks.victory?.(); }
 export function placeOnFloor(n) { hooks.place?.(n); }
 
 export function enterSortie() {
-  if (!G.sortie?.active) { addMsg('The breach portal is dark. Confirm a sortie at the mission console.'); return; }
+  if (!G.sortie?.active) { addMsg('The grav lift is locked. Confirm a sortie at the mission console.'); return; }
   G.sortie.entered = true;
   missionStart = { gold0: G.run.gold, time0: G.time || 0 };
   hooks.goto?.(G.sortie.floorN);

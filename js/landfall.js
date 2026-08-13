@@ -588,8 +588,8 @@ export function updateArrival(dt) {
       A.haze.material.opacity = 0.75;
       A.skyline.position.y = -1.4; // the city holds outside the glass — the
       // SAME world the docking bay hangs over, one deck below
-      say('Altitude is stable. Docking bay portal is open.');
-      addMsg('"Altitude is stable. Docking bay portal is open." — take the breach portal down.', 'gold');
+      say('Altitude is stable. The grav lift to the flight deck is ready.');
+      addMsg('"Altitude is stable. Docking bay is open." — take the grav lift down to the flight deck.', 'gold');
       landfallPortalReady();
       A = null;
     }
