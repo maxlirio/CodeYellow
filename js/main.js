@@ -36,6 +36,7 @@ import { initCommander, openCommandMap, closeCommandMap, commander } from './com
 import { themeFor } from './dungeon.js';
 import { setMusicBase, setBossMusic, musicCtxFor, toggleMusic, updateMusic, musicEnabled } from './music.js';
 import { registerTouchScreen, setTouchActions, updateTouchCursor, touchScreenClick, isTouchScreen, tickTouchScreens, clearTouchScreens } from './touchscreens.js';
+import { liftRide, liftBusy } from './lift.js';
 import { fetchPublicGames, publishGame, unpublishGame } from './board.js';
 import {
   createPlayer, resetPlayerForFloor, updatePlayer, updateRemotes, tryAttack, tryDodge, tryInteract,
@@ -1039,16 +1040,19 @@ function buyItem(id, price) {
   refreshHud();
 }
 
-// personal descent (or a trip home): only I change floors; teammates stay put
+// personal descent (or a trip home): a GRAV LIFT ride — the destination
+// deck streams in behind the car shell, the doors open on the far side.
+// One ship, no screen fades.
 function descendTo(n) {
+  if (liftBusy()) return;
   G.mode = 'transition';
   if (n > 0) G.run.deepest = Math.max(G.run.deepest || 1, n);
-  const fs = ensureFloor(n); // peek at what awaits for the banner
-  showTransition(n, () => {
-    setLocalFloor(n);
-    G.mode = 'playing';
-    lockPointer();
-  }, fs.theme?.name, fs.mutator ? `${fs.mutator.name} — ${fs.mutator.desc}` : null);
+  ensureFloor(n);
+  liftRide(n, {
+    downward: n > G.floor,
+    swap: () => setLocalFloor(n),
+    onDone: () => { G.mode = 'playing'; lockPointer(); },
+  });
 }
 
 function victory(fromNet = false) {
