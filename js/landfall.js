@@ -15,7 +15,7 @@ import { makePiece, makeCharacter, buildMergedStatic, ALIEN_MODELS } from './ass
 import { addMsg, refreshHud } from './ui.js';
 import { sfx } from './audio.js';
 import { saveReport } from './bridge.js';
-import { landfallPortalReady } from './missions.js';
+import { landfallPortalReady, beginSortie, enterSortieInPlace, campaignVictory, placeOnFloor } from './missions.js';
 import {
   buildBomber, buildFighter, buildCarrier, cockpitKit, drawLockAt, hideLockWidgets, setLandfallHook, flashScreen, SHIP_SLOTS, mySlot, slotOf, HULL_LOCAL_BOXES,
 } from './space.js';
@@ -688,23 +688,150 @@ function endFlight(result) {
     if (boardAt.yaw !== undefined) G.player.camYaw = boardAt.yaw;
   }
   if (result === 'DOCKED') {
-    addMsg('Docked. Racks reloaded — six bombs. Board when ready.', 'gold');
-    sfx.levelup();
+    if (G.run.liberated && !G.run.campaignWon) {
+      G.run.campaignWon = true;
+      saveReport({ section: 'OPERATION LANDFALL', result: 'CAMPAIGN COMPLETE', kills, credits: 0, time: Math.round((G.time || 0) - time0) });
+      addMsg('Wheels down. The planet is free — OPERATION LANDFALL COMPLETE.', 'gold');
+      say('Welcome home, pilot.');
+      campaignVictory();
+    } else {
+      addMsg('Docked. Racks reloaded — six bombs. Board when ready.', 'gold');
+      sfx.levelup();
+    }
   } else if (result === 'LZ SECURED') {
     const credits = 350 + kills * 25;
     G.run.gold += credits;
     G.run.landfall = Math.max(G.run.landfall || 0, 1);
-    const g = G.floors.get(G.floor)?.grid;
-    if (g) g.stairsLocked = false; // extraction opens
     saveReport({ section: 'OPERATION LANDFALL I', result, kills, credits, time: Math.round((G.time || 0) - time0) });
-    addMsg(`LZ SECURED — shield grid down, +${credits} credits. Ground assault is NEXT. Extraction is open.`, 'gold');
-    say('Shield grid destroyed. Well flown.');
+    if (!(G.run.clearedSections ||= []).includes('landfall')) G.run.clearedSections.push('landfall');
+    addMsg(`LZ SECURED — shield grid down, +${credits} credits.`, 'gold');
+    say('Shield grid destroyed. Well flown. Beginning ground assault.');
     sfx.victory();
+    groundEntry(); // canopy open, boots down — the assault starts HERE
+    return;
   } else if (result === 'SHOT DOWN') {
     saveReport({ section: 'OPERATION LANDFALL I', result, kills, credits: 0, time: Math.round((G.time || 0) - time0) });
     addMsg('Bomber lost — recovery pod tractored back to the deck.', 'bad');
   } else addMsg('Recovered to the deck.', 'bad');
   refreshHud();
+}
+
+// ======================= ACT II SEAM =======================
+// Touchdown -> boots on the ground, with the floor swap hidden inside a
+// camera dip onto the pad ring (identical ring on both sides of the seam).
+function groundEntry() {
+  G.mode = 'transition';
+  const cam = G.camera;
+  const from = cam.quaternion.clone();
+  const downQ = new THREE.Quaternion().setFromEuler(new THREE.Euler(-Math.PI / 2, 0, 0));
+  const t0 = performance.now();
+  let swapped = false;
+  const tick = () => {
+    const t = (performance.now() - t0) / 1000;
+    if (t < 0.9) { // dip onto the pad
+      cam.quaternion.slerpQuaternions(from, downQ, Math.min(1, t / 0.9));
+      requestAnimationFrame(tick);
+      return;
+    }
+    if (!swapped) {
+      swapped = true;
+      // the district IS the city you just bombed — sortie changes hands here
+      beginSortie('district', null, null, false, 0);
+      enterSortieInPlace(true); // places us on the district floor at the LZ
+      const g = G.floors.get(G.floor)?.grid;
+      const p = G.player;
+      if (p && g?.lz) {
+        cam.position.set(g.lz.x, 5.2, g.lz.z);
+        cam.quaternion.copy(downQ); // same view: the pad ring, straight down
+        p.camPitch = -0.12;
+        p.camYaw = Math.PI; // facing your parked bird
+      }
+      sfx.stairs(); // canopy slides
+      addMsg('Canopy open — boots on the ground. Burn the nests; the Broodmind holds the plaza.', 'gold');
+      requestAnimationFrame(tick);
+      return;
+    }
+    const k = Math.min(1, (t - 0.9) / 1.2); // climb-down: pad view -> standing
+    const p = G.player;
+    if (p) {
+      const eye = new THREE.Vector3(p.obj.position.x, p.obj.position.y + 1.62, p.obj.position.z);
+      const overPad = new THREE.Vector3(G.grid?.lz?.x ?? eye.x, 5.2, G.grid?.lz?.z ?? eye.z);
+      cam.position.lerpVectors(overPad, eye, k * k * (3 - 2 * k));
+      const standQ = new THREE.Quaternion().setFromEuler(new THREE.Euler(p.camPitch, p.camYaw + Math.PI, 0, 'YXZ'));
+      cam.quaternion.slerpQuaternions(downQ, standQ, k * k * (3 - 2 * k));
+    }
+    if (k >= 1) { G.mode = 'playing'; return; }
+    requestAnimationFrame(tick);
+  };
+  tick();
+}
+
+// Liberation done -> board the parked fighter and FLY home. The reverse
+// seam: climb to the over-pad view, swap to the flight world, ease into
+// the cockpit already sitting on the same pad.
+export function startCityDeparture() {
+  const p = G.player;
+  const g = G.floors.get(G.floor)?.grid;
+  if (!p || !g?.lz) return;
+  G.mode = 'transition';
+  const cam = G.camera;
+  const eyeQ = cam.quaternion.clone();
+  const downQ = new THREE.Quaternion().setFromEuler(new THREE.Euler(-Math.PI / 2, 0, 0));
+  const overPad = new THREE.Vector3(g.lz.x, 5.2, g.lz.z);
+  const eye0 = cam.position.clone();
+  const t0 = performance.now();
+  let swapped = false;
+  addMsg('Strapping in. The carrier is waiting overhead.', 'gold');
+  sfx.stairs();
+  const tick = () => {
+    const t = (performance.now() - t0) / 1000;
+    if (t < 1.0) {
+      const k = t / 1.0, e = k * k * (3 - 2 * k);
+      cam.position.lerpVectors(eye0, overPad, e);
+      cam.quaternion.slerpQuaternions(eyeQ, downQ, e);
+      requestAnimationFrame(tick);
+      return;
+    }
+    if (!swapped) {
+      swapped = true;
+      placeOnFloor(9); // the flight world (deck 9 holds the planet)
+      startFlightFromLZ();
+      if (L) {
+        cam.position.copy(L.ship.position).add(new THREE.Vector3(0, 5, 0));
+        cam.quaternion.copy(downQ);
+      }
+      requestAnimationFrame(tick);
+      return;
+    }
+    const k = Math.min(1, (t - 1.0) / 1.0);
+    if (L) {
+      const fwd = new THREE.Vector3(0, 0, -1).applyQuaternion(L.ship.quaternion);
+      const up = new THREE.Vector3(0, 1, 0).applyQuaternion(L.ship.quaternion);
+      const seat = L.ship.position.clone().addScaledVector(up, 0.9).addScaledVector(fwd, 0.6);
+      const seatQ = L.ship.quaternion.clone();
+      const e = k * k * (3 - 2 * k);
+      cam.position.lerpVectors(L.ship.position.clone().add(new THREE.Vector3(0, 5, 0)), seat, e);
+      cam.quaternion.slerpQuaternions(downQ, seatQ, e);
+    }
+    if (k >= 1) { G.mode = 'space'; return; } // the flight loop owns it now
+    requestAnimationFrame(tick);
+  };
+  tick();
+}
+
+function startFlightFromLZ() {
+  const fs = G.floors.get(G.floor);
+  if (!fs?.grid?.landfall || !LW) return;
+  const mine = fs.boardShips?.find((b) => b.userData.boardShip.slot === mySlot()) || fs.boardShips?.[0];
+  const u = mine?.userData.boardShip;
+  if (mine) mine.visible = false; // you're flying it
+  startFlight({
+    pos: LW.lzWorld.clone().add(new THREE.Vector3(0, 4, 0)),
+    quat: new THREE.Quaternion().setFromEuler(new THREE.Euler(0, Math.PI, 0)),
+    speed: 20,
+    boardAt: u ? { x: u.x, z: u.z, yaw: u.yaw, floor: G.floor, bsId: u.id } : { x: 0, z: 0, floor: G.floor },
+  });
+  if (L) { L.noLand = true; addMsg('Airborne — R marks the hangar. Bring her home.', 'gold'); }
 }
 
 export function landfallCycleLock() {
@@ -1389,8 +1516,9 @@ export function updateLandfall(dt) {
     if (k >= 1) { L.fs.meshGroup.remove(e.mesh); L.fx.splice(i, 1); }
   }
 
-  // LZ landing (only once the grid is dead)
-  if (LW && !LW.targets.some((t) => t.hp > 0)) {
+  // LZ landing (only once the grid is dead — and never on the flight HOME:
+  // a departure lifting off the pad would instantly re-trigger its own landing)
+  if (LW && !L.noLand && !LW.targets.some((t) => t.hp > 0)) {
     const d2 = Math.hypot(L.ship.position.x - LW.lzWorld.x, L.ship.position.z - LW.lzWorld.z);
     if (d2 < 26 && L.ship.position.y < CITY_Y + 40 && L.speed < 36) {
       L.phase = 'land';

@@ -137,6 +137,7 @@ function meshKit(pal, accent) {
     panel: new THREE.MeshStandardMaterial({ color: 0x222222, emissive: 0xd9ecf6, emissiveIntensity: 1.2, roughness: 1 }),
     hive: new THREE.MeshStandardMaterial({ color: 0x233a2e, metalness: 0.1, roughness: 0.85 }),
     hiveglow: new THREE.MeshStandardMaterial({ color: 0x123a36, emissive: 0x2fd6c8, emissiveIntensity: 0.9, roughness: 0.7 }),
+    lzpad: new THREE.MeshStandardMaterial({ color: 0x5d6b42, metalness: 0.05, roughness: 1 }),
   };
   for (const [i, c] of (pal.boxes || []).entries()) {
     mats['box' + i] = new THREE.MeshStandardMaterial({ color: c, metalness: 0.2, roughness: 0.8 });
@@ -1029,9 +1030,14 @@ function genDistrict(seed, diff = 0) {
 
   extraFoes(fs, grid, rng, [0, 6, 12][diff], ['skitter', 'spitter', 'broodguard']);
 
-  // in from the south avenue; extraction at the north end
+  // in at the LZ on the south avenue — your fighter is parked ON the pad
+  // and, once the district is liberated, it is also the way home
   grid.spawn = { x: cx0 * CELL, z: (H - 4) * CELL };
   grid.spawnYaw = Math.PI;
+  grid.lz = { x: cx0 * CELL, z: (H - 4) * CELL + 6 };
+  fs.npcs.push({ model: null, noModel: true, sign: false, name: 'Your Fighter', shop: 'board_fighter',
+    label: 'YOUR FIGHTER — RETURN TO THE CARRIER', x: grid.lz.x, z: grid.lz.z });
+  grid.colliders.push({ x: grid.lz.x, z: grid.lz.z, hx: 2.2, hz: 2.6, y0: 0, h: 1.1, noMesh: true });
   grid.cells[3 * W + cx0] = STAIRS;
   grid.stairs = { x: cx0 * CELL, z: 3 * CELL, cx: cx0, cy: 3 };
   grid.portal = { dx: 0, dy: -1, yaw: 0 };
@@ -1087,9 +1093,32 @@ function buildDistrict(fs) {
   const cx0 = Math.floor(W / 2) * CELL, cy0 = Math.floor(H / 2) * CELL;
   kit.box('hive', cx0, 0.5, cy0 - 3 * CELL, 7, 1.0, 7);
   kit.box('hiveglow', cx0, 1.05, cy0 - 3 * CELL, 5.6, 0.06, 5.6);
+  // LZ apron: Dagobah-green patch + pad ring, matched to the Act I landing
+  // zone so the touchdown seam has nothing to give it away
+  if (g.lz) {
+    kit.box('lzpad', g.lz.x, 0.012, g.lz.z, 13, 0.03, 13);
+    kit.box('accent', g.lz.x, 0.035, g.lz.z - 6.4, 12.6, 0.02, 0.35);
+    kit.box('accent', g.lz.x, 0.035, g.lz.z + 6.4, 12.6, 0.02, 0.35);
+    kit.box('accent', g.lz.x - 6.4, 0.035, g.lz.z, 0.35, 0.02, 12.6);
+    kit.box('accent', g.lz.x + 6.4, 0.035, g.lz.z, 0.35, 0.02, 12.6);
+  }
   drawStructural(kit, g);
   extractionPad(kit, g.stairs.x, g.stairs.z, 0);
   kit.finish(group);
+  if (g.lz) {
+    // your bird, set down on the pad — slot-tinted, the way you left it
+    import('./space.js').then(({ buildFighter, SHIP_SLOTS, mySlot }) => {
+      const bird = buildFighter(false, false, null, SHIP_SLOTS[mySlot()]);
+      bird.scale.setScalar(2.0);
+      bird.position.set(g.lz.x, 1.2, g.lz.z);
+      bird.name = 'lzFighter';
+      group.add(bird);
+      const ring = new THREE.Mesh(new THREE.CylinderGeometry(6.4, 6.4, 0.05, 26, 1, true),
+        new THREE.MeshBasicMaterial({ color: 0x4fe8e0, toneMapped: false }));
+      ring.position.set(g.lz.x, 0.05, g.lz.z);
+      group.add(ring);
+    });
+  }
   // city furniture from the REAL kit: streetlights + benches down the avenues
   try {
     const props = [];

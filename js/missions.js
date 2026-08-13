@@ -115,6 +115,18 @@ export function onRemoteMissionEnd() {
 }
 
 // player stepped on the bridge portal pad
+// continuous-flow variants: the sortie changes hands WITHOUT deck travel
+// (used by the landfall touchdown -> ground assault -> fly-home chain)
+export function enterSortieInPlace(placeFloor = true) {
+  if (!G.sortie?.active) return;
+  G.sortie.entered = true;
+  missionStart = { gold0: G.run.gold, time0: G.time || 0 };
+  if (placeFloor) hooks.place?.(G.sortie.floorN);
+}
+export function finishSortieInPlace(result) { finishSortieCore(result); }
+export function campaignVictory() { hooks.victory?.(); }
+export function placeOnFloor(n) { hooks.place?.(n); }
+
 export function enterSortie() {
   if (!G.sortie?.active) { addMsg('The breach portal is dark. Confirm a sortie at the mission console.'); return; }
   G.sortie.entered = true;
@@ -134,7 +146,7 @@ export function tryExtract() {
   return true;
 }
 
-export function finishSortie(result) {
+function finishSortieCore(result) {
   const fs = G.floors.get(G.sortie?.floorN);
   const kills = fs ? fs.enemies.filter(e => e.state === 'dead').length : 0;
   const credits = Math.max(0, (G.run.gold ?? 0) - (missionStart?.gold0 ?? 0));
@@ -149,7 +161,6 @@ export function finishSortie(result) {
   G.sortie.active = false;
   if (isAuthority()) netSend({ t: 'mend' });
   portalSet(false);
-  hooks.goto?.(0);
   // RESUPPLY — the ship restocks its own
   const p = G.player;
   if (p) { p.hp = p.maxHp; p.mana = p.maxMana; }
@@ -160,6 +171,10 @@ export function finishSortie(result) {
     ? `Sortie complete — ${kills} hostiles down. Resupplied.`
     : 'Recovered to the bridge. Resupplied.', 'gold');
   alertT = -4; alerted = false; // the next alert takes a breath
+}
+export function finishSortie(result) {
+  finishSortieCore(result);
+  hooks.goto?.(0);
 }
 
 // ---- per-frame: red alert on the bridge, clear-check in the field ----

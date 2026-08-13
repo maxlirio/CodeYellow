@@ -20,10 +20,11 @@ import { generateSector, hasSector } from './sectors.js';
 import {
   setMissionHooks, updateMissions, openMissionMap, enterSortie, tryExtract,
   onRemoteMission, onRemoteMissionEnd, beginSortie,
+finishSortieInPlace,
 } from './missions.js';
 import { openTrainRoom, setSkillHooks, trainSkill } from './skills.js';
 import { updateSpace, spaceMouse, spaceFire, inSpace, startSpaceFlight, setSpaceHooks, spaceSetWeapon, startBoarding, spaceCycleLock, spaceHomeLock , updateAmbientWar } from './space.js';
-import { startArrival, updateArrival, updateLandfall, inLandfall, landfallCycleLock, landfallTrigger, landfallSetWeapon, landfallHomeLock, landfallSyncFloor, updateLandfallAmbient } from './landfall.js';
+import { startArrival, updateArrival, updateLandfall, inLandfall, landfallCycleLock, landfallTrigger, landfallSetWeapon, landfallHomeLock, landfallSyncFloor, updateLandfallAmbient, startCityDeparture } from './landfall.js';
 import { initViewmodel, updateViewmodel } from './viewmodel.js';
 import { updateWalls, clearWalls } from './walls.js';
 import { initFloorTraps, updateTraps } from './traps.js';
@@ -366,7 +367,7 @@ function setupMenu() {
     onMission: (m) => onRemoteMission(m),
     onMissionEnd: () => onRemoteMissionEnd(),
   });
-  setMissionHooks({ goto: descendTo, disposeFloor, lock: lockPointer, landfall: () => startArrival(!!G.fastArrival) });
+  setMissionHooks({ goto: descendTo, place: setLocalFloor, victory: () => victory(), disposeFloor, lock: lockPointer, landfall: () => startArrival(!!G.fastArrival) });
   setSkillHooks({ lock: lockPointer });
   setSpaceHooks({ onCarrierLost: () => {
     addMsg('THE CARRIER IS GONE. There is no ship to come home to.', 'bad');
@@ -943,6 +944,7 @@ function onShopOpened(type) {
   if (type === 'missions') { openMissionMap(); return; }
   if (type === 'training') { openTrainRoom(); return; }
   if (type === 'board_ship') { startBoarding(arguments[1] || { x: G.player.obj.position.x, z: G.player.obj.position.z }, !!G.hangarDrill); return; }
+  if (type === 'board_fighter') { boardCityFighter(); return; }
   if (type === 'board') { document.exitPointerLock?.(); window.openTavernBoard(); return; }
   if (type === 'mode') { openModeDialog(); return; }
   if (type === 'codex') { openCodex(); return; }
@@ -1055,9 +1057,21 @@ function descendTo(n) {
   });
 }
 
+// ACT III EXIT: the parked fighter at the district LZ — the way home
+function boardCityFighter() {
+  const fs = G.floors.get(G.floor);
+  if (fs?.grid?.stairsLocked) { addMsg('The district is not clear — the Broodmind still sings.', 'bad'); return; }
+  finishSortieInPlace('CLEARED'); // pay the ground op WITHOUT deck travel
+  startCityDeparture();
+}
+
 function victory(fromNet = false) {
   if (G.mode === 'victory') return;
   G.mode = 'victory';
+  // the win screen names what you actually won
+  const vt = $('victoryTitle'), vs = $('victorySub');
+  if (vt && G.run.campaignWon) { vt.textContent = 'OPERATION LANDFALL — COMPLETE'; vs.textContent = 'The hive is broken. The planet is free.'; }
+  else if (vt) { vt.textContent = 'THE HULK IS OURS'; vs.textContent = 'Every section swept. The war moves on.'; }
   if (G.net.role === 'host' && !fromNet) netSend({ t: 'victory' });
   sfx.victory();
   document.exitPointerLock?.();
