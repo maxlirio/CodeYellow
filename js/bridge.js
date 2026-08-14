@@ -55,7 +55,7 @@ export function generateBridgeData() {
     { model: null, noModel: true, sign: false, name: 'Sim Deck', shop: 'mode',
       label: 'SIM DECK — CHANGE VENTURE', x: 9 * CELL, z: 11.7 * CELL },
     { model: null, noModel: true, sign: false, name: 'Training', shop: 'training',
-      label: 'TRAINING — SPEND SKILL POINTS', x: 4.4 * CELL, z: 10.9 * CELL },
+      label: 'TRAINING — SPEND SKILL POINTS', x: 3.1 * CELL, z: 9.9 * CELL },
     { model: null, noModel: true, sign: false, name: 'Armory', shop: 'armory',
       label: 'THE ARMORY — BUY GEAR', x: 10 * CELL, z: 10.9 * CELL },
   ];
@@ -68,7 +68,7 @@ export function generateBridgeData() {
       { kind: 'status', x: 1.5 * CELL + 0.15, z: C * CELL, ry: Math.PI / 2 },
       { kind: 'comms', x: 12.5 * CELL - 0.15, z: C * CELL, ry: -Math.PI / 2 },
       { kind: 'sim', x: 9 * CELL, z: 12.5 * CELL - 0.15, ry: Math.PI },
-      { kind: 'training', x: 4 * CELL, z: 11.5 * CELL + 0.15, ry: Math.PI },
+      { kind: 'training', x: 3 * CELL, z: 10.8 * CELL + 0.15, ry: Math.PI },
       { kind: 'armory', x: 10 * CELL, z: 11.5 * CELL + 0.15, ry: Math.PI },
     ],
     rooms: [{ x: 2, y: 2, w: 11, h: 11, cx: C, cy: C }],

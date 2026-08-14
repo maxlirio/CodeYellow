@@ -808,7 +808,10 @@ export function buildFloorMeshes(fs) {
     const { stairs, portal } = fs.grid;
     const col = fs.theme?.portal ?? 0x2fd6c8;
     const lob = new THREE.Group();
-    lob.position.set(stairs.x + portal.dx * (CELL / 2 - 0.55), 0, stairs.z + portal.dy * (CELL / 2 - 0.55));
+    // anchored so the CAB sits inside the walkable cell (grid cells behind
+    // the wall are solid — a cab poking through them is unreachable); only
+    // the housing back kisses the wall plane
+    lob.position.set(stairs.x + portal.dx * (CELL / 2 - 2.95), 0, stairs.z + portal.dy * (CELL / 2 - 2.95));
     lob.rotation.y = portal.yaw;
     const wallM2 = new THREE.MeshStandardMaterial({ color: 0x232a33, metalness: 0.4, roughness: 0.7 });
     const leafM = new THREE.MeshStandardMaterial({ color: 0x2c3642, metalness: 0.5, roughness: 0.5 });
@@ -818,15 +821,17 @@ export function buildFloorMeshes(fs) {
       m.position.set(x, y, z);
       lob.add(m); return m;
     };
-    // a WALK-IN CAB behind the doors: floor, walls, roof, lamp — deep
-    // enough to stand in. The doors are the only way through.
-    LB(wallM2, 0.5, 3.9, 2.6, -1.55, 1.95, 0.85);  // posts / cab flanks
-    LB(wallM2, 0.5, 3.9, 2.6, 1.55, 1.95, 0.85);
-    LB(wallM2, 3.6, 0.55, 2.6, 0, 3.62, 0.85);     // header / cab roof
-    LB(wallM2, 3.6, 3.9, 0.3, 0, 1.95, 2.1);       // cab back wall
-    LB(wallM2, 2.6, 0.16, 2.2, 0, -0.02, 0.95);    // cab floor plate
+    // a WALK-IN CAB behind the doors — a real ROOM: wide and deep enough
+    // that a body fits with clearance (a cramped cab put the player's
+    // collision probes permanently inside the walls, and the embedded-body
+    // escape rule then let them ghost straight through the doors).
+    LB(wallM2, 0.5, 3.9, 3.6, -1.85, 1.95, 1.35);  // posts / cab flanks
+    LB(wallM2, 0.5, 3.9, 3.6, 1.85, 1.95, 1.35);
+    LB(wallM2, 4.2, 0.55, 3.6, 0, 3.62, 1.35);     // header / cab roof
+    LB(wallM2, 4.2, 3.9, 0.4, 0, 1.95, 3.1);       // cab back wall
+    LB(wallM2, 3.2, 0.16, 3.2, 0, -0.02, 1.45);    // cab floor plate
     const cabLampM = new THREE.MeshBasicMaterial({ color: 0xbfe8ff, toneMapped: false });
-    LB(cabLampM, 1.6, 0.05, 1.2, 0, 3.32, 0.95);   // cab ceiling lamp
+    LB(cabLampM, 2.0, 0.05, 1.8, 0, 3.32, 1.4);    // cab ceiling lamp
     const doorL = LB(leafM, 1.32, 3.2, 0.14, -0.66, 1.6, -0.2); // door leaves
     const doorR = LB(leafM, 1.32, 3.2, 0.14, 0.66, 1.6, -0.2);
     // the DECK ticker inside the cab (reads during the ride)
@@ -836,7 +841,7 @@ export function buildFloorMeshes(fs) {
     ttex.colorSpace = THREE.SRGBColorSpace;
     const ticker = new THREE.Mesh(new THREE.PlaneGeometry(1.0, 0.5),
       new THREE.MeshBasicMaterial({ map: ttex, toneMapped: false }));
-    ticker.position.set(0, 2.5, 1.92);
+    ticker.position.set(0, 2.5, 2.88);
     ticker.rotation.y = Math.PI;
     lob.add(ticker);
     // glow kit: meeting-edge, waist stripes, sill, sign — wakes with the sortie
@@ -879,19 +884,20 @@ export function buildFloorMeshes(fs) {
       x: lob.position.x + Math.cos(portal.yaw) * lx + Math.sin(portal.yaw) * lz,
       z: lob.position.z - Math.sin(portal.yaw) * lx + Math.cos(portal.yaw) * lz,
     });
-    const side1 = W2L(-1.55, 0.85), side2 = W2L(1.55, 0.85), back = W2L(0, 2.1), doorW = W2L(0, -0.2);
+    const side1 = W2L(-1.85, 1.35), side2 = W2L(1.85, 1.35), back = W2L(0, 3.1), doorW = W2L(0, -0.2);
     const box = (p, hx, hz) => fs.grid.colliders.push({ x: p.x, z: p.z, hx: along ? hz : hx, hz: along ? hx : hz, y0: 0, h: 3.9, noMesh: true });
-    box(side1, 0.28, 1.35);
-    box(side2, 0.28, 1.35);
-    box(back, 1.85, 0.2);
-    const doorCol = { x: doorW.x, z: doorW.z, hx: along ? 0.14 : 1.5, hz: along ? 1.5 : 0.14, y0: 0, h: 3.9, noMesh: true, off: false };
+    box(side1, 0.3, 1.85);
+    box(side2, 0.3, 1.85);
+    box(back, 2.1, 0.35);
+    const doorCol = { x: doorW.x, z: doorW.z, hx: along ? 0.35 : 1.7, hz: along ? 1.7 : 0.35, y0: 0, h: 3.9, noMesh: true, off: false };
     fs.grid.colliders.push(doorCol);
     // the lift record the controller drives
-    const cabW = W2L(0, 0.95);
+    const cabW = W2L(0, 1.5);
     fs.lift = {
       lob, doorL, doorR, doorCol, glowGrp, plight,
       ticker: { canvas: tc, tex: ttex },
       cab: { x: cabW.x, z: cabW.z },
+      yaw: portal.yaw, // lobby orientation — rides map your place in the cab
       outYaw: Math.atan2(-portal.dx, portal.dy), // player camYaw facing OUT the doors
       doorK: 0, state: 'closed',
     };

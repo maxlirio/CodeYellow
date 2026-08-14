@@ -74,9 +74,15 @@ export function updateLifts(dt) {
     }
     case 'boarding': { // you're in — the doors seal behind you
       setDoors(lift, Math.max(0, 1 - ride.t / 0.8));
+      if (!playerInCab(lift) && ride.t < 0.75) {
+        // stepped back out mid-close — the doors give way again
+        ride.phase = 'opening'; ride.t = 0.8 * (1 - lift.doorK);
+        break;
+      }
       if (ride.t >= 0.8) {
         ride.phase = 'riding'; ride.t = 0;
-        G.mode = 'transition'; // the cab owns you for the ride
+        // NO mode change: the cab is a ROOM, not a cutscene — walk around,
+        // look around; the world changes outside the sealed doors
         ride.commit?.();
         sfx.stairs();
         sfx.rumble?.();
@@ -90,19 +96,27 @@ export function updateLifts(dt) {
       drawTicker(ride.lift2 || lift, `DECK ${passing}`, ride.target > ride.from ? '▼ DESCENDING' : '▲ ASCENDING');
       if (ride.t >= 1.3 && !ride.swapped) {
         ride.swapped = true;
-        setFloorFn?.(ride.target); // the world changes while you're sealed in
-        const dest = G.floors.get(ride.target)?.lift;
         const p = G.player;
+        // remember WHERE IN THE CAB you're standing and where you're looking,
+        // relative to the origin lobby's frame
+        const o = lift;
+        const relX = p ? p.obj.position.x - o.cab.x : 0;
+        const relZ = p ? p.obj.position.z - o.cab.z : 0;
+        const co = Math.cos(-o.yaw), so = Math.sin(-o.yaw);
+        const lx = relX * co + relZ * so, lz = -relX * so + relZ * co; // into lobby-local
+        const relYaw = p ? p.camYaw - o.outYaw : 0;
+        setFloorFn?.(ride.target); // the world changes outside the sealed doors
+        const dest = G.floors.get(ride.target)?.lift;
         if (dest && p) {
-          // you are STANDING IN the destination cab — same box, new deck
-          p.obj.position.set(dest.cab.x, 0, dest.cab.z);
-          p.camYaw = dest.outYaw;
-          p.camPitch = 0;
+          // same spot in the SAME room — new deck beyond the doors
+          const cd = Math.cos(dest.yaw), sd = Math.sin(dest.yaw);
+          p.obj.position.set(dest.cab.x + lx * cd + lz * sd, 0, dest.cab.z - lx * sd + lz * cd);
+          p.camYaw = dest.outYaw + relYaw;
           setDoors(dest, 0);
           ride.lift2 = dest;
         }
       }
-      if (ride.t >= 2.6) { ride.phase = 'arrive'; ride.t = 0; G.mode = 'playing'; sfx.key(); }
+      if (ride.t >= 2.6) { ride.phase = 'arrive'; ride.t = 0; sfx.key(); }
       break;
     }
     case 'arrive': { // doors part on the new deck — walk out
