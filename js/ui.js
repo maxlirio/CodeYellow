@@ -374,8 +374,8 @@ export function updateWaveHud(horde) {
   if (!horde.active) { el.classList.add('hidden'); return; }
   el.classList.remove('hidden');
   el.textContent = horde.phase === 'build'
-    ? `BUILD — wave ${horde.wave + 1} in ${Math.max(0, Math.ceil(horde.t))}s · B barricade · H hire`
-    : `WAVE ${horde.wave} — hold the line!`;
+    ? `BUILD — wave ${horde.wave + 1} in ${Math.max(0, Math.ceil(horde.t))}s · B walls · V machines · H crew`
+    : `WAVE ${horde.wave} — hold the line! · V machines · H crew`;
 }
 
 // ---------- tavern board ----------

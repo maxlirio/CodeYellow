@@ -16,8 +16,8 @@ export function startHorde() {
   horde.wave = 0;
   horde.phase = 'build';
   horde.t = FIRST_BUILD;
-  addMsg('LAST STAND — build barricades (B), hire mercenaries (H), survive.', 'gold');
-  addMsg(`First wave in ${FIRST_BUILD}s. Gold buys walls (${BARRICADE_COST}g) and sellswords (${MERC_COST}g).`);
+  addMsg('LAST STAND — B build walls · V war machines · H hire crew · survive.', 'gold');
+  addMsg(`First wave in ${FIRST_BUILD}s. V raises turrets & cannons — hire a WORKER (H) to crew each one, or it stays silent.`);
 }
 export function stopHorde() { horde.active = false; }
 
