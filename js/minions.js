@@ -16,7 +16,7 @@ let nextMinionId = 1;
 
 const KINDS = {
   sword: { model: 'RobotExpressive', mscale: 0.46, paint: 0x59c7ff, show: [], held: 'arcblade', hp: 90, dmg: 12, speed: 7.5, range: 2.6, atkTime: 0.8, name: 'Blade Trooper' },
-  bow: { model: 'Character_Soldier', mscale: 0.85, show: [], hp: 60, dmg: 10, speed: 7.5, range: 13, atkTime: 1.3, ranged: true, name: 'Rifle Trooper' },
+  bow: { model: 'Character_Soldier', mscale: 0.85, show: ['Sniper'], hp: 60, dmg: 10, speed: 7.5, range: 13, atkTime: 1.3, ranged: true, name: 'Rifle Trooper' },
   // holo copies of their caster: fast, fragile, and gone in seconds
   phantom: { model: 'Astronaut_FinnTheFrog', mscale: 0.62, show: [], hp: 45, dmg: 8, speed: 9.5, range: 2.6, atkTime: 0.55, name: 'Holo Echo', phantom: true },
   // an inflatable double of the caster: never moves, never fights, soaks aggro
@@ -251,7 +251,14 @@ export function updateMinions(dt) {
             : 'Unarmed_Melee_Attack_Punch_A';
           m.anim.play(atkClip, { once: true });
           if (m.cfg.ranged) {
-            const from = pos.clone().setY(pos.y + 1.4);
+            // the round leaves the WEAPON the trooper is holding — anchor to
+            // the shown gun mesh (falls back to body height if none)
+            if (m.muzzleNode === undefined) {
+              m.muzzleNode = (m.cfg.show?.length && m.obj.getObjectByName(m.cfg.show[0]))
+                || m.obj.getObjectByName('handslotr') || m.obj.getObjectByName('handslot.r') || null;
+            }
+            const from = m.muzzleNode ? m.muzzleNode.getWorldPosition(new THREE.Vector3())
+              : pos.clone().setY(pos.y + 1.4);
             const to = target.obj.position.clone().setY(target.obj.position.y + 1.1);
             const dir = to.sub(from).normalize();
             const bolt = { x: from.x + dir.x * 0.6, y: from.y, z: from.z + dir.z * 0.6, dirX: dir.x, dirY: dir.y, dirZ: dir.z, speed: 22, dmg: 0, owner: 'fx', color: 0xbfe3ff };
